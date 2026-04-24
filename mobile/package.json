@@ -1,0 +1,9 @@
+{
+  "name": "mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "React Native app scaffold — run RN init here when ready.",
+  "scripts": {
+    "dev": "echo \"Generate React Native app in mobile/ first. See README.md\" && exit 1"
+  }
+}

@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root[data-theme="dark"] {
+  --color-background: #12161b;
+  --color-surface: #12161b;
+  --color-surface-container: #1a1f26;
+  --color-surface-container-low: #161b22;
+  --color-surface-container-high: #20262e;
+  --color-surface-container-highest: #252b32;
+  --color-surface-container-lowest: #0d1014;
+  --color-surface-variant: #2f353d;
+  --color-on-surface: #ffffff;
+  --color-on-surface-variant: #cad7dd;
+  --color-outline: #a5b3b8;
+  /* Tailwind orange-500 / orange-600 */
+  --color-primary: #f97316;
+  --color-primary-container: #ea580c;
+  --color-tertiary: #ffd9a1;
+
+  /* PrimeReact Lara: same primary as app tokens (orange-500), not theme blue */
+  --primary-color: var(--color-primary);
+  --primary-color-text: #ffffff;
+  --primary-50: #fff7ed;
+  --primary-100: #ffedd5;
+  --primary-200: #fed7aa;
+  --primary-300: #fdba74;
+  --primary-400: #fb923c;
+  --primary-500: #f97316;
+  --primary-600: #ea580c;
+  --primary-700: #c2410c;
+  --primary-800: #9a3412;
+  --primary-900: #7c2d12;
+  --focus-ring: 0 0 0 0.2rem rgb(249 115 22 / 0.35);
+  --highlight-bg: rgb(249 115 22 / 0.14);
+  --highlight-text-color: #fdba74;
+}
+
+:root[data-theme="light"] {
+  --color-background: #f7f9fc;
+  --color-surface: #f7f9fc;
+  --color-surface-container: #f2f4f7;
+  --color-surface-container-low: #f2f4f7;
+  --color-surface-container-high: #e8eaed;
+  --color-surface-container-highest: #e0e3e6;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-variant: #e0e3e6;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #40484c;
+  --color-outline: #70787c;
+  --color-primary: #f97316;
+  --color-primary-container: #ea580c;
+  --color-tertiary: #006099;
+
+  /* PrimeReact Lara: orange-500 primary (matches Tailwind orange-500) */
+  --primary-color: var(--color-primary);
+  --primary-color-text: #ffffff;
+  --primary-50: #fff7ed;
+  --primary-100: #ffedd5;
+  --primary-200: #fed7aa;
+  --primary-300: #fdba74;
+  --primary-400: #fb923c;
+  --primary-500: #f97316;
+  --primary-600: #ea580c;
+  --primary-700: #c2410c;
+  --primary-800: #9a3412;
+  --primary-900: #7c2d12;
+  --focus-ring: 0 0 0 0.2rem rgb(249 115 22 / 0.2);
+  --highlight-bg: rgb(249 115 22 / 0.1);
+  --highlight-text-color: #c2410c;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: Manrope, system-ui, sans-serif;
+}
+
+.heavy-blur {
+  filter: blur(80px) brightness(0.6);
+}
+
+.app-chrome-bg {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  backdrop-filter: blur(14px);
+}
+
+.app-chrome-bg::before {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  z-index: -2;
+  background-image: var(--app-chrome-bg);
+  background-attachment: fixed;
+  background-position: center;
+  background-size: cover;
+  filter: blur(24px) brightness(0.9) saturate(1.1);
+  transform: scale(1.08);
+}
+
+.app-chrome-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--color-surface-container-low) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+}
+
+[data-theme="light"] .app-chrome-bg::before {
+  filter: blur(24px) brightness(1.18) saturate(1.02);
+}
+
+[data-theme="light"] .app-chrome-bg::after {
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 86%, transparent);
+}
+
+.orange-glow {
+  background: radial-gradient(circle, rgb(249 115 22 / 0.14) 0%, transparent 70%);
+  filter: blur(80px);
+}
+
+[data-theme="light"] .orange-glow {
+  background: radial-gradient(circle, rgb(249 115 22 / 0.1) 0%, transparent 70%);
+  filter: blur(72px);
+}
+
+.professional-panel {
+  position: relative;
+  z-index: 1;
+  /* Fallback if color-mix unsupported */
+  background: rgba(26, 31, 38, 0.92);
+  background: color-mix(in srgb, var(--color-surface-container) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(24px);
+}
+
+[data-theme="light"] .professional-panel {
+  background: rgba(255, 255, 255, 0.94);
+  background: color-mix(in srgb, var(--color-surface-container) 92%, transparent);
+  box-shadow: 0 24px 48px rgba(25, 28, 30, 0.06);
+  border: 1px solid color-mix(in srgb, var(--color-tertiary) 12%, transparent);
+}
+
+/* Login CTA: Athene orange / red-orange from --color-primary (Lara theme would else paint blue). */
+.action-button.p-button,
+.action-button.p-button:enabled:hover,
+.action-button.p-button:enabled:active,
+.action-button.p-button:focus-visible {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    var(--color-primary-container) 100%
+  ) !important;
+  background-color: var(--color-primary) !important;
+  border: none !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.action-button.p-button:enabled:hover {
+  filter: brightness(1.06);
+}
+
+.action-button.p-button:enabled:active {
+  filter: brightness(0.98);
+}
+
+.p-inputtext,
+.p-password-input {
+  width: 100%;
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent) !important;
+  border: 1px solid var(--color-surface-variant) !important;
+  color: var(--color-on-surface) !important;
+  border-radius: 0 !important;
+  padding: 1rem !important;
+}
+
+[data-theme="light"] .p-inputtext,
+[data-theme="light"] .p-password-input {
+  background: var(--color-surface-container-low) !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.p-inputtext:enabled:focus,
+.p-password-input:enabled:focus {
+  box-shadow: none !important;
+  outline: none !important;
+  border-color: var(--color-primary) !important;
+}
+
+[data-theme="light"] .p-inputtext:enabled:focus,
+[data-theme="light"] .p-password-input:enabled:focus {
+  border-left: 2px solid var(--color-tertiary) !important;
+  border-color: transparent !important;
+}
+
+.p-inputswitch-slider {
+  border-radius: 2px !important;
+}
+
+.compact-data-table {
+  font-size: 0.75rem;
+}
+
+.compact-data-table .p-datatable-thead > tr > th,
+.compact-data-table .p-datatable-tbody > tr > td {
+  padding: 0.35rem 0.5rem !important;
+  line-height: 1.2;
+}
+
+.compact-data-table .p-column-title {
+  line-height: 1.2;
+}
