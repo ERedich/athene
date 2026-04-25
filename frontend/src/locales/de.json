@@ -99,6 +99,8 @@
     "documentsDeleteTitle": "Dokument löschen?",
     "documentsConfirmDelete": "Dokument „{{name}}“ wirklich löschen?",
     "documentsOpen": "Öffnen",
+    "documentsOpenError": "Dokument konnte nicht geöffnet werden.",
+    "documentsPopupBlocked": "Popup blockiert. Bitte Popups für diese Seite erlauben.",
     "documentsPending": "Zum Hochladen vorgemerkt",
     "documentsRemovePending": "Vorgemerkte Datei entfernen",
     "documentsMetaDialogTitle": "Dokument-Metadaten",

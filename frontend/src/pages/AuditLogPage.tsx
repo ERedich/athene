@@ -13,6 +13,7 @@ import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { apiFetch, apiUrl } from "../lib/api";
 
 export type AuditLogEntry = {
   id: string;
@@ -31,8 +32,6 @@ export type AuditLogEntry = {
   ipAddress: string | null;
   userAgent: string | null;
 };
-
-const fetchOpts: RequestInit = { credentials: "include" };
 
 function operationBadgeClass(operation: string): string {
   const op = operation.toUpperCase();
@@ -106,7 +105,7 @@ export function AuditLogPage() {
     if (filterFrom.trim()) params.set("from", filterFrom.trim());
     if (filterTo.trim()) params.set("to", filterTo.trim());
     try {
-      const res = await fetch(`/api/audit-log?${params.toString()}`, fetchOpts);
+      const res = await apiFetch(apiUrl(`/api/audit-log?${params.toString()}`));
       if (!res.ok) throw new Error("load");
       const data = (await res.json()) as {
         rows: AuditLogEntry[];

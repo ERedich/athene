@@ -5,6 +5,7 @@ import { Button } from "primereact/button";
 
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { apiFetch } from "../lib/api";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 
 const navBtn =
@@ -141,7 +142,7 @@ export function AppShellLayout() {
               onClick={() => {
                 void (async () => {
                   try {
-                    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                    await apiFetch("/api/auth/logout", { method: "POST" });
                   } catch {
                     /* ignore */
                   }

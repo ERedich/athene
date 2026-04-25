@@ -8,6 +8,7 @@ import { Password } from "primereact/password";
 
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { apiFetch } from "../lib/api";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 
 const logoSrc =
@@ -114,10 +115,9 @@ export function LoginPage() {
                       }
                       setSubmitting(true);
                       try {
-                        const res = await fetch("/api/auth/login", {
+                        const res = await apiFetch("/api/auth/login", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          credentials: "include",
                           body: JSON.stringify({
                             loginName: name,
                             password,

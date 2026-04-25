@@ -95,6 +95,8 @@
     "documentsUploaded": "Documents uploaded.",
     "documentsUploadPartialError": "At least one document could not be uploaded.",
     "documentsDeleteError": "Could not delete document.",
+    "documentsOpenError": "Could not open document.",
+    "documentsPopupBlocked": "Popup was blocked by the browser. Please allow popups for this site.",
     "documentsDeleted": "Document deleted.",
     "documentsDeleteTitle": "Delete document?",
     "documentsConfirmDelete": "Really delete document \"{{name}}\"?",

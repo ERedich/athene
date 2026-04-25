@@ -1,21 +1,21 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
-import session from "express-session";
 
 import { auditLogRouter } from "./auditLog.js";
+import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
 import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
 import { costCentersRouter } from "./costCenters.js";
 import { requireAuth } from "./middleware/requireAuth.js";
+import { readSessionUserId } from "./sessionToken.js";
 import { sitesRouter } from "./sites.js";
 import { usersRouter } from "./users.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
-const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret || sessionSecret.length < 16) {
+if (!configuredSessionSecret || configuredSessionSecret.length < 16) {
   console.warn(
     "[athene-backend] SESSION_SECRET is missing or short; set a strong secret in production.",
   );
@@ -24,20 +24,23 @@ if (!sessionSecret || sessionSecret.length < 16) {
 app.set("trust proxy", 1);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use(
-  session({
-    name: "athene.sid",
-    secret: sessionSecret ?? "dev-only-insecure-session-secret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+app.use((req, _res, next) => {
+  const userId = readSessionUserId(req, sessionSecret);
+  // Keep legacy `req.session.userId` access pattern without server-side session storage.
+  const reqWithSession = req as unknown as {
+    session: {
+      userId?: string;
+      destroy: (cb?: (err?: unknown) => void) => void;
+    };
+  };
+  reqWithSession.session = {
+    userId,
+    destroy: (cb) => {
+      cb?.(undefined);
     },
-  }),
-);
+  };
+  next();
+});
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "athene-backend" });

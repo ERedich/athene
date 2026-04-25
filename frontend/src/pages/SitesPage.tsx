@@ -14,6 +14,7 @@ import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { apiFetch } from "../lib/api";
 
 type Site = {
   id: string;
@@ -26,9 +27,6 @@ type Site = {
   createdBy: string;
   updatedBy: string;
 };
-
-const apiFetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { ...init, credentials: "include" });
 
 type FormState = {
   key: string;
