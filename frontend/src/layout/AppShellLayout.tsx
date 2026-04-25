@@ -1,13 +1,11 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 
-import laraDark from "primereact/resources/themes/lara-dark-blue/theme.css?url";
-import laraLight from "primereact/resources/themes/lara-light-blue/theme.css?url";
-
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 
 const navBtn =
   "w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-on-surface-variant rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -20,7 +18,9 @@ const chromeBackground = {
 } as CSSProperties;
 
 function headerTitleKey(pathname: string): string {
+  if (pathname.startsWith("/assets")) return "assets.appName";
   if (pathname.startsWith("/sites")) return "sites.appName";
+  if (pathname.startsWith("/users")) return "users.appName";
   if (pathname.startsWith("/cost-centers")) return "costCenters.appName";
   if (pathname.startsWith("/audit-log")) return "auditLog.appName";
   return "dashboard.appName";
@@ -32,25 +32,14 @@ export type AppShellOutletContext = {
 };
 
 export function AppShellLayout() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
-  const [dark, setDark] = useState(
-    () => document.documentElement.dataset.theme !== "light",
-  );
-  const activeLang = i18n.language.startsWith("de") ? "de" : "en";
+  const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
 
   const toggleBtn =
     "inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-[var(--color-primary)] focus-visible:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    const link = document.getElementById("prime-theme-link") as HTMLLinkElement | null;
-    if (link) {
-      link.href = dark ? laraDark : laraLight;
-    }
-  }, [dark]);
 
   return (
     <div
@@ -82,6 +71,15 @@ export function AppShellLayout() {
             {t("dashboard.navDashboard")}
           </NavLink>
           <NavLink
+            to="/assets"
+            className={({ isActive }) =>
+              `${navBtn} ${isActive ? activeNavBtn : ""}`
+            }
+          >
+            <i className="pi pi-box" aria-hidden />
+            {t("assets.navAssets")}
+          </NavLink>
+          <NavLink
             to="/sites"
             className={({ isActive }) =>
               `${navBtn} ${isActive ? activeNavBtn : ""}`
@@ -89,6 +87,15 @@ export function AppShellLayout() {
           >
             <i className="pi pi-map-marker" aria-hidden />
             {t("sites.navSites")}
+          </NavLink>
+          <NavLink
+            to="/users"
+            className={({ isActive }) =>
+              `${navBtn} ${isActive ? activeNavBtn : ""}`
+            }
+          >
+            <i className="pi pi-users" aria-hidden />
+            {t("users.navUsers")}
           </NavLink>
           <NavLink
             to="/cost-centers"
@@ -109,35 +116,50 @@ export function AppShellLayout() {
             {t("auditLog.navAudit")}
           </NavLink>
         </nav>
-        <div className="p-3 border-t border-white/5 space-y-2">
-          <Button
-            type="button"
-            label={t("dashboard.signOut")}
-            icon="pi pi-sign-out"
-            outlined
-            size="small"
-            className="w-full justify-center gap-2"
-            onClick={() => {
-              void (async () => {
-                try {
-                  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-                } catch {
-                  /* ignore */
-                }
-                navigate("/", { replace: true });
-              })();
-            }}
-          />
+        <div className="p-3 border-t border-white/5">
+          <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+            Misc
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={toggleBtn}
+              aria-label={dark ? t("login.themeToggleToLight") : t("login.themeToggleToDark")}
+              title={dark ? t("login.themeLight") : t("login.themeDark")}
+              onClick={toggleTheme}
+            >
+              <i className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`} aria-hidden />
+            </button>
+            <Button
+              type="button"
+              icon="pi pi-sign-out"
+              aria-label={t("dashboard.signOut")}
+              title={t("dashboard.signOut")}
+              outlined
+              size="small"
+              className="h-9 w-9"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                  } catch {
+                    /* ignore */
+                  }
+                  navigate("/", { replace: true });
+                })();
+              }}
+            />
+          </div>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header
-          className="app-chrome-bg h-14 shrink-0 flex items-center justify-between gap-4 pl-2 pr-6 border-b border-white/5 bg-surface-container-low"
+          className="app-chrome-bg h-14 shrink-0 flex items-center justify-between gap-4 pl-[15px] pr-4 border-b border-white/5 bg-surface-container-low"
           style={chromeBackground}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <h1 className="w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
+            <h1 className="app-shell-title font-headline w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
               {t(headerTitleKey(pathname))}
             </h1>
             {headerActions ? (
@@ -148,41 +170,19 @@ export function AppShellLayout() {
                 />
                 <nav
                   aria-label={t("shell.actionsNavAria")}
-                  className="flex shrink-0 items-center"
+                  className="flex min-w-0 flex-1 items-center"
                 >
                   {headerActions}
                 </nav>
               </>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="sr-only">{t("login.themeLabel")}</span>
-            <button
-              type="button"
-              className={`${toggleBtn} w-9`}
-              aria-label={dark ? t("login.themeToggleToLight") : t("login.themeToggleToDark")}
-              title={dark ? t("login.themeLight") : t("login.themeDark")}
-              onClick={() => setDark((d) => !d)}
-            >
-              <i className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className={`${toggleBtn} text-xs font-semibold tracking-widest`}
-              aria-label={t("login.langToggleAria")}
-              title={t("login.langToggleAria")}
-              onClick={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
-            >
-              <span className="select-none" aria-hidden>
-                {activeLang === "de" ? "DE" : "EN"}
-              </span>
-            </button>
-          </div>
         </header>
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden bg-surface p-px">
           <Outlet context={{ setHeaderActions } satisfies AppShellOutletContext} />
         </main>
       </div>
+      <ThemeLoadingOverlay visible={isThemeLoading} />
     </div>
   );
 }

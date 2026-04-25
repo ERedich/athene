@@ -68,13 +68,66 @@ North star differs by theme but shared principles: **precision / industrial**, *
 - **Layout**: fixed **left navbar** (navigation, app switcher, settings entry points); **right main window** for all detail views, lists, and embedded content. Nested routes render inside the main window only.
 - **PrimeReact themes**: use **Lara** (`lara-light-blue` / `lara-dark-blue`) loaded dynamically with `document.documentElement.dataset.theme` (`light` / `dark`) so Prime components match the active mode.
 - **Primary colours (current web tokens)**: map Lara to Athene orange via CSS variables on `:root[data-theme="light"]` and `:root[data-theme="dark"]` — **`--color-primary: #f97316`**, **`--color-primary-container: #ea580c`**. Use these (and Tailwind mappings `primary` / `primary-container`) for accents, CTAs, and focus; override Prime defaults where Lara would otherwise paint blue.
+- **Tables**: every PrimeReact `DataTable` in the app must use `app-data-table` so header and body cells share one font size. Do not add local `text-xs` / `text-sm` overrides inside table cells; use color, mono font, width, and alignment classes only unless a new table-specific design decision is documented here first.
+- **Tables (row double-click)**: double-clicking a table row must trigger the same behavior as clicking that row's **Edit** action.
+- **Tables (status icon)**: check icons that represent active/true/plant states in tables must be green (use global `app-data-table` styling for `i.pi.pi-check`; avoid neutral white/gray checks).
+- **Search (mandatory per app)**: every app with a table/list view must provide a search field.
+  - **Placement**: search is part of the top header action row (`setHeaderActions`) and must be placed at the far right (`ml-auto`) while CRUD actions remain on the left.
+  - **Component pattern**: use PrimeReact `IconField` + `InputIcon` + `InputText` (left search icon).
+  - **Sizing**: compact header size (`h-9`, width around `w-56` unless app-specific constraints require otherwise).
+  - **Styling**: use a dedicated input class (e.g. `users-header-search-input`) and define padding/background in `frontend/src/index.css`; do not rely only on utility padding when global `.p-inputtext` `!important` rules exist.
+  - **Behavior**: search filters the currently visible list/table rows live (client-side unless explicitly specified otherwise).
 - **Consistency**: reuse the same surface / on-surface / outline tokens as login; keep the “no-line” and typography rules from **Shared rules** above.
+
+### Reference affordances (“Referenzen” in tables)
+
+Use these **background** colors for reference icon buttons (and matching border) so users can read the reference *type* from color alone. Implement via shared classes in `frontend/src/index.css` (`app-ref-button--…`); do not invent ad‑hoc hex values per screen.
+
+| Reference kind | Meaning | Background (Tailwind token) | CSS class |
+| --- | --- | --- | --- |
+| **Documents** | Attached files (PDF, images, video, etc.) | **`cyan-300`** | `app-ref-button--documents` |
+| **Material** | Material / stock–related links | **`green-300`** | `app-ref-button--material` |
+| **Purchase (Einkauf)** | Procurement / purchasing links | **`pink-300`** | `app-ref-button--purchase` |
+
+- **Foreground**: keep icon and badge text **high contrast** on these pastel fills (the shared classes use a dark slate foreground; adjust only if documented here).
+- **Disabled / empty**: use neutral surface styling — **do not** use the cyan / green / pink fills when there is nothing to open.
 
 ---
 
 ## UI library
 
 - **PrimeReact** — primary React component library: [PrimeReact documentation](https://primereact.org/).
+- **Always** consult the PrimeReact guidelines on components, theming, and implementation at [https://primereact.org](https://primereact.org) **before applying changes** whenever anything about a component's API, props, styling hooks, theme tokens, or implementation pattern is unclear. Verify against the official docs first, then implement.
+
+---
+
+## Modal Handling
+
+- There are two modal types: normal modal windows (MW) and big modal windows (BMW).
+- BMW use 80% of screen width and 90% of screen height.
+- MW and BMW must have a divider below the title, except when the modal contains a TabView immediately under the title — in that case the tab navigation border serves as the divider and the header divider is omitted.
+- Clicking outside a modal window (MW/BMW) should close the modal.
+- Footer buttons (bottom-right) follow a strict pattern:
+  - **Cancel / Abbrechen / Close** → outlined secondary (`severity="secondary" outlined`).
+  - **Submit / OK / Save / Speichern** → filled primary color (PrimeReact `Button` default; no `severity` or `outlined`).
+
+---
+
+## Destructive actions (delete / remove)
+
+- Destructive actions must be **red**, never the primary (orange) color.
+- Use PrimeReact `severity="danger"` on the `Button`; this maps to `--color-danger` (red-500) / `--color-danger-container` (red-600) in our theme.
+- Inline icon-only delete in lists/cards: `<Button text severity="danger" icon="pi pi-trash" aria-label="…" title="…" />` (red icon, no fill).
+- Confirmation dialogs for destructive actions: pass `acceptClassName="p-button-danger"` so the confirm action renders as a red filled button.
+
+---
+
+## Tab Handling
+
+- Use PrimeReact `TabView` / `TabPanel` for tabbed UI.
+- Keep tab state controlled via `activeIndex` and `onTabChange`.
+- Use named tab indexes instead of inline magic numbers.
+- Tabs in BMW should stay sticky at the top and sit close to the title, while preserving PrimeReact's default TabView styling and selected-tab highlight.
 
 ---
 

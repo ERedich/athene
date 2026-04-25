@@ -15,6 +15,7 @@ export default {
         primary: "var(--color-primary)",
         "primary-container": "var(--color-primary-container)",
         outline: "var(--color-outline)",
+        "outline-variant": "var(--color-outline-variant)",
         "surface-variant": "var(--color-surface-variant)",
         "surface-container": "var(--color-surface-container)",
         "surface-container-low": "var(--color-surface-container-low)",

@@ -1,0 +1,13 @@
+---
+description: Keep frontend PrimeReact tables typographically consistent
+globs: frontend/src/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# PrimeReact Table Typography
+
+- Every PrimeReact `DataTable` must include the shared `app-data-table` class.
+- Keep table header and body cell font sizes unified through `frontend/src/index.css`.
+- Do not add local `text-xs` or `text-sm` classes inside table cells.
+- Cell-level classes may still handle color, mono font, width, truncation, whitespace, and alignment.
+- If a table needs different typography, document that design decision in `Guidelines.md` before implementing it.

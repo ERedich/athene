@@ -14,10 +14,14 @@
   --color-on-surface: #ffffff;
   --color-on-surface-variant: #cad7dd;
   --color-outline: #a5b3b8;
+  --color-outline-variant: rgba(255, 255, 255, 0.12);
   /* Tailwind orange-500 / orange-600 */
   --color-primary: #f97316;
   --color-primary-container: #ea580c;
   --color-tertiary: #ffd9a1;
+  /* Destructive actions: Tailwind red-500 / red-600. */
+  --color-danger: #ef4444;
+  --color-danger-container: #dc2626;
 
   /* PrimeReact Lara: same primary as app tokens (orange-500), not theme blue */
   --primary-color: var(--color-primary);
@@ -49,9 +53,13 @@
   --color-on-surface: #191c1e;
   --color-on-surface-variant: #40484c;
   --color-outline: #70787c;
+  --color-outline-variant: rgba(25, 28, 30, 0.12);
   --color-primary: #f97316;
   --color-primary-container: #ea580c;
   --color-tertiary: #006099;
+  /* Destructive actions: Tailwind red-500 / red-600. */
+  --color-danger: #ef4444;
+  --color-danger-container: #dc2626;
 
   /* PrimeReact Lara: orange-500 primary (matches Tailwind orange-500) */
   --primary-color: var(--color-primary);
@@ -71,12 +79,32 @@
   --highlight-text-color: #c2410c;
 }
 
+html {
+  font-size: 15px;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--color-background);
   color: var(--color-on-surface);
   font-family: Manrope, system-ui, sans-serif;
+}
+
+/* Native ViewTransition crossfade (Chromium). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Fallback crossfade for browsers without ViewTransition API. */
+html.theme-crossfade-fallback #root {
+  opacity: 0.88;
+}
+
+#root {
+  transition: opacity 220ms ease-in-out;
 }
 
 .heavy-blur {
@@ -180,17 +208,31 @@ body {
 .p-password-input {
   width: 100%;
   background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent) !important;
-  border: 1px solid var(--color-surface-variant) !important;
+  border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
   color: var(--color-on-surface) !important;
-  border-radius: 0 !important;
+  border-radius: 0.5rem !important;
   padding: 1rem !important;
 }
 
+.p-dropdown,
+.p-multiselect {
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
+  border-radius: 0.5rem !important;
+  color: var(--color-on-surface) !important;
+}
+
+.p-dropdown .p-dropdown-label,
+.p-multiselect .p-multiselect-label {
+  color: var(--color-on-surface) !important;
+}
+
 [data-theme="light"] .p-inputtext,
-[data-theme="light"] .p-password-input {
+[data-theme="light"] .p-password-input,
+[data-theme="light"] .p-dropdown,
+[data-theme="light"] .p-multiselect {
   background: var(--color-surface-container-low) !important;
-  border: none !important;
-  box-shadow: inset 0 0 0 1px transparent;
+  border-color: color-mix(in srgb, var(--color-outline) 45%, transparent) !important;
 }
 
 .p-inputtext:enabled:focus,
@@ -200,26 +242,451 @@ body {
   border-color: var(--color-primary) !important;
 }
 
-[data-theme="light"] .p-inputtext:enabled:focus,
-[data-theme="light"] .p-password-input:enabled:focus {
-  border-left: 2px solid var(--color-tertiary) !important;
-  border-color: transparent !important;
+/* Header search input inside IconField: override global p-inputtext padding. */
+.app-header-search-input.p-inputtext {
+  padding-left: 2.1rem !important;
+  padding-right: 0.75rem !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.p-dropdown:not(.p-disabled).p-focus,
+.p-multiselect:not(.p-disabled).p-focus {
+  box-shadow: none !important;
+  outline: none !important;
+  border-color: var(--color-primary) !important;
+}
+
+.app-required-marker {
+  margin-left: 0.25rem;
+  color: var(--color-primary);
+}
+
+/* Reference column icon buttons — Guidelines “Referenzen” (Tailwind 300 palette) */
+.app-ref-button--documents.p-button:not(:disabled),
+.app-ref-button--documents.p-button:not(.p-disabled) {
+  background: rgb(103 232 249) !important; /* cyan-300 */
+  border-color: rgb(103 232 249) !important;
+  color: rgb(15 23 42) !important; /* slate-900 */
+}
+.app-ref-button--documents.p-button:not(:disabled):hover,
+.app-ref-button--documents.p-button:not(.p-disabled):hover {
+  background: rgb(34 211 238) !important; /* cyan-400 */
+  border-color: rgb(34 211 238) !important;
+}
+
+.app-ref-button--material.p-button:not(:disabled),
+.app-ref-button--material.p-button:not(.p-disabled) {
+  background: rgb(134 239 172) !important; /* green-300 */
+  border-color: rgb(134 239 172) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--material.p-button:not(:disabled):hover,
+.app-ref-button--material.p-button:not(.p-disabled):hover {
+  background: rgb(74 222 128) !important; /* green-400 */
+  border-color: rgb(74 222 128) !important;
+}
+
+.app-ref-button--purchase.p-button:not(:disabled),
+.app-ref-button--purchase.p-button:not(.p-disabled) {
+  background: rgb(249 168 212) !important; /* pink-300 */
+  border-color: rgb(249 168 212) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--purchase.p-button:not(:disabled):hover,
+.app-ref-button--purchase.p-button:not(.p-disabled):hover {
+  background: rgb(244 114 182) !important; /* pink-400 */
+  border-color: rgb(244 114 182) !important;
+}
+
+/* PrimeReact Button — restore styling (Tailwind @layer base preflight wins
+   over PrimeReact's @layer primereact, leaving footer buttons unstyled).
+   Athene primary palette replaces the theme's hard-coded blue. */
+.p-button {
+  color: #ffffff;
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  padding: 0.6rem 1.1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.p-button:not(:disabled):hover {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary-container);
+  color: #ffffff;
+}
+
+.p-button:not(:disabled):active {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary-container);
+  filter: brightness(0.94);
+  color: #ffffff;
+}
+
+.p-button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.p-button.p-button-outlined {
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.p-button.p-button-outlined:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.p-button.p-button-outlined.p-button-secondary {
+  color: var(--color-on-surface-variant);
+  border-color: color-mix(in srgb, var(--color-on-surface) 28%, transparent);
+}
+
+.p-button.p-button-outlined.p-button-secondary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+  color: var(--color-on-surface);
+  border-color: color-mix(in srgb, var(--color-on-surface) 40%, transparent);
+}
+
+.p-button.p-button-text {
+  background-color: transparent;
+  color: var(--color-primary);
+  border-color: transparent;
+}
+
+.p-button.p-button-text:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border-color: transparent;
+}
+
+/* Danger variants — destructive actions (delete/remove) per Guidelines.md. */
+.p-button.p-button-danger,
+.p-button.p-button-severity-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #ffffff;
+}
+
+.p-button.p-button-danger:not(:disabled):hover,
+.p-button.p-button-severity-danger:not(:disabled):hover {
+  background: var(--color-danger-container);
+  border-color: var(--color-danger-container);
+  color: #ffffff;
+}
+
+.p-button.p-button-outlined.p-button-danger,
+.p-button.p-button-outlined.p-button-severity-danger {
+  background-color: transparent;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.p-button.p-button-outlined.p-button-danger:not(:disabled):hover,
+.p-button.p-button-outlined.p-button-severity-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.p-button.p-button-text.p-button-danger,
+.p-button.p-button-text.p-button-severity-danger {
+  background-color: transparent;
+  color: var(--color-danger);
+  border-color: transparent;
+}
+
+.p-button.p-button-text.p-button-danger:not(:disabled):hover,
+.p-button.p-button-text.p-button-severity-danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
+  border-color: transparent;
+}
+
+.p-dialog .p-dialog-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+/* Subtle card border token used across dialogs/lists. Defined explicitly so
+   it works regardless of Tailwind JIT cache state for the custom color. */
+.border-outline-variant {
+  border-color: var(--color-outline-variant) !important;
+}
+
+/* Cascading entrance for document/list cards. Each card sets its own
+   `--app-cascade-index` and the animation delay is derived from it. */
+@keyframes app-card-cascade {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.app-card-cascade {
+  opacity: 0;
+  animation: app-card-cascade 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--app-cascade-index, 0) * 60ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-card-cascade {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.app-big-modal-window.p-dialog {
+  width: 80vw;
+  height: 90vh;
+}
+
+.app-big-modal-window .p-dialog-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-top: 1rem;
+}
+
+.app-tabbed-modal-window .p-dialog-content {
+  padding-top: 0;
+}
+
+.app-tabbed-modal-window .p-dialog-header {
+  border-bottom: 0;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.app-sticky-tabs .p-tabview-nav-container {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-overlay);
+}
+
+.app-sticky-tabs .p-tabview-nav,
+.app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
+  background: var(--surface-overlay);
+}
+
+.app-sticky-tabs .p-tabview-nav {
+  position: relative;
+  border-bottom: 2px solid color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
+}
+
+.app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
+  border-bottom: 2px solid color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
+  margin-bottom: -2px;
+}
+
+.app-sticky-tabs .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  color: var(--color-primary);
+}
+
+.app-sticky-tabs .p-tabview-nav::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 2px;
+  width: var(--app-ink-w, 0);
+  transform: translateX(var(--app-ink-x, 0));
+  background: var(--color-primary);
+  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.app-inline-icon-dropdown .p-dropdown-trigger {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: 2.5rem !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border-left: 0 !important;
+  box-shadow: none !important;
+  color: var(--color-on-surface-variant) !important;
+  padding: 0 1rem 0 0 !important;
+}
+
+.app-inline-icon-dropdown .p-dropdown-label {
+  padding-right: 2.5rem !important;
+}
+
+.app-inline-icon-dropdown.p-dropdown {
+  position: relative !important;
+  background: var(--color-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+}
+
+.app-inline-icon-dropdown.p-dropdown .p-dropdown-clear-icon {
+  right: 2.5rem !important;
+}
+
+.app-inline-icon-dropdown .p-dropdown-trigger-icon {
+  color: var(--color-on-surface-variant) !important;
 }
 
 .p-inputswitch-slider {
   border-radius: 2px !important;
 }
 
-.compact-data-table {
-  font-size: 0.75rem;
+.app-data-table .p-datatable-table {
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-.compact-data-table .p-datatable-thead > tr > th,
-.compact-data-table .p-datatable-tbody > tr > td {
-  padding: 0.35rem 0.5rem !important;
-  line-height: 1.2;
+.app-data-table.p-datatable {
+  min-width: 0;
 }
 
-.compact-data-table .p-column-title {
-  line-height: 1.2;
+.app-data-table .p-datatable-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-width: 100%;
+}
+
+.app-data-table .p-datatable-thead > tr > th,
+.app-data-table .p-datatable-tbody > tr > td {
+  font-size: 0.875rem;
+  border-width: 0 1px 1px 0;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.app-data-table.p-datatable .p-datatable-thead > tr > th {
+  border-width: 0 1px 1px 0 !important;
+  border-style: solid !important;
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+}
+
+.app-data-table .p-datatable-thead > tr > th:last-child,
+.app-data-table .p-datatable-tbody > tr > td:last-child {
+  border-right-width: 0;
+}
+
+.app-data-table .p-datatable-thead > tr > th:last-child {
+  border-right-width: 0 !important;
+}
+
+.app-data-table .p-datatable-tbody > tr.p-highlight {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.app-data-table .p-datatable-tbody > tr.p-highlight > td {
+  background: transparent;
+  color: inherit;
+}
+
+.app-data-table .p-datatable-tbody > tr.p-highlight:hover {
+  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+}
+
+.app-data-table .p-column-title {
+  font-size: inherit;
+}
+
+/* Global table status check icon: use green accent instead of neutral text color. */
+.app-data-table i.pi.pi-check {
+  color: #22c55e !important;
+}
+
+/* App shell page title: use ATHENE headline font + signature underline. */
+.app-shell-title {
+  white-space: nowrap;
+}
+
+.app-shell-title::after {
+  content: "_";
+  margin-left: 0.05em;
+  color: color-mix(in srgb, var(--color-primary-container) 80%, white);
+  font-weight: 700;
+}
+
+/* PrimeReact Paginator rows-per-page dropdown
+   (v10: .p-paginator-rpp-options, v11+: .p-paginator-rpp-dropdown) */
+.p-paginator .p-paginator-rpp-options,
+.p-paginator .p-paginator-rpp-dropdown {
+  min-height: 2.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 72%, transparent);
+}
+
+.p-paginator .p-paginator-rpp-options .p-dropdown-label,
+.p-paginator .p-paginator-rpp-dropdown .p-dropdown-label {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+/* Make trigger part feel like one unified control */
+.p-paginator .p-paginator-rpp-options .p-dropdown-trigger,
+.p-paginator .p-paginator-rpp-dropdown .p-dropdown-trigger {
+  width: 2.5rem;
+  border-left: 1px solid color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+  background: transparent;
+}
+
+/* Keep Users MultiSelect same closed height as Dropdown/Input (54px). */
+.users-site-multiselect.p-multiselect {
+  min-height: 54px;
+}
+
+.users-site-multiselect .p-multiselect-label-container {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+}
+
+.users-site-multiselect .p-multiselect-label {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.theme-swap-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  background: color-mix(in srgb, var(--color-surface-container) 24%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.theme-swap-overlay__glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 24%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 84%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-on-surface) 16%, transparent);
+}
+
+.theme-swap-overlay__spinner {
+  font-size: 1.25rem;
+  color: var(--color-primary);
 }

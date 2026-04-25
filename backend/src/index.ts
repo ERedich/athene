@@ -4,10 +4,12 @@ import express from "express";
 import session from "express-session";
 
 import { auditLogRouter } from "./auditLog.js";
+import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
 import { costCentersRouter } from "./costCenters.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { sitesRouter } from "./sites.js";
+import { usersRouter } from "./users.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -42,7 +44,9 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/users", requireAuth, usersRouter);
 app.use("/api/cost-centers", requireAuth, costCentersRouter);
+app.use("/api/assets", requireAuth, assetsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/audit-log", requireAuth, auditLogRouter);
 

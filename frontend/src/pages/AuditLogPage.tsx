@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
+import { IconField } from "primereact/iconfield";
+import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Toast } from "primereact/toast";
+
+import type { AppShellOutletContext } from "../layout/AppShellLayout";
 
 export type AuditLogEntry = {
   id: string;
@@ -29,8 +34,23 @@ export type AuditLogEntry = {
 
 const fetchOpts: RequestInit = { credentials: "include" };
 
+function operationBadgeClass(operation: string): string {
+  const op = operation.toUpperCase();
+  if (op === "INSERT") {
+    return "border-green-400/35 bg-green-500/15 text-green-200";
+  }
+  if (op === "UPDATE") {
+    return "border-cyan-400/35 bg-cyan-500/15 text-cyan-200";
+  }
+  if (op === "DELETE") {
+    return "border-red-400/35 bg-red-500/15 text-red-200";
+  }
+  return "border-white/15 bg-white/10 text-on-surface";
+}
+
 export function AuditLogPage() {
   const { t, i18n } = useTranslation();
+  const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,6 +63,7 @@ export function AuditLogPage() {
   const [filterOperation, setFilterOperation] = useState<string | null>(null);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [detail, setDetail] = useState<AuditLogEntry | null>(null);
 
@@ -55,6 +76,24 @@ export function AuditLogPage() {
     ],
     [t],
   );
+
+  const filteredRows = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [
+        row.tableName,
+        row.recordId,
+        row.operation,
+        row.changedByLogin ?? "",
+        row.changedBy ?? "",
+        row.requestId ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [rows, searchTerm]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +129,27 @@ export function AuditLogPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setHeaderActions(
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
+        <li className="ml-auto">
+          <IconField iconPosition="left">
+            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <InputText
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("auditLog.searchPlaceholder")}
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
+            />
+          </IconField>
+        </li>
+      </ul>,
+    );
+    return () => {
+      setHeaderActions(null);
+    };
+  }, [searchTerm, setHeaderActions, t]);
+
   const onPageChange = (e: PaginatorPageChangeEvent) => {
     if (e.rows !== limit) {
       setLimit(e.rows);
@@ -111,12 +171,22 @@ export function AuditLogPage() {
   };
 
   const opBody = (row: AuditLogEntry) => (
-    <span className="font-mono text-xs">{row.operation}</span>
+    <span
+      className={`inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[11px] ${operationBadgeClass(row.operation)}`}
+    >
+      {row.operation}
+    </span>
   );
 
   const detailFooter = (
     <div className="flex justify-end">
-      <Button type="button" label={t("auditLog.close")} onClick={() => setDetail(null)} />
+      <Button
+        type="button"
+        label={t("auditLog.close")}
+        severity="secondary"
+        outlined
+        onClick={() => setDetail(null)}
+      />
     </div>
   );
 
@@ -211,14 +281,19 @@ export function AuditLogPage() {
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <DataTable
-          className="compact-data-table w-full"
-          value={rows}
+          className="app-data-table w-full"
+          value={filteredRows}
           loading={loading}
           dataKey="id"
           stripedRows
-          size="small"
+          showGridlines
           scrollable
+          resizableColumns
+          columnResizeMode="expand"
           scrollHeight="flex"
+          tableStyle={{ minWidth: "72rem" }}
+          stateStorage="local"
+          stateKey="athene-audit-log-table"
           emptyMessage={t("auditLog.empty")}
           onRowClick={(e) => setDetail(e.data as AuditLogEntry)}
           rowClassName={() => "cursor-pointer"}
@@ -231,10 +306,15 @@ export function AuditLogPage() {
             className="whitespace-nowrap"
           />
           <Column field="tableName" header={t("auditLog.colTable")} sortable />
-          <Column field="recordId" header={t("auditLog.colRecord")} body={(r) => <span className="font-mono text-xs">{r.recordId}</span>} />
+          <Column field="recordId" header={t("auditLog.colRecord")} body={(r) => <span className="font-mono">{r.recordId}</span>} />
           <Column header={t("auditLog.colOp")} body={opBody} className="w-28" />
           <Column field="changedByLogin" header={t("auditLog.colUser")} />
-          <Column field="requestId" header={t("auditLog.colRequest")} body={(r) => <span className="font-mono text-xs truncate max-w-[8rem] inline-block">{r.requestId ?? "—"}</span>} />
+          <Column
+            field="requestId"
+            header={t("auditLog.colRequest")}
+            body={(r) => <span className="font-mono truncate max-w-[8rem] inline-block">{r.requestId ?? "—"}</span>}
+            className="min-w-48"
+          />
         </DataTable>
         <Paginator
           first={page * limit}
@@ -249,10 +329,11 @@ export function AuditLogPage() {
       <Dialog
         header={t("auditLog.detailTitle")}
         visible={detail !== null}
-        style={{ width: "min(48rem, 95vw)" }}
+        className="app-big-modal-window"
         onHide={() => setDetail(null)}
         footer={detailFooter}
         modal
+        dismissableMask
         draggable={false}
         resizable={false}
       >
@@ -264,7 +345,13 @@ export function AuditLogPage() {
               <dt className="text-on-surface-variant">{t("auditLog.colRecord")}</dt>
               <dd className="m-0 font-mono text-xs">{detail.recordId}</dd>
               <dt className="text-on-surface-variant">{t("auditLog.colOp")}</dt>
-              <dd className="m-0 font-mono">{detail.operation}</dd>
+              <dd className="m-0">
+                <span
+                  className={`inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[11px] ${operationBadgeClass(detail.operation)}`}
+                >
+                  {detail.operation}
+                </span>
+              </dd>
               <dt className="text-on-surface-variant">{t("auditLog.colWhen")}</dt>
               <dd className="m-0">{formatDt(detail.changedAt)}</dd>
               <dt className="text-on-surface-variant">{t("auditLog.colUser")}</dt>

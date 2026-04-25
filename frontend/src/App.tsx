@@ -2,11 +2,13 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppShellLayout } from "./layout/AppShellLayout";
+import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SitesPage } from "./pages/SitesPage";
+import { UsersPage } from "./pages/UsersPage";
 
 export default function App() {
   return (
@@ -15,7 +17,9 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="assets" element={<AssetsPage />} />
           <Route path="sites" element={<SitesPage />} />
+          <Route path="users" element={<UsersPage />} />
           <Route path="cost-centers" element={<CostCentersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
         </Route>

@@ -5,6 +5,7 @@ import type { QueryResult } from "pg";
 
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
+import { siteAccessSql } from "./siteAccess.js";
 
 export type SiteRow = {
   id: string;
@@ -88,23 +89,36 @@ function auditMeta(req: Request) {
   };
 }
 
-router.get("/", async (_req: Request, res: Response) => {
+const selectSitesSql = `
+  SELECT
+    s."id",
+    s."key",
+    s."name",
+    s."isPlant",
+    s."colorHex",
+    s."createdAt",
+    s."updatedAt",
+    COALESCE(created_by."loginName", s."createdBy"::text) AS "createdBy",
+    COALESCE(updated_by."loginName", s."updatedBy"::text) AS "updatedBy"
+  FROM "site" s
+  LEFT JOIN "users" created_by ON created_by."id" = s."createdBy"
+  LEFT JOIN "users" updated_by ON updated_by."id" = s."updatedBy"
+`;
+
+router.get("/", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
     const { rows } = await pool.query<SiteRow>(
       `
-      SELECT
-        "id",
-        "key",
-        "name",
-        "isPlant",
-        "colorHex",
-        "createdAt",
-        "updatedAt",
-        "createdBy",
-        "updatedBy"
-      FROM "site"
-      ORDER BY "key" ASC
+      ${selectSitesSql}
+      WHERE ${siteAccessSql('s."id"', "$1")}
+      ORDER BY s."key" ASC
       `,
+      [userId],
     );
     res.json(rows);
   } catch (err) {
@@ -120,23 +134,37 @@ router.post("/", async (req: Request, res: Response) => {
   }
   const { key, name, isPlant, colorHex } = parsed;
   try {
-    const row = await withAuditContext(auditMeta(req), async (client) => {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
       const { rows } = await client.query<SiteRow>(
         `
-        INSERT INTO "site" ("key", "name", "isPlant", "colorHex")
-        VALUES ($1, $2, $3, $4)
-        RETURNING
-          "id",
-          "key",
-          "name",
-          "isPlant",
-          "colorHex",
-          "createdAt",
-          "updatedAt",
-          "createdBy",
-          "updatedBy"
+        WITH inserted AS (
+          INSERT INTO "site" ("key", "name", "isPlant", "colorHex")
+          VALUES ($1, $2, $3, $4)
+          RETURNING *
+        ),
+        linked AS (
+          INSERT INTO "userSite" ("userId", "siteId")
+          SELECT $5::uuid, i."id"
+          FROM inserted i
+          ON CONFLICT ("userId", "siteId") DO NOTHING
+          RETURNING "siteId"
+        )
+        SELECT
+          i."id",
+          i."key",
+          i."name",
+          i."isPlant",
+          i."colorHex",
+          i."createdAt",
+          i."updatedAt",
+          COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
+          COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy"
+        FROM inserted i
+        LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         `,
-        [key, name, isPlant, colorHex],
+        [key, name, isPlant, colorHex, meta.userId],
       );
       return rows[0];
     });
@@ -167,29 +195,41 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
   const { key, name, isPlant, colorHex } = parsed;
   try {
-    const row = await withAuditContext(auditMeta(req), async (client) => {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<Pick<SiteRow, "id">>(
-        `SELECT "id" FROM "site" WHERE "id" = $1::uuid`,
-        [id],
+        `
+        SELECT "id"
+        FROM "site"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"id"', "$2")}
+        `,
+        [id, meta.userId],
       );
       if (existing.rowCount === 0) {
         return null;
       }
       const { rows } = await client.query<SiteRow>(
         `
-        UPDATE "site"
-        SET "key" = $1, "name" = $2, "isPlant" = $3, "colorHex" = $4
-        WHERE "id" = $5::uuid
-        RETURNING
-          "id",
-          "key",
-          "name",
-          "isPlant",
-          "colorHex",
-          "createdAt",
-          "updatedAt",
-          "createdBy",
-          "updatedBy"
+        WITH updated AS (
+          UPDATE "site"
+          SET "key" = $1, "name" = $2, "isPlant" = $3, "colorHex" = $4
+          WHERE "id" = $5::uuid
+          RETURNING *
+        )
+        SELECT
+          u."id",
+          u."key",
+          u."name",
+          u."isPlant",
+          u."colorHex",
+          u."createdAt",
+          u."updatedAt",
+          COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
+          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy"
+        FROM updated u
+        LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         `,
         [key, name, isPlant, colorHex, id],
       );
@@ -220,8 +260,16 @@ router.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const deleted = await withAuditContext(auditMeta(req), async (client) => {
-      const result: QueryResult = await client.query(`DELETE FROM "site" WHERE "id" = $1::uuid`, [id]);
+    const meta = auditMeta(req);
+    const deleted = await withAuditContext(meta, async (client) => {
+      const result: QueryResult = await client.query(
+        `
+        DELETE FROM "site"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"id"', "$2")}
+        `,
+        [id, meta.userId],
+      );
       return result.rowCount ?? 0;
     });
     if (deleted === 0) {

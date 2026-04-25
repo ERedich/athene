@@ -8,6 +8,8 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
+import { IconField } from "primereact/iconfield";
+import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
@@ -55,7 +57,10 @@ const actionNavItem =
 
 const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
 const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10 hover:text-red-500`;
+const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
+const createActionIcon = "text-green-500/70";
+const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
+const deleteActionIcon = "text-red-500";
 
 export function CostCentersPage() {
   const { t, i18n } = useTranslation();
@@ -69,11 +74,23 @@ export function CostCentersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const siteOptions = useMemo(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
     [sites],
   );
+
+  const filteredCostCenters = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return costCenters;
+    return costCenters.filter((row) =>
+      [row.key, row.name, row.siteKey, row.siteName, row.createdBy, row.updatedBy]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [costCenters, searchTerm]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -243,10 +260,10 @@ export function CostCentersPage() {
 
   useEffect(() => {
     setHeaderActions(
-      <ul className="m-0 flex list-none items-center gap-1 p-0">
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className="pi pi-plus" aria-hidden />
+            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
             <span>{t("costCenters.new")}</span>
           </button>
         </li>
@@ -259,7 +276,7 @@ export function CostCentersPage() {
               if (selectedCostCenter) openEdit(selectedCostCenter);
             }}
           >
-            <i className="pi pi-pencil" aria-hidden />
+            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
             <span>{t("costCenters.edit")}</span>
           </button>
         </li>
@@ -272,16 +289,27 @@ export function CostCentersPage() {
               if (selectedCostCenter) confirmDelete(selectedCostCenter);
             }}
           >
-            <i className="pi pi-trash" aria-hidden />
+            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
             <span>{t("costCenters.delete")}</span>
           </button>
+        </li>
+        <li className="ml-auto">
+          <IconField iconPosition="left">
+            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <InputText
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("costCenters.searchPlaceholder")}
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
+            />
+          </IconField>
         </li>
       </ul>,
     );
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, selectedCostCenter, setHeaderActions, t]);
+  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedCostCenter, setHeaderActions, t]);
 
   const activeBody = (row: CostCenter) =>
     row.isActive ? (
@@ -328,31 +356,56 @@ export function CostCentersPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <DataTable
-          className="compact-data-table w-full"
-          value={costCenters}
+          className="app-data-table w-full"
+          value={filteredCostCenters}
           loading={loading}
           dataKey="id"
           selection={selectedCostCenter}
           onSelectionChange={(e) => setSelectedCostCenter(e.value as CostCenter | null)}
+          onRowDoubleClick={(e) => openEdit(e.data as CostCenter)}
           selectionMode="single"
           metaKeySelection={false}
           stripedRows
-          size="small"
+          showGridlines
           scrollable
+          resizableColumns
+          columnResizeMode="expand"
           scrollHeight="flex"
+          tableStyle={{ minWidth: "68rem" }}
+          stateStorage="local"
+          stateKey="athene-cost-centers-table"
           emptyMessage={t("costCenters.empty")}
         >
           <Column field="key" header={t("costCenters.key")} sortable />
           <Column field="name" header={t("costCenters.name")} sortable />
           <Column field="siteName" header={t("costCenters.site")} sortable />
+          <Column header={t("costCenters.active")} body={activeBody} className="w-28 text-center" />
+          <Column
+            field="createdAt"
+            header={t("costCenters.createdAt")}
+            body={(row: CostCenter) => formatShortDt(row.createdAt)}
+            sortable
+            className="whitespace-nowrap text-on-surface-variant"
+          />
+          <Column
+            field="createdBy"
+            header={t("costCenters.createdBy")}
+            sortable
+            className="text-on-surface-variant"
+          />
           <Column
             field="updatedAt"
             header={t("costCenters.updatedAt")}
             body={(row: CostCenter) => formatShortDt(row.updatedAt)}
             sortable
-            className="whitespace-nowrap text-xs text-on-surface-variant"
+            className="whitespace-nowrap text-on-surface-variant"
           />
-          <Column header={t("costCenters.active")} body={activeBody} className="w-28 text-center" />
+          <Column
+            field="updatedBy"
+            header={t("costCenters.updatedBy")}
+            sortable
+            className="text-on-surface-variant"
+          />
         </DataTable>
       </div>
 
@@ -363,6 +416,7 @@ export function CostCentersPage() {
         onHide={() => setDialogVisible(false)}
         footer={dialogFooter}
         modal
+        dismissableMask
         draggable={false}
         resizable={false}
       >
@@ -373,6 +427,9 @@ export function CostCentersPage() {
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
               {t("costCenters.key")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
             <InputText
               id="cost-center-key"
@@ -388,6 +445,9 @@ export function CostCentersPage() {
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
               {t("costCenters.name")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
             <InputText
               id="cost-center-name"
@@ -403,6 +463,9 @@ export function CostCentersPage() {
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
               {t("costCenters.site")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
             <Dropdown
               inputId="cost-center-site"

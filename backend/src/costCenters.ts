@@ -5,6 +5,7 @@ import type { QueryResult } from "pg";
 
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
+import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
 export type CostCenterRow = {
   id: string;
@@ -80,19 +81,28 @@ const selectCostCentersSql = `
     c."isActive",
     c."createdAt",
     c."updatedAt",
-    c."createdBy",
-    c."updatedBy"
+    COALESCE(created_by."loginName", c."createdBy"::text) AS "createdBy",
+    COALESCE(updated_by."loginName", c."updatedBy"::text) AS "updatedBy"
   FROM "costCenter" c
   JOIN "site" s ON s."id" = c."siteId"
+  LEFT JOIN "users" created_by ON created_by."id" = c."createdBy"
+  LEFT JOIN "users" updated_by ON updated_by."id" = c."updatedBy"
 `;
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
     const { rows } = await pool.query<CostCenterRow>(
       `
       ${selectCostCentersSql}
+      WHERE ${siteAccessSql('c."siteId"', "$1")}
       ORDER BY c."key" ASC
       `,
+      [userId],
     );
     res.json(rows);
   } catch (err) {
@@ -108,7 +118,9 @@ router.post("/", async (req: Request, res: Response) => {
   }
   const { key, name, siteId, isActive } = parsed;
   try {
-    const row = await withAuditContext(auditMeta(req), async (client) => {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      await assertSiteAccess(client, meta.userId, siteId);
       const { rows } = await client.query<CostCenterRow>(
         `
         WITH inserted AS (
@@ -126,10 +138,12 @@ router.post("/", async (req: Request, res: Response) => {
           i."isActive",
           i."createdAt",
           i."updatedAt",
-          i."createdBy",
-          i."updatedBy"
+          COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
+          COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
+        LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         `,
         [key, name, siteId, isActive],
       );
@@ -143,6 +157,10 @@ router.post("/", async (req: Request, res: Response) => {
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if ((err as Error).message === "site_access_denied") {
+      res.status(403).json({ error: "site_access_denied" });
       return;
     }
     sendPgError(res, err);
@@ -162,14 +180,21 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
   const { key, name, siteId, isActive } = parsed;
   try {
-    const row = await withAuditContext(auditMeta(req), async (client) => {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<Pick<CostCenterRow, "id">>(
-        `SELECT "id" FROM "costCenter" WHERE "id" = $1::uuid`,
-        [id],
+        `
+        SELECT "id"
+        FROM "costCenter"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
       );
       if (existing.rowCount === 0) {
         return null;
       }
+      await assertSiteAccess(client, meta.userId, siteId);
       const { rows } = await client.query<CostCenterRow>(
         `
         WITH updated AS (
@@ -188,10 +213,12 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."isActive",
           u."createdAt",
           u."updatedAt",
-          u."createdBy",
-          u."updatedBy"
+          COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
+          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
+        LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         `,
         [key, name, siteId, isActive, id],
       );
@@ -207,6 +234,10 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
+    if ((err as Error).message === "site_access_denied") {
+      res.status(403).json({ error: "site_access_denied" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -218,10 +249,15 @@ router.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const deleted = await withAuditContext(auditMeta(req), async (client) => {
+    const meta = auditMeta(req);
+    const deleted = await withAuditContext(meta, async (client) => {
       const result: QueryResult = await client.query(
-        `DELETE FROM "costCenter" WHERE "id" = $1::uuid`,
-        [id],
+        `
+        DELETE FROM "costCenter"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
       );
       return result.rowCount ?? 0;
     });

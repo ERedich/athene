@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -6,11 +6,9 @@ import { Checkbox } from "primereact/checkbox";
 import { InputText } from "primereact/inputtext";
 import { Password } from "primereact/password";
 
-import laraDark from "primereact/resources/themes/lara-dark-blue/theme.css?url";
-import laraLight from "primereact/resources/themes/lara-light-blue/theme.css?url";
-
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 
 const logoSrc =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuDnDKENTaCHFOqAdjN14UnFa-vZmQPHcl4v3LF3e1drOvbl2kZqYu2ezKY4fgPmcQB1z6SXjYvMVL_JUG2qhgUoJzxU5FM2_giekynnoc6LnHcCEP0S-iOgCGpT2ktK_tqcYoxKnrQaayIvjB4dA-FMHSJjC98H-x9tK0Fgu_2KHobc5jvubRlozy-q6tzipOESW7d7IXtyqzNgSmDnMJ5w2EDvGjHYWnVT5G-_rFeUvOyEMHNR1gIN8S09jo_t8vmp_d7JWv7ePYSn";
@@ -18,7 +16,7 @@ const logoSrc =
 export function LoginPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const [dark, setDark] = useState(true);
+  const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
   const [remember, setRemember] = useState(false);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
@@ -32,14 +30,6 @@ export function LoginPage() {
 
   const textLinkInteractive =
     "transition-colors hover:text-[var(--color-primary)] focus-visible:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    const link = document.getElementById("prime-theme-link") as HTMLLinkElement | null;
-    if (link) {
-      link.href = dark ? laraDark : laraLight;
-    }
-  }, [dark]);
 
   return (
     <div className="font-body text-on-surface min-h-screen flex flex-col overflow-hidden selection:bg-primary/30">
@@ -73,7 +63,7 @@ export function LoginPage() {
               className={`${toggleBtn} w-9`}
               aria-label={dark ? t("login.themeToggleToLight") : t("login.themeToggleToDark")}
               title={dark ? t("login.themeLight") : t("login.themeDark")}
-              onClick={() => setDark((d) => !d)}
+              onClick={toggleTheme}
             >
               <i className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`} aria-hidden />
             </button>
@@ -154,6 +144,9 @@ export function LoginPage() {
                   <div className="space-y-2">
                     <label className="block text-[11px] font-headline text-outline uppercase tracking-[0.1em] px-0.5">
                       {t("login.operatorId")}
+                      <span className="app-required-marker" aria-hidden>
+                        *
+                      </span>
                     </label>
                     <InputText
                       value={loginName}
@@ -165,6 +158,9 @@ export function LoginPage() {
                   <div className="space-y-2">
                     <label className="block text-[11px] font-headline text-outline uppercase tracking-[0.1em] px-0.5">
                       {t("login.password")}
+                      <span className="app-required-marker" aria-hidden>
+                        *
+                      </span>
                     </label>
                     <Password
                       inputClassName="p-password-input"
@@ -252,6 +248,7 @@ export function LoginPage() {
           </a>
         </div>
       </footer>
+      <ThemeLoadingOverlay visible={isThemeLoading} />
     </div>
   );
 }

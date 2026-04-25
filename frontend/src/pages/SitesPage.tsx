@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -8,6 +8,8 @@ import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
+import { IconField } from "primereact/iconfield";
+import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
@@ -64,7 +66,10 @@ const actionNavItem =
 
 const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
 const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10 hover:text-red-500`;
+const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
+const createActionIcon = "text-green-500/70";
+const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
+const deleteActionIcon = "text-red-500";
 
 export function SitesPage() {
   const { t, i18n } = useTranslation();
@@ -77,6 +82,15 @@ export function SitesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredSites = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return sites;
+    return sites.filter((site) =>
+      [site.key, site.name, site.colorHex, site.createdBy, site.updatedBy].join(" ").toLowerCase().includes(q),
+    );
+  }, [sites, searchTerm]);
 
   const loadSites = useCallback(async () => {
     setLoading(true);
@@ -235,10 +249,10 @@ export function SitesPage() {
 
   useEffect(() => {
     setHeaderActions(
-      <ul className="m-0 flex list-none items-center gap-1 p-0">
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className="pi pi-plus" aria-hidden />
+            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
             <span>{t("sites.new")}</span>
           </button>
         </li>
@@ -251,7 +265,7 @@ export function SitesPage() {
               if (selectedSite) openEdit(selectedSite);
             }}
           >
-            <i className="pi pi-pencil" aria-hidden />
+            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
             <span>{t("sites.edit")}</span>
           </button>
         </li>
@@ -264,16 +278,27 @@ export function SitesPage() {
               if (selectedSite) confirmDelete(selectedSite);
             }}
           >
-            <i className="pi pi-trash" aria-hidden />
+            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
             <span>{t("sites.delete")}</span>
           </button>
+        </li>
+        <li className="ml-auto">
+          <IconField iconPosition="left">
+            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <InputText
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("sites.searchPlaceholder")}
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
+            />
+          </IconField>
         </li>
       </ul>,
     );
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, selectedSite, setHeaderActions, t]);
+  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedSite, setHeaderActions, t]);
 
   const plantBody = (row: Site) =>
     row.isPlant ? (
@@ -302,7 +327,7 @@ export function SitesPage() {
           style={{ backgroundColor: hex }}
           aria-hidden
         />
-        <span className="font-mono text-xs text-on-surface-variant">{hex}</span>
+        <span className="font-mono text-on-surface-variant">{hex}</span>
       </div>
     );
   };
@@ -334,31 +359,56 @@ export function SitesPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <DataTable
-          className="compact-data-table w-full"
-          value={sites}
+          className="app-data-table w-full"
+          value={filteredSites}
           loading={loading}
           dataKey="id"
           selection={selectedSite}
           onSelectionChange={(e) => setSelectedSite(e.value as Site | null)}
+          onRowDoubleClick={(e) => openEdit(e.data as Site)}
           selectionMode="single"
           metaKeySelection={false}
           stripedRows
-          size="small"
+          showGridlines
           scrollable
+          resizableColumns
+          columnResizeMode="expand"
           scrollHeight="flex"
+          tableStyle={{ minWidth: "66rem" }}
+          stateStorage="local"
+          stateKey="athene-sites-table"
           emptyMessage={t("sites.empty")}
         >
           <Column field="key" header={t("sites.key")} sortable />
           <Column field="name" header={t("sites.name")} sortable />
+          <Column header={t("sites.color")} body={colorBody} className="w-40" />
+          <Column header={t("sites.werk")} body={plantBody} className="w-24 text-center" />
+          <Column
+            field="createdAt"
+            header={t("sites.createdAt")}
+            body={(row: Site) => formatShortDt(row.createdAt)}
+            sortable
+            className="whitespace-nowrap text-on-surface-variant"
+          />
+          <Column
+            field="createdBy"
+            header={t("sites.createdBy")}
+            sortable
+            className="text-on-surface-variant"
+          />
           <Column
             field="updatedAt"
             header={t("sites.updatedAt")}
             body={(row: Site) => formatShortDt(row.updatedAt)}
             sortable
-            className="whitespace-nowrap text-xs text-on-surface-variant"
+            className="whitespace-nowrap text-on-surface-variant"
           />
-          <Column header={t("sites.color")} body={colorBody} className="w-40" />
-          <Column header={t("sites.werk")} body={plantBody} className="w-24 text-center" />
+          <Column
+            field="updatedBy"
+            header={t("sites.updatedBy")}
+            sortable
+            className="text-on-surface-variant"
+          />
         </DataTable>
       </div>
 
@@ -369,6 +419,7 @@ export function SitesPage() {
         onHide={() => setDialogVisible(false)}
         footer={dialogFooter}
         modal
+        dismissableMask
         draggable={false}
         resizable={false}
       >
@@ -379,6 +430,9 @@ export function SitesPage() {
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
               {t("sites.key")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
             <InputText
               id="site-key"
@@ -394,6 +448,9 @@ export function SitesPage() {
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
               {t("sites.name")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
             <InputText
               id="site-name"
