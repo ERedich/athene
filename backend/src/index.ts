@@ -13,6 +13,7 @@ import { usersRouter } from "./users.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
+const isProduction = process.env.NODE_ENV === "production";
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || sessionSecret.length < 16) {
@@ -32,8 +33,9 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      // Vercel frontend/backend run on different origins; production needs cross-site cookies.
+      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   }),
