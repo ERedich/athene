@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 
+import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
+import { clearSessionCookie, writeSessionCookie } from "./sessionToken.js";
 
 export type AuthUserRow = {
   id: string;
@@ -35,7 +37,7 @@ router.post("/login", async (req: Request, res: Response) => {
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }
-    req.session.userId = user.id;
+    writeSessionCookie(res, user.id, sessionSecret, isProduction);
     res.json({ user });
   } catch (err) {
     console.error(err);
@@ -61,9 +63,8 @@ router.get("/me", async (req: Request, res: Response) => {
     );
     const user = rows[0];
     if (!user) {
-      req.session.destroy(() => {
-        res.status(401).json({ error: "unauthorized" });
-      });
+      clearSessionCookie(res, isProduction);
+      res.status(401).json({ error: "unauthorized" });
       return;
     }
     res.json({ user });
@@ -74,14 +75,11 @@ router.get("/me", async (req: Request, res: Response) => {
 });
 
 router.post("/logout", (req: Request, res: Response) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error(err);
-      res.status(500).json({ error: "internal_error" });
-      return;
-    }
-    res.status(204).send();
+  req.session.destroy(() => {
+    // No server-side session store to clear; cookie is removed below.
   });
+  clearSessionCookie(res, isProduction);
+  res.status(204).send();
 });
 
 export const authRouter = router;
