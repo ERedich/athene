@@ -15,6 +15,7 @@ import { Password } from "primereact/password";
 import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { apiFetch } from "../lib/api";
 
 type SiteOption = {
   id: string;
@@ -45,9 +46,6 @@ type FormState = {
   workingSiteId: string;
   additionalSiteIds: string[];
 };
-
-const apiFetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { ...init, credentials: "include" });
 
 const emptyForm = (): FormState => ({
   loginName: "",

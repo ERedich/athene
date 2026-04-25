@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 
 export function RequireAuth() {
   const { t } = useTranslation();
@@ -8,7 +9,7 @@ export function RequireAuth() {
 
   useEffect(() => {
     let alive = true;
-    void fetch("/api/auth/me", { credentials: "include" })
+    void apiFetch("/api/auth/me")
       .then((r) => {
         if (!alive) return;
         setOk(r.ok);

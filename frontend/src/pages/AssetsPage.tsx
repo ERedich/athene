@@ -29,6 +29,7 @@ import {
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
+import { apiFetch, apiUrl } from "../lib/api";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
@@ -97,9 +98,6 @@ type FormState = {
   manufacturer: string;
   remark: string;
 };
-
-const apiFetch = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { ...init, credentials: "include" });
 
 const PENDING_AUTO_UPLOAD_MS = 5_000;
 const PENDING_RING_C = 2 * Math.PI * 10;
@@ -1059,7 +1057,7 @@ export function AssetsPage() {
   };
 
   const openDocumentContent = (assetId: string, documentId: string) => {
-    window.open(`/api/assets/${assetId}/documents/${documentId}/content`, "_blank", "noopener,noreferrer");
+    window.open(apiUrl(`/api/assets/${assetId}/documents/${documentId}/content`), "_blank", "noopener,noreferrer");
   };
 
   const deleteDocument = async (assetId: string, documentId: string) => {
