@@ -22,7 +22,9 @@ import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
+import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   type AssetDocumentCategory,
@@ -30,14 +32,54 @@ import {
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
 import { apiFetch } from "../lib/api";
+import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
+
+function isAssetTypeValue(v: unknown): v is AssetType {
+  return v === "site" || v === "structure" || v === "line" || v === "maintenanceObject";
+}
+
+/** PrimeIcons glyph per asset type (industrial hierarchy metaphor). */
+function assetTypePrimeIconClass(type: AssetType): string {
+  switch (type) {
+    case "site":
+      return "pi pi-map-marker";
+    case "structure":
+      return "pi pi-sitemap";
+    case "line":
+      return "pi pi-arrows-h";
+    case "maintenanceObject":
+      return "pi pi-wrench";
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}
+
+function assetTypeIconClassNames(type: AssetType): string {
+  return `${assetTypePrimeIconClass(type)} app-asset-type-icon app-asset-type-icon--${type}`;
+}
+
+function resolveAssetTypeDropdownValue(incoming: unknown): AssetType | null {
+  if (incoming == null) return null;
+  if (isAssetTypeValue(incoming)) return incoming;
+  if (typeof incoming === "object" && incoming !== null && "value" in incoming) {
+    const v = (incoming as { value: unknown }).value;
+    if (isAssetTypeValue(v)) return v;
+  }
+  return null;
+}
 
 type SiteOption = {
   id: string;
   key: string;
   name: string;
+  colorHex: string;
 };
+
+type SiteDropdownOption = { label: string; value: string };
 
 type Asset = {
   id: string;
@@ -46,6 +88,7 @@ type Asset = {
   siteId: string;
   siteKey: string;
   siteName: string;
+  siteColorHex: string;
   type: AssetType;
   parentAssetId: string | null;
   parentAssetKey: string | null;
@@ -55,11 +98,22 @@ type Asset = {
   buildDate: string | null;
   manufacturer: string | null;
   remark: string | null;
+  costCenterId: string | null;
+  costCenterKey: string | null;
+  costCenterName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+};
+
+type CostCenterListRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  isActive: boolean;
 };
 
 type AssetDocument = {
@@ -93,6 +147,7 @@ type FormState = {
   siteId: string;
   type: AssetType;
   parentAssetId: string;
+  costCenterId: string;
   serialNumber: string;
   buildDate: string;
   manufacturer: string;
@@ -256,6 +311,7 @@ const emptyForm = (): FormState => ({
   siteId: "",
   type: "site",
   parentAssetId: "",
+  costCenterId: "",
   serialNumber: "",
   buildDate: "",
   manufacturer: "",
@@ -312,11 +368,14 @@ function formatDateOnly(value: Date | null): string {
 
 export function AssetsPage() {
   const { t, i18n } = useTranslation();
+  const { user, appParameterBooleans } = useAuth();
+  const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenterListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -377,10 +436,92 @@ export function AssetsPage() {
     [t],
   );
 
-  const siteOptions = useMemo(
+  const renderAssetTypeDropdownOption = useCallback(
+    (option: { value: AssetType; label: string }) => (
+      <span className="flex min-w-0 items-center gap-2">
+        <i className={assetTypeIconClassNames(option.value)} aria-hidden />
+        <span className="truncate">{option.label}</span>
+      </span>
+    ),
+    [],
+  );
+
+  const renderAssetTypeDropdownValue = useCallback(
+    (incoming: unknown) => {
+      const type = resolveAssetTypeDropdownValue(incoming);
+      if (!type) {
+        return <span className="text-on-surface-variant">{t("assets.type")}</span>;
+      }
+      return (
+        <span className="flex min-w-0 items-center gap-2">
+          <i className={assetTypeIconClassNames(type)} aria-hidden />
+          <span className="truncate">{t(`assets.types.${type}`)}</span>
+        </span>
+      );
+    },
+    [t],
+  );
+
+  const typeColumnBody = useCallback(
+    (row: Asset) => (
+      <span className="flex min-w-0 items-center gap-2">
+        <i className={assetTypeIconClassNames(row.type)} aria-hidden />
+        <span className="truncate">{t(`assets.types.${row.type}`)}</span>
+      </span>
+    ),
+    [t],
+  );
+
+  const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
     [sites],
   );
+
+  const renderSiteDropdownOption = useCallback(
+    (option: SiteDropdownOption) => {
+      const site = sites.find((s) => s.id === option.value);
+      const hex = site?.colorHex || DEFAULT_SITE_COLOR_HEX;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${option.label} (${hex})`}>
+          {option.label}
+        </span>
+      );
+    },
+    [sites],
+  );
+
+  const renderSiteDropdownValue = useCallback(
+    (incoming: unknown) => {
+      const id =
+        typeof incoming === "string"
+          ? incoming
+          : incoming && typeof incoming === "object" && incoming !== null && "value" in incoming
+            ? String((incoming as { value: unknown }).value ?? "")
+            : "";
+      const site = sites.find((s) => s.id === id);
+      if (!site) {
+        return <span className="text-on-surface-variant">{t("assets.sitePlaceholder")}</span>;
+      }
+      const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+      const label = `${site.key} - ${site.name}`;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+          {label}
+        </span>
+      );
+    },
+    [sites, t],
+  );
+
+  const siteColumnBody = useCallback((row: Asset) => {
+    const hex = row.siteColorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${row.siteKey} - ${row.siteName}`;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {row.siteName}
+      </span>
+    );
+  }, []);
 
   const documentCategoryOptions = useMemo(
     () =>
@@ -471,6 +612,20 @@ export function AssetsPage() {
       }));
   }, [assets, editingId, form.siteId, form.type, t]);
 
+  const costCenterDropdownOptions = useMemo(
+    () =>
+      costCenters
+        .filter(
+          (cc) =>
+            cc.siteId === form.siteId && (cc.isActive || (form.costCenterId !== "" && cc.id === form.costCenterId)),
+        )
+        .map((cc) => ({
+          label: `${cc.key} - ${cc.name}${cc.isActive ? "" : ` (${t("costCenters.inactive")})`}`,
+          value: cc.id,
+        })),
+    [costCenters, form.costCenterId, form.siteId, t],
+  );
+
   const filteredAssets = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return assets;
@@ -480,9 +635,12 @@ export function AssetsPage() {
         row.name,
         row.siteKey,
         row.siteName,
+        row.siteColorHex,
         row.type,
         row.parentAssetKey ?? "",
         row.parentAssetName ?? "",
+        row.costCenterKey ?? "",
+        row.costCenterName ?? "",
         row.serialNumber ?? "",
         row.manufacturer ?? "",
         row.remark ?? "",
@@ -499,14 +657,20 @@ export function AssetsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetsRes, sitesRes] = await Promise.all([apiFetch("/api/assets"), apiFetch("/api/sites")]);
-      if (!assetsRes.ok || !sitesRes.ok) throw new Error("load");
-      const [assetsData, sitesData] = (await Promise.all([assetsRes.json(), sitesRes.json()])) as [
-        Asset[],
-        SiteOption[],
-      ];
+      const [assetsRes, sitesRes, costCentersRes] = await Promise.all([
+        apiFetch("/api/assets"),
+        apiFetch("/api/sites"),
+        apiFetch("/api/cost-centers"),
+      ]);
+      if (!assetsRes.ok || !sitesRes.ok || !costCentersRes.ok) throw new Error("load");
+      const [assetsData, sitesData, costCentersData] = (await Promise.all([
+        assetsRes.json(),
+        sitesRes.json(),
+        costCentersRes.json(),
+      ])) as [Asset[], SiteOption[], CostCenterListRow[]];
       setAssets(assetsData);
       setSites(sitesData);
+      setCostCenters(costCentersData);
     } catch {
       toastRef.current?.show({ severity: "error", summary: t("assets.loadError"), life: 6000 });
     } finally {
@@ -521,14 +685,17 @@ export function AssetsPage() {
   const openCreate = useCallback(() => {
     clearAllPendingAutoTimers();
     setEditingId(null);
-    setForm(emptyForm());
+    setForm({
+      ...emptyForm(),
+      ...(siteFieldLocked ? { siteId: user.workingSiteId } : {}),
+    });
     setDocuments([]);
     setPendingFiles([]);
     setUploadDrafts([]);
     setUploadMetaVisible(false);
     setActiveTabIndex(assetDialogTabs.General);
     setDialogVisible(true);
-  }, [clearAllPendingAutoTimers]);
+  }, [clearAllPendingAutoTimers, siteFieldLocked, user.workingSiteId]);
 
   const openEdit = useCallback((row: Asset) => {
     clearAllPendingAutoTimers();
@@ -539,6 +706,7 @@ export function AssetsPage() {
       siteId: row.siteId,
       type: row.type,
       parentAssetId: row.parentAssetId ?? "",
+      costCenterId: row.costCenterId ?? "",
       serialNumber: row.serialNumber ?? "",
       buildDate: row.buildDate ?? "",
       manufacturer: row.manufacturer ?? "",
@@ -592,13 +760,18 @@ export function AssetsPage() {
   useEffect(() => {
     if (!form.siteId) {
       if (form.parentAssetId) setForm((cur) => ({ ...cur, parentAssetId: "" }));
+      if (form.costCenterId) setForm((cur) => ({ ...cur, costCenterId: "" }));
       return;
     }
     const allowed = new Set(parentOptions.map((opt) => String(opt.value)));
     if (form.parentAssetId && !allowed.has(form.parentAssetId)) {
       setForm((cur) => ({ ...cur, parentAssetId: "" }));
     }
-  }, [form.parentAssetId, form.siteId, form.type, parentOptions]);
+    const allowedCc = new Set(costCenterDropdownOptions.map((opt) => String(opt.value)));
+    if (form.costCenterId && !allowedCc.has(form.costCenterId)) {
+      setForm((cur) => ({ ...cur, costCenterId: "" }));
+    }
+  }, [costCenterDropdownOptions, form.costCenterId, form.parentAssetId, form.siteId, form.type, parentOptions]);
 
   const showSaveError = async (res: Response) => {
     let code: string | undefined;
@@ -616,6 +789,7 @@ export function AssetsPage() {
     if (code === "invalid_parent_self") detail = t("assets.invalidParentSelf");
     if (code === "invalid_parent_asset") detail = t("assets.invalidParentAsset");
     if (code === "foreign_key_violation") detail = t("assets.foreignKey");
+    if (code === "invalid_cost_center") detail = t("assets.invalidCostCenter");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -684,6 +858,7 @@ export function AssetsPage() {
       siteId,
       type: f.type,
       parentAssetId: f.parentAssetId.trim() || null,
+      costCenterId: f.costCenterId.trim() || null,
       serialNumber: f.serialNumber.trim() || null,
       buildDate: f.buildDate.trim() || null,
       manufacturer: f.manufacturer.trim() || null,
@@ -822,6 +997,7 @@ export function AssetsPage() {
         siteId,
         type: form.type,
         parentAssetId: form.parentAssetId.trim() || null,
+        costCenterId: form.costCenterId.trim() || null,
         serialNumber: form.serialNumber.trim() || null,
         buildDate: form.buildDate.trim() || null,
         manufacturer: form.manufacturer.trim() || null,
@@ -986,6 +1162,15 @@ export function AssetsPage() {
     return (
       <span>
         {row.parentAssetKey} - {row.parentAssetName} ({typeLabel})
+      </span>
+    );
+  };
+
+  const costCenterBody = (row: Asset) => {
+    if (!row.costCenterId) return <span className="text-on-surface-variant">—</span>;
+    return (
+      <span>
+        {row.costCenterKey} - {row.costCenterName}
       </span>
     );
   };
@@ -1204,8 +1389,9 @@ export function AssetsPage() {
         >
           <Column field="key" header={t("assets.key")} sortable />
           <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
-          <Column field="type" header={t("assets.type")} sortable body={(row: Asset) => t(`assets.types.${row.type}`)} />
-          <Column field="siteName" header={t("assets.site")} sortable />
+          <Column field="type" header={t("assets.type")} sortable body={typeColumnBody} />
+          <Column field="siteName" header={t("assets.site")} sortable body={siteColumnBody} />
+          <Column field="costCenterName" header={t("assets.costCenter")} sortable body={costCenterBody} className="min-w-48" />
           <Column header={t("assets.parentAsset")} body={parentBody} className="min-w-72" />
           <Column field="serialNumber" header={t("assets.serialNumber")} body={(row: Asset) => nullableTextBody(row.serialNumber)} />
           <Column field="buildDate" header={t("assets.buildDate")} body={(row: Asset) => dateOnlyBody(row.buildDate)} />
@@ -1291,11 +1477,33 @@ export function AssetsPage() {
                 <Dropdown
                   inputId="asset-site"
                   value={form.siteId}
-                  options={siteOptions}
+                  options={siteDropdownOptions}
                   onChange={(e) => setForm((cur) => ({ ...cur, siteId: String(e.value ?? "") }))}
                   placeholder={t("assets.sitePlaceholder")}
                   className="w-full app-inline-icon-dropdown"
+                  itemTemplate={renderSiteDropdownOption}
+                  valueTemplate={renderSiteDropdownValue}
                   filter
+                  disabled={siteFieldLocked}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="asset-cost-center"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("assets.costCenter")}
+                </label>
+                <Dropdown
+                  inputId="asset-cost-center"
+                  value={form.costCenterId}
+                  options={costCenterDropdownOptions}
+                  onChange={(e) => setForm((cur) => ({ ...cur, costCenterId: String(e.value ?? "") }))}
+                  placeholder={t("assets.costCenterPlaceholder")}
+                  className="w-full app-inline-icon-dropdown"
+                  disabled={!form.siteId}
+                  filter
+                  showClear
                 />
               </div>
               <div className="space-y-2">
@@ -1311,6 +1519,8 @@ export function AssetsPage() {
                   options={typeOptions}
                   onChange={(e) => setForm((cur) => ({ ...cur, type: e.value as AssetType }))}
                   className="w-full app-inline-icon-dropdown"
+                  itemTemplate={renderAssetTypeDropdownOption}
+                  valueTemplate={renderAssetTypeDropdownValue}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">

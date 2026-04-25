@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import type { QueryResult } from "pg";
 
+import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
@@ -14,6 +15,7 @@ export type CostCenterRow = {
   siteId: string;
   siteKey: string;
   siteName: string;
+  siteColorHex: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +80,7 @@ const selectCostCentersSql = `
     c."siteId",
     s."key" AS "siteKey",
     s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
     c."isActive",
     c."createdAt",
     c."updatedAt",
@@ -120,7 +123,9 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      await assertSiteAccess(client, meta.userId, siteId);
+      const allowSiteChange = await getAllowSiteChange(client);
+      const effectiveSiteId = allowSiteChange ? siteId : await getWorkingSiteId(client, meta.userId);
+      await assertSiteAccess(client, meta.userId, effectiveSiteId);
       const { rows } = await client.query<CostCenterRow>(
         `
         WITH inserted AS (
@@ -135,6 +140,7 @@ router.post("/", async (req: Request, res: Response) => {
           i."siteId",
           s."key" AS "siteKey",
           s."name" AS "siteName",
+          s."colorHex" AS "siteColorHex",
           i."isActive",
           i."createdAt",
           i."updatedAt",
@@ -145,7 +151,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         `,
-        [key, name, siteId, isActive],
+        [key, name, effectiveSiteId, isActive],
       );
       return rows[0];
     });
@@ -155,6 +161,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
     res.status(201).json(row);
   } catch (err) {
+    if ((err as Error).message === "user_not_found") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });
       return;
@@ -182,9 +192,9 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      const existing = await client.query<Pick<CostCenterRow, "id">>(
+      const existing = await client.query<Pick<CostCenterRow, "id" | "siteId">>(
         `
-        SELECT "id"
+        SELECT "id", "siteId"::text AS "siteId"
         FROM "costCenter"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -194,7 +204,10 @@ router.put("/:id", async (req: Request, res: Response) => {
       if (existing.rowCount === 0) {
         return null;
       }
-      await assertSiteAccess(client, meta.userId, siteId);
+      const storedSiteId = existing.rows[0]!.siteId;
+      const allowSiteChange = await getAllowSiteChange(client);
+      const effectiveSiteId = allowSiteChange ? siteId : storedSiteId;
+      await assertSiteAccess(client, meta.userId, effectiveSiteId);
       const { rows } = await client.query<CostCenterRow>(
         `
         WITH updated AS (
@@ -210,6 +223,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."siteId",
           s."key" AS "siteKey",
           s."name" AS "siteName",
+          s."colorHex" AS "siteColorHex",
           u."isActive",
           u."createdAt",
           u."updatedAt",
@@ -220,7 +234,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         `,
-        [key, name, siteId, isActive, id],
+        [key, name, effectiveSiteId, isActive, id],
       );
       return rows[0] ?? null;
     });
@@ -230,6 +244,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     res.json(row);
   } catch (err) {
+    if ((err as Error).message === "user_not_found") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });
       return;

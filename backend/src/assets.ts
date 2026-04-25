@@ -4,6 +4,7 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
 
+import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
@@ -24,6 +25,7 @@ export type AssetRow = {
   siteId: string;
   siteKey: string;
   siteName: string;
+  siteColorHex: string;
   type: AssetType;
   parentAssetId: string | null;
   parentAssetKey: string | null;
@@ -33,6 +35,9 @@ export type AssetRow = {
   buildDate: string | null;
   manufacturer: string | null;
   remark: string | null;
+  costCenterId: string | null;
+  costCenterKey: string | null;
+  costCenterName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -64,6 +69,7 @@ type ParsedBody = {
   buildDate: string | null;
   manufacturer: string | null;
   remark: string | null;
+  costCenterId: string | null;
 };
 
 const router = Router();
@@ -149,9 +155,11 @@ function parseBody(body: unknown): ParsedBody | null {
   const buildDate = readTrimmedOptionalString(o.buildDate);
   const manufacturer = readTrimmedOptionalString(o.manufacturer);
   const remark = readTrimmedOptionalString(o.remark);
+  const costCenterIdRaw = readTrimmedOptionalString(o.costCenterId);
 
   if (!key || !name || !isUuid(siteId) || !isAssetType(type)) return null;
   if (parentAssetIdRaw !== null && !isUuid(parentAssetIdRaw)) return null;
+  if (costCenterIdRaw !== null && !isUuid(costCenterIdRaw)) return null;
   if (buildDate !== null && !isValidDateOnly(buildDate)) return null;
   if (remark !== null && remark.length > 2000) return null;
 
@@ -165,6 +173,7 @@ function parseBody(body: unknown): ParsedBody | null {
     buildDate,
     manufacturer,
     remark,
+    costCenterId: costCenterIdRaw,
   };
 }
 
@@ -209,6 +218,7 @@ const selectAssetsSql = `
     a."siteId",
     s."key" AS "siteKey",
     s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
     a."type",
     a."parentAssetId",
     parent."key" AS "parentAssetKey",
@@ -218,6 +228,9 @@ const selectAssetsSql = `
     a."buildDate"::text AS "buildDate",
     a."manufacturer",
     a."remark",
+    a."costCenterId",
+    cc."key" AS "costCenterKey",
+    cc."name" AS "costCenterName",
     a."createdAt",
     a."updatedAt",
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
@@ -225,6 +238,7 @@ const selectAssetsSql = `
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
+  LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
@@ -296,6 +310,28 @@ async function assertParentRules(
       [currentParentId],
     );
     currentParentId = ancestor.rows[0]?.parentAssetId ?? null;
+  }
+}
+
+async function assertCostCenterForAssetSite(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  userId: string,
+  assetSiteId: string,
+  costCenterId: string | null,
+) {
+  if (costCenterId === null) return;
+  const { rows } = await client.query<{ id: string }>(
+    `
+    SELECT c."id"
+    FROM "costCenter" c
+    WHERE c."id" = $1::uuid
+      AND c."siteId" = $2::uuid
+      AND ${siteAccessSql('c."siteId"', "$3")}
+    `,
+    [costCenterId, assetSiteId, userId],
+  );
+  if (!rows[0]) {
+    throw new Error("asset_cost_center_invalid");
   }
 }
 
@@ -605,20 +641,25 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      await assertSiteAccess(client, meta.userId, parsed.siteId);
+      const allowSiteChange = await getAllowSiteChange(client);
+      const effectiveSiteId = allowSiteChange
+        ? parsed.siteId
+        : await getWorkingSiteId(client, meta.userId);
+      await assertSiteAccess(client, meta.userId, effectiveSiteId);
       await assertParentRules(
         client,
         parsed.type,
-        parsed.siteId,
+        effectiveSiteId,
         parsed.parentAssetId,
       );
+      await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
       const { rows } = await client.query<AssetRow>(
         `
         WITH inserted AS (
           INSERT INTO "asset"
-            ("key", "name", "siteId", "type", "parentAssetId", "serialNumber", "buildDate", "manufacturer", "remark")
+            ("key", "name", "siteId", "type", "parentAssetId", "costCenterId", "serialNumber", "buildDate", "manufacturer", "remark")
           VALUES
-            ($1, $2, $3::uuid, $4, $5::uuid, $6, $7::date, $8, $9)
+            ($1, $2, $3::uuid, $4, $5::uuid, $6::uuid, $7, $8::date, $9, $10)
           RETURNING *
         )
         SELECT
@@ -628,11 +669,15 @@ router.post("/", async (req: Request, res: Response) => {
           i."siteId",
           s."key" AS "siteKey",
           s."name" AS "siteName",
+          s."colorHex" AS "siteColorHex",
           i."type",
           i."parentAssetId",
           parent."key" AS "parentAssetKey",
           parent."name" AS "parentAssetName",
           parent."type" AS "parentAssetType",
+          i."costCenterId",
+          cc."key" AS "costCenterKey",
+          cc."name" AS "costCenterName",
           i."serialNumber",
           i."buildDate"::text AS "buildDate",
           i."manufacturer",
@@ -640,19 +685,27 @@ router.post("/", async (req: Request, res: Response) => {
           i."createdAt",
           i."updatedAt",
           COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
-          COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy"
+          COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
+          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
+        LEFT JOIN "costCenter" cc ON cc."id" = i."costCenterId"
         LEFT JOIN "asset" parent ON parent."id" = i."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
+        LEFT JOIN (
+          SELECT "assetId", COUNT(*)::int AS "documentCount"
+          FROM "assetDocument"
+          GROUP BY "assetId"
+        ) doc_counts ON doc_counts."assetId" = i."id"
         `,
         [
           parsed.key,
           parsed.name,
-          parsed.siteId,
+          effectiveSiteId,
           parsed.type,
           parsed.parentAssetId,
+          parsed.costCenterId,
           parsed.serialNumber,
           parsed.buildDate,
           parsed.manufacturer,
@@ -667,6 +720,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
     res.status(201).json(row);
   } catch (err) {
+    if ((err as Error).message === "user_not_found") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });
       return;
@@ -687,6 +744,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid_parent_site" });
       return;
     }
+    if ((err as Error).message === "asset_cost_center_invalid") {
+      res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -705,9 +766,9 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      const existing = await client.query<Pick<AssetRow, "id">>(
+      const existing = await client.query<Pick<AssetRow, "id" | "siteId">>(
         `
-        SELECT "id"
+        SELECT "id", "siteId"::text AS "siteId"
         FROM "asset"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -717,15 +778,19 @@ router.put("/:id", async (req: Request, res: Response) => {
       if (existing.rowCount === 0) {
         return null;
       }
+      const storedSiteId = existing.rows[0]!.siteId;
+      const allowSiteChange = await getAllowSiteChange(client);
+      const effectiveSiteId = allowSiteChange ? parsed.siteId : storedSiteId;
 
-      await assertSiteAccess(client, meta.userId, parsed.siteId);
+      await assertSiteAccess(client, meta.userId, effectiveSiteId);
       await assertParentRules(
         client,
         parsed.type,
-        parsed.siteId,
+        effectiveSiteId,
         parsed.parentAssetId,
         id,
       );
+      await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
 
       const { rows } = await client.query<AssetRow>(
         `
@@ -737,11 +802,12 @@ router.put("/:id", async (req: Request, res: Response) => {
             "siteId" = $3::uuid,
             "type" = $4,
             "parentAssetId" = $5::uuid,
-            "serialNumber" = $6,
-            "buildDate" = $7::date,
-            "manufacturer" = $8,
-            "remark" = $9
-          WHERE "id" = $10::uuid
+            "costCenterId" = $6::uuid,
+            "serialNumber" = $7,
+            "buildDate" = $8::date,
+            "manufacturer" = $9,
+            "remark" = $10
+          WHERE "id" = $11::uuid
           RETURNING *
         )
         SELECT
@@ -751,11 +817,15 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."siteId",
           s."key" AS "siteKey",
           s."name" AS "siteName",
+          s."colorHex" AS "siteColorHex",
           u."type",
           u."parentAssetId",
           parent."key" AS "parentAssetKey",
           parent."name" AS "parentAssetName",
           parent."type" AS "parentAssetType",
+          u."costCenterId",
+          cc."key" AS "costCenterKey",
+          cc."name" AS "costCenterName",
           u."serialNumber",
           u."buildDate"::text AS "buildDate",
           u."manufacturer",
@@ -763,19 +833,27 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."createdAt",
           u."updatedAt",
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
-          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy"
+          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
+          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
+        LEFT JOIN "costCenter" cc ON cc."id" = u."costCenterId"
         LEFT JOIN "asset" parent ON parent."id" = u."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
+        LEFT JOIN (
+          SELECT "assetId", COUNT(*)::int AS "documentCount"
+          FROM "assetDocument"
+          GROUP BY "assetId"
+        ) doc_counts ON doc_counts."assetId" = u."id"
         `,
         [
           parsed.key,
           parsed.name,
-          parsed.siteId,
+          effectiveSiteId,
           parsed.type,
           parsed.parentAssetId,
+          parsed.costCenterId,
           parsed.serialNumber,
           parsed.buildDate,
           parsed.manufacturer,
@@ -792,6 +870,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.json(row);
   } catch (err) {
     const message = (err as Error).message;
+    if (message === "user_not_found") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     if (message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });
       return;
@@ -818,6 +900,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "asset_parent_cycle") {
       res.status(400).json({ error: "invalid_parent_cycle" });
+      return;
+    }
+    if (message === "asset_cost_center_invalid") {
+      res.status(400).json({ error: "invalid_cost_center" });
       return;
     }
     sendPgError(res, err);

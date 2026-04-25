@@ -16,6 +16,7 @@ import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type SiteOption = {
   id: string;
@@ -63,41 +64,9 @@ const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(-
 const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
 const createActionIcon = "text-green-500/70";
 const deleteActionIcon = "text-red-500";
-const defaultSiteColorHex = "#64748b";
 
 function uniqueSiteIds(ids: string[]): string[] {
   return [...new Set(ids)];
-}
-
-function parseHexColor(colorHex?: string): [number, number, number] {
-  const raw = (colorHex || defaultSiteColorHex).trim();
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  const match = /^#([0-9a-fA-F]{6})$/.exec(withHash);
-  if (!match) return [100, 116, 139];
-  const hex = match[1];
-  return [
-    Number.parseInt(hex.slice(0, 2), 16),
-    Number.parseInt(hex.slice(2, 4), 16),
-    Number.parseInt(hex.slice(4, 6), 16),
-  ];
-}
-
-function mixWithWhite(colorHex: string | undefined, amount: number): string {
-  const [r, g, b] = parseHexColor(colorHex);
-  const mix = (channel: number) => Math.round(channel * (1 - amount) + 255 * amount);
-  const toHex = (v: number) => v.toString(16).padStart(2, "0");
-  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
-}
-
-function readableSiteColor(colorHex?: string): string {
-  return mixWithWhite(colorHex, 0.3);
-}
-
-function readableBadgeTextColor(colorHex?: string): string {
-  const [r, g, b] = parseHexColor(colorHex);
-  // Relative luminance approximation for contrast choice.
-  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  return luminance > 0.62 ? "#0f172a" : "#ffffff";
 }
 
 export function UsersPage() {
@@ -375,36 +344,39 @@ export function UsersPage() {
     if (selectedSites.length === 0) return <span className="text-on-surface-variant">—</span>;
     return (
       <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {selectedSites.map((site) => (
-          <span
-            key={site.id}
-            className="text-xs"
-            style={{ color: readableSiteColor(site.colorHex) }}
-            title={`${site.key} - ${site.name} (${site.colorHex || defaultSiteColorHex})`}
-          >
-            {site.name}
-          </span>
-        ))}
+        {selectedSites.map((site) => {
+          const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+          const label = `${site.key} - ${site.name}`;
+          return (
+            <span key={site.id} className="text-xs" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+              {site.name}
+            </span>
+          );
+        })}
       </div>
     );
   };
 
   const primarySiteBody = (row: User) => {
     const site = siteLookup.get(row.workingSiteId);
-    const colorHex = site?.colorHex || defaultSiteColorHex;
+    const colorHex = site?.colorHex || DEFAULT_SITE_COLOR_HEX;
     const label = site ? `${site.key} - ${site.name}` : row.workingSiteName;
     return (
-      <span style={{ color: readableSiteColor(colorHex) }} title={`${label} (${colorHex})`}>
+      <span className="truncate" style={{ color: readableSiteColor(colorHex) }} title={`${label} (${colorHex})`}>
         {label}
       </span>
     );
   };
 
-  const renderSiteOption = (site: SiteOption) => (
-    <span style={{ color: readableSiteColor(site.colorHex) }}>
-      {`${site.key} - ${site.name}`}
-    </span>
-  );
+  const renderSiteOption = (site: SiteOption) => {
+    const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${site.key} - ${site.name}`;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {label}
+      </span>
+    );
+  };
 
   const renderSelectedSiteChip = (value: string | SiteOption | undefined) => {
     const siteId =
@@ -415,14 +387,10 @@ export function UsersPage() {
           : "";
     const site = siteLookup.get(siteId);
     if (!site) return <span>{typeof value === "string" ? value : ""}</span>;
+    const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${site.key} - ${site.name}`;
     return (
-      <span
-        className="mr-1 inline-flex items-center rounded-full px-3 py-1 text-sm"
-        style={{
-          backgroundColor: site.colorHex || defaultSiteColorHex,
-          color: readableBadgeTextColor(site.colorHex),
-        }}
-      >
+      <span className="mr-1 truncate text-sm" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
         {site.name}
       </span>
     );
@@ -651,7 +619,7 @@ export function UsersPage() {
               placeholder={t("users.additionalSitesPlaceholder")}
               className="w-full users-site-multiselect"
               filter
-              display="chip"
+              display="comma"
             />
           </div>
         </div>

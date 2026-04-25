@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
+import { fetchAppParameterBooleans } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
 import { clearSessionCookie, writeSessionCookie } from "./sessionToken.js";
@@ -67,7 +68,13 @@ router.get("/me", async (req: Request, res: Response) => {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
-    res.json({ user });
+    let appParameterBooleans: Record<string, boolean> = {};
+    try {
+      appParameterBooleans = await fetchAppParameterBooleans(pool);
+    } catch (paramErr) {
+      console.warn("[athene-backend] appParameter load skipped:", paramErr);
+    }
+    res.json({ user, appParameterBooleans });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });

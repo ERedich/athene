@@ -79,6 +79,29 @@
   --highlight-text-color: #c2410c;
 }
 
+/* Asset type (Standort / Struktur / Linie / IO): icon colors from theme tokens only. */
+.app-asset-type-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.app-asset-type-icon--site {
+  color: var(--color-primary);
+}
+
+.app-asset-type-icon--structure {
+  color: var(--color-primary-container);
+}
+
+.app-asset-type-icon--line {
+  color: color-mix(in srgb, var(--color-on-surface-variant) 50%, var(--color-primary) 50%);
+}
+
+.app-asset-type-icon--maintenanceObject {
+  color: var(--color-danger);
+}
+
 html {
   font-size: 15px;
 }
@@ -478,6 +501,10 @@ html.theme-crossfade-fallback #root {
   background: var(--surface-overlay);
 }
 
+.app-sticky-tabs ul.p-tabview-nav {
+  border-radius: 0 !important;
+}
+
 .app-sticky-tabs .p-tabview-nav {
   position: relative;
   border-bottom: 2px solid color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
@@ -505,6 +532,72 @@ html.theme-crossfade-fallback #root {
     width 240ms cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
   z-index: 1;
+}
+
+/* Full-page tab shell: matches app-tabbed-modal-window + app-sticky-tabs + big modal proportions */
+.app-tabbed-page-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  background: var(--surface-overlay);
+  overflow: hidden;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-tabbed-page-shell .app-tabview-with-ink {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs.p-tabview {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs > .p-tabview-nav-container {
+  flex-shrink: 0;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs > .p-tabview-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  padding: 0 !important;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs .p-tabview-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs .p-tabview-panel-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.app-tabbed-page-shell .app-parameters-tab-panel-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-inline-icon-dropdown .p-dropdown-trigger {
@@ -604,6 +697,26 @@ html.theme-crossfade-fallback #root {
 /* Global table status check icon: use green accent instead of neutral text color. */
 .app-data-table i.pi.pi-check {
   color: #22c55e !important;
+}
+
+/* App parameters: no horizontal table growth — wrap cell text, rows grow in height */
+.app-parameters-data-table.app-data-table .p-datatable-wrapper {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.app-parameters-data-table.app-data-table .p-datatable-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0 !important;
+}
+
+.app-parameters-data-table.app-data-table .p-datatable-thead > tr > th,
+.app-parameters-data-table.app-data-table .p-datatable-tbody > tr > td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 /* App shell page title: use ATHENE headline font + signature underline. */

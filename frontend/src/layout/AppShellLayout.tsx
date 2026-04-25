@@ -23,6 +23,7 @@ function headerTitleKey(pathname: string): string {
   if (pathname.startsWith("/sites")) return "sites.appName";
   if (pathname.startsWith("/users")) return "users.appName";
   if (pathname.startsWith("/cost-centers")) return "costCenters.appName";
+  if (pathname.startsWith("/app-parameters")) return "appParameters.appName";
   if (pathname.startsWith("/audit-log")) return "auditLog.appName";
   return "dashboard.appName";
 }
@@ -106,6 +107,15 @@ export function AppShellLayout() {
           >
             <i className="pi pi-briefcase" aria-hidden />
             {t("costCenters.navCostCenters")}
+          </NavLink>
+          <NavLink
+            to="/app-parameters"
+            className={({ isActive }) =>
+              `${navBtn} ${isActive ? activeNavBtn : ""}`
+            }
+          >
+            <i className="pi pi-sliders-h" aria-hidden />
+            {t("appParameters.navAppParameters")}
           </NavLink>
           <NavLink
             to="/audit-log"

@@ -4,6 +4,7 @@ import express from "express";
 
 import { auditLogRouter } from "./auditLog.js";
 import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
+import { appParametersRouter } from "./appParameters.js";
 import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
 import { costCentersRouter } from "./costCenters.js";
@@ -51,6 +52,7 @@ app.use("/api/users", requireAuth, usersRouter);
 app.use("/api/cost-centers", requireAuth, costCentersRouter);
 app.use("/api/assets", requireAuth, assetsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
+app.use("/api/app-parameters", requireAuth, appParametersRouter);
 app.use("/api/audit-log", requireAuth, auditLogRouter);
 
 app.listen(port, () => {

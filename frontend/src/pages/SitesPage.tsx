@@ -15,6 +15,7 @@ import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { readableSiteColor } from "../lib/siteColor";
 
 type Site = {
   id: string;
@@ -319,14 +320,9 @@ export function SitesPage() {
   const colorBody = (row: Site) => {
     const hex = row.colorHex ?? defaultColorHex;
     return (
-      <div className="flex items-center gap-2">
-        <span
-          className="h-4 w-4 shrink-0 rounded-sm border border-white/15 ring-1 ring-white/5"
-          style={{ backgroundColor: hex }}
-          aria-hidden
-        />
-        <span className="font-mono text-on-surface-variant">{hex}</span>
-      </div>
+      <span className="font-mono" style={{ color: readableSiteColor(hex) }} title={hex}>
+        {hex}
+      </span>
     );
   };
 

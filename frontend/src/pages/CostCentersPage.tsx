@@ -13,14 +13,20 @@ import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
+import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
+import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type SiteOption = {
   id: string;
   key: string;
   name: string;
+  colorHex: string;
 };
+
+type SiteDropdownOption = { label: string; value: string };
 
 type CostCenter = {
   id: string;
@@ -29,6 +35,7 @@ type CostCenter = {
   siteId: string;
   siteKey: string;
   siteName: string;
+  siteColorHex: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +69,8 @@ const deleteActionIcon = "text-red-500";
 
 export function CostCentersPage() {
   const { t, i18n } = useTranslation();
+  const { user, appParameterBooleans } = useAuth();
+  const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
@@ -74,16 +83,62 @@ export function CostCentersPage() {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const siteOptions = useMemo(
+  const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
     [sites],
   );
+
+  const renderSiteDropdownOption = useCallback(
+    (option: SiteDropdownOption) => {
+      const site = sites.find((s) => s.id === option.value);
+      const hex = site?.colorHex || DEFAULT_SITE_COLOR_HEX;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${option.label} (${hex})`}>
+          {option.label}
+        </span>
+      );
+    },
+    [sites],
+  );
+
+  const renderSiteDropdownValue = useCallback(
+    (incoming: unknown) => {
+      const id =
+        typeof incoming === "string"
+          ? incoming
+          : incoming && typeof incoming === "object" && incoming !== null && "value" in incoming
+            ? String((incoming as { value: unknown }).value ?? "")
+            : "";
+      const site = sites.find((s) => s.id === id);
+      if (!site) {
+        return <span className="text-on-surface-variant">{t("costCenters.sitePlaceholder")}</span>;
+      }
+      const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+      const label = `${site.key} - ${site.name}`;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+          {label}
+        </span>
+      );
+    },
+    [sites, t],
+  );
+
+  const siteColumnBody = useCallback((row: CostCenter) => {
+    const hex = row.siteColorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${row.siteKey} - ${row.siteName}`;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {row.siteName}
+      </span>
+    );
+  }, []);
 
   const filteredCostCenters = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return costCenters;
     return costCenters.filter((row) =>
-      [row.key, row.name, row.siteKey, row.siteName, row.createdBy, row.updatedBy]
+      [row.key, row.name, row.siteKey, row.siteName, row.siteColorHex, row.createdBy, row.updatedBy]
         .join(" ")
         .toLowerCase()
         .includes(q),
@@ -121,9 +176,12 @@ export function CostCentersPage() {
 
   const openCreate = useCallback(() => {
     setEditingId(null);
-    setForm(emptyForm());
+    setForm({
+      ...emptyForm(),
+      ...(siteFieldLocked ? { siteId: user.workingSiteId } : {}),
+    });
     setDialogVisible(true);
-  }, []);
+  }, [siteFieldLocked, user.workingSiteId]);
 
   const openEdit = useCallback((row: CostCenter) => {
     setEditingId(row.id);
@@ -376,7 +434,7 @@ export function CostCentersPage() {
         >
           <Column field="key" header={t("costCenters.key")} sortable />
           <Column field="name" header={t("costCenters.name")} sortable />
-          <Column field="siteName" header={t("costCenters.site")} sortable />
+          <Column field="siteName" header={t("costCenters.site")} sortable body={siteColumnBody} />
           <Column header={t("costCenters.active")} body={activeBody} className="w-28 text-center" />
           <Column
             field="createdAt"
@@ -468,11 +526,14 @@ export function CostCentersPage() {
             <Dropdown
               inputId="cost-center-site"
               value={form.siteId}
-              options={siteOptions}
+              options={siteDropdownOptions}
               onChange={(e) => setForm((f) => ({ ...f, siteId: String(e.value ?? "") }))}
               placeholder={t("costCenters.sitePlaceholder")}
-              className="w-full"
+              className="w-full app-inline-icon-dropdown"
+              itemTemplate={renderSiteDropdownOption}
+              valueTemplate={renderSiteDropdownValue}
               filter
+              disabled={siteFieldLocked}
             />
           </div>
           <label className="flex items-center gap-3 cursor-pointer group">
