@@ -29,7 +29,7 @@ import {
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
-import { apiFetch, apiUrl } from "../lib/api";
+import { apiFetch } from "../lib/api";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
@@ -1056,8 +1056,26 @@ export function AssetsPage() {
     setPendingFiles((cur) => cur.filter((p) => p.localId !== localId));
   };
 
-  const openDocumentContent = (assetId: string, documentId: string) => {
-    window.open(apiUrl(`/api/assets/${assetId}/documents/${documentId}/content`), "_blank", "noopener,noreferrer");
+  const openDocumentContent = async (assetId: string, documentId: string) => {
+    try {
+      const res = await apiFetch(`/api/assets/${assetId}/documents/${documentId}/content`);
+      if (!res.ok) {
+        toastRef.current?.show({ severity: "error", summary: t("assets.documentsOpenError"), life: 6000 });
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const popup = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (!popup) {
+        URL.revokeObjectURL(blobUrl);
+        toastRef.current?.show({ severity: "warn", summary: t("assets.documentsPopupBlocked"), life: 5000 });
+        return;
+      }
+      // Delay revocation so the new tab can fully load the Blob resource.
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("assets.documentsOpenError"), life: 6000 });
+    }
   };
 
   const deleteDocument = async (assetId: string, documentId: string) => {
@@ -1534,7 +1552,7 @@ export function AssetsPage() {
                             title={t("assets.documentsOpen")}
                             onClick={(e) => {
                               e.stopPropagation();
-                              openDocumentContent(doc.assetId, doc.id);
+                              void openDocumentContent(doc.assetId, doc.id);
                             }}
                           />
                           <Button
