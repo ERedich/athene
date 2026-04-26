@@ -31,6 +31,11 @@
     "navAria": "Hauptnavigation",
     "navDashboard": "Dashboard",
     "signOut": "Abmelden",
+    "buildInfoTitle": "Build-Informationen",
+    "recentCommitLabel": "Letzter Commit",
+    "versionLabel": "Version",
+    "commitTimestampLabel": "Commit-Zeitstempel",
+    "metaUnavailable": "Nicht verfügbar",
     "empty": "Noch keine Module konfiguriert. Inhalt für diese App erscheint hier."
   },
   "shell": {
