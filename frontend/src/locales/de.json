@@ -41,7 +41,9 @@
   },
   "shell": {
     "product": "Athene CMMS",
-    "actionsNavAria": "Seitenaktionen"
+    "actionsNavAria": "Seitenaktionen",
+    "sidebarCollapse": "Seitenleiste einklappen",
+    "sidebarExpand": "Seitenleiste ausklappen"
   },
   "assets": {
     "appName": "Assets",
