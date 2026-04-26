@@ -797,10 +797,10 @@ export function AssetsPage() {
 
   const assetTreeTableStyle = useMemo<CSSProperties | undefined>(() => {
     if (!coloredAssetTreeEnabled) return undefined;
-    const siteBg = colorHexToRgba(assetTypeColorsForTree.site.colorHex, 0.2);
-    const structureBg = colorHexToRgba(assetTypeColorsForTree.structure.colorHex, 0.2);
-    const lineBg = colorHexToRgba(assetTypeColorsForTree.line.colorHex, 0.2);
-    const maintenanceObjectBg = colorHexToRgba(assetTypeColorsForTree.maintenanceObject.colorHex, 0.2);
+    const siteBg = colorHexToRgba(assetTypeColorsForTree.site.colorHex, 0.1);
+    const structureBg = colorHexToRgba(assetTypeColorsForTree.structure.colorHex, 0.1);
+    const lineBg = colorHexToRgba(assetTypeColorsForTree.line.colorHex, 0.1);
+    const maintenanceObjectBg = colorHexToRgba(assetTypeColorsForTree.maintenanceObject.colorHex, 0.1);
     return {
       ["--app-assets-tree-row-bg-site" as string]: siteBg ?? "transparent",
       ["--app-assets-tree-row-bg-structure" as string]: structureBg ?? "transparent",
