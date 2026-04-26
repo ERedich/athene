@@ -1023,7 +1023,8 @@ html.theme-crossfade-fallback #root {
   }
 }
 
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) {
+/* Animate cells, not the row: `transform` on `<tr>` breaks border painting in Firefox for nested tree rows. */
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) > td {
   animation: app-assets-tree-row-reveal 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1041,7 +1042,7 @@ html.theme-crossfade-fallback #root {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-assets-treetable.p-treetable .p-treetable-tbody > tr {
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) > td {
     animation: none !important;
     transition: none !important;
   }
