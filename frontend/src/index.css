@@ -995,6 +995,25 @@ html.theme-crossfade-fallback #root {
   max-width: none;
 }
 
+/* Asset tree view: no vertical separators between columns. */
+.app-assets-treetable.p-treetable .p-treetable-thead > tr > th,
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
+  border-right-width: 0 !important;
+}
+
+/* Asset tree view: zebra striping based on currently visible rows (after expand/collapse). */
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):nth-child(even) > td {
+  background: color-mix(in srgb, var(--color-on-surface) 4%, transparent);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):nth-child(odd) > td {
+  background: transparent;
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):hover > td {
+  background: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
+}
+
 .app-assets-treetable.p-treetable .p-treetable-thead > tr > th {
   white-space: nowrap;
   overflow: visible;
@@ -1043,7 +1062,6 @@ html.theme-crossfade-fallback #root {
     transition: none !important;
   }
 }
-
 .app-data-table .p-column-title {
   flex: 0 1 auto;
   font-size: inherit;

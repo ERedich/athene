@@ -31,11 +31,19 @@
     "navAria": "Main navigation",
     "navDashboard": "Dashboard",
     "signOut": "Sign out",
+    "buildInfoTitle": "Build information",
+    "branchLabel": "Branch",
+    "recentCommitLabel": "Recent commit",
+    "versionLabel": "Version",
+    "commitTimestampLabel": "Commit timestamp",
+    "metaUnavailable": "Unavailable",
     "empty": "No modules configured yet. Content for this app will appear here."
   },
   "shell": {
     "product": "Athene CMMS",
-    "actionsNavAria": "Page actions"
+    "actionsNavAria": "Page actions",
+    "sidebarCollapse": "Collapse sidebar",
+    "sidebarExpand": "Expand sidebar"
   },
   "assets": {
     "appName": "Assets",
