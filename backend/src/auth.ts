@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { fetchAppParameterBooleans } from "./appParameters.js";
+import { fetchAppParameterBooleans, getAssetTypeDisplayConfig } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
 import { clearSessionCookie, writeSessionCookie } from "./sessionToken.js";
@@ -69,12 +69,18 @@ router.get("/me", async (req: Request, res: Response) => {
       return;
     }
     let appParameterBooleans: Record<string, boolean> = {};
+    let appParameterAssetTypes: Awaited<ReturnType<typeof getAssetTypeDisplayConfig>> = null;
     try {
       appParameterBooleans = await fetchAppParameterBooleans(pool);
     } catch (paramErr) {
       console.warn("[athene-backend] appParameter load skipped:", paramErr);
     }
-    res.json({ user, appParameterBooleans });
+    try {
+      appParameterAssetTypes = await getAssetTypeDisplayConfig(pool);
+    } catch (atypErr) {
+      console.warn("[athene-backend] GN-ATYP load skipped:", atypErr);
+    }
+    res.json({ user, appParameterBooleans, appParameterAssetTypes });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });

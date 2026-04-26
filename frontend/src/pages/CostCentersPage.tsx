@@ -17,6 +17,7 @@ import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
+import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type SiteOption = {
@@ -534,6 +535,7 @@ export function CostCentersPage() {
               valueTemplate={renderSiteDropdownValue}
               filter
               disabled={siteFieldLocked}
+              appendTo={overlayAppendTo}
             />
           </div>
           <label className="flex items-center gap-3 cursor-pointer group">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -8,6 +8,7 @@ import { Password } from "primereact/password";
 
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { navigateFromLoginToApp } from "../auth/loginNavigation";
 import { apiFetch } from "../lib/api";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 
@@ -23,6 +24,18 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginToAppExit, setLoginToAppExit] = useState(false);
+
+  const prepareCssFallbackExit = useCallback(() => {
+    setLoginToAppExit(true);
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.setTimeout(resolve, 540);
+        });
+      });
+    });
+  }, []);
 
   const activeLang = i18n.language.startsWith("de") ? "de" : "en";
 
@@ -33,7 +46,11 @@ export function LoginPage() {
     "transition-colors hover:text-[var(--color-primary)] focus-visible:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 
   return (
-    <div className="font-body text-on-surface min-h-screen flex flex-col overflow-hidden selection:bg-primary/30">
+    <div
+      className={`font-body text-on-surface min-h-screen flex flex-col overflow-hidden selection:bg-primary/30 ${
+        loginToAppExit ? "login-to-app-fallback-exit pointer-events-none" : ""
+      }`}
+    >
       <div className="fixed inset-0 z-[-2] overflow-hidden bg-surface">
         <img
           alt=""
@@ -132,7 +149,7 @@ export function LoginPage() {
                           );
                           return;
                         }
-                        navigate("/dashboard", { replace: true });
+                        await navigateFromLoginToApp(navigate, prepareCssFallbackExit);
                       } catch {
                         setError(t("login.errorGeneric"));
                       } finally {

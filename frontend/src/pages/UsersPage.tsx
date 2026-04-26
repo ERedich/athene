@@ -16,6 +16,7 @@ import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type SiteOption = {
@@ -590,6 +591,7 @@ export function UsersPage() {
               placeholder={t("users.primarySitePlaceholder")}
               className="w-full"
               filter
+              appendTo={overlayAppendTo}
             />
           </div>
 
@@ -620,6 +622,7 @@ export function UsersPage() {
               className="w-full users-site-multiselect"
               filter
               display="comma"
+              appendTo={overlayAppendTo}
             />
           </div>
         </div>

@@ -114,11 +114,70 @@ body {
   font-family: Manrope, system-ui, sans-serif;
 }
 
-/* Native ViewTransition crossfade (Chromium). */
+/* Native ViewTransition crossfade (Chromium) — default (e.g. theme). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 220ms;
   animation-timing-function: ease-in-out;
+}
+
+/* Login → app: crossfade with Gaussian blur (scoped; class set on <html> during transition). */
+html.login-to-app-vt::view-transition-old(root),
+html.login-to-app-vt::view-transition-new(root) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  animation-fill-mode: both;
+}
+
+html.login-to-app-vt::view-transition-old(root) {
+  animation-name: athene-login-app-vt-out;
+}
+
+html.login-to-app-vt::view-transition-new(root) {
+  animation-name: athene-login-app-vt-in;
+}
+
+@keyframes athene-login-app-vt-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(16px);
+  }
+}
+
+@keyframes athene-login-app-vt-in {
+  from {
+    opacity: 0;
+    filter: blur(16px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.login-to-app-fallback-exit {
+  opacity: 0;
+  filter: blur(14px);
+  transition:
+    opacity 540ms cubic-bezier(0.33, 1, 0.68, 1),
+    filter 540ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.app-shell-login-enter-from {
+  opacity: 0;
+  filter: blur(14px);
+}
+
+.app-shell-login-enter-active {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity 540ms cubic-bezier(0.33, 1, 0.68, 1),
+    filter 540ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 /* Fallback crossfade for browsers without ViewTransition API. */
@@ -298,6 +357,45 @@ html.theme-crossfade-fallback #root {
   border-color: rgb(34 211 238) !important;
 }
 
+/* Document references with zero files: no fill; icon only, soft blue (overrides Prime disabled → primary) */
+.app-ref-button--documents-inactive.p-button.p-disabled,
+.app-ref-button--documents-inactive.p-button:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon,
+.app-ref-button--documents-inactive.p-button:disabled .p-button-icon {
+  color: rgb(125 211 252) !important; /* sky-300 — leicht bläulich */
+}
+
+.app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
+.app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
+  color: inherit !important;
+}
+
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon,
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled .p-button-icon {
+  color: rgb(125 211 252) !important;
+}
+
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
+  color: inherit !important;
+}
+
 .app-ref-button--material.p-button:not(:disabled),
 .app-ref-button--material.p-button:not(.p-disabled) {
   background: rgb(134 239 172) !important; /* green-300 */
@@ -432,6 +530,24 @@ html.theme-crossfade-fallback #root {
   border-color: transparent;
 }
 
+/* PrimeReact Checkbox — same cascade issue as `.p-button` above: Tailwind
+   preflight applies `border-width: 0` inside `@layer base`, which overrides
+   Lara theme rules that live in `@layer primereact`, so the box outline
+   vanishes in light and dark mode. Restore a visible border from app tokens. */
+.p-checkbox .p-checkbox-box {
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: color-mix(in srgb, var(--color-outline) 58%, var(--color-surface)) !important;
+}
+
+.p-checkbox.p-checkbox-checked .p-checkbox-box {
+  border-color: var(--color-primary) !important;
+}
+
+.p-checkbox.p-disabled .p-checkbox-box {
+  border-color: color-mix(in srgb, var(--color-outline) 40%, var(--color-surface)) !important;
+}
+
 .p-dialog .p-dialog-header {
   border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
 }
@@ -476,6 +592,7 @@ html.theme-crossfade-fallback #root {
 .app-big-modal-window .p-dialog-content {
   flex: 1 1 auto;
   overflow: auto;
+  overscroll-behavior: contain;
   padding-top: 1rem;
 }
 
@@ -534,14 +651,15 @@ html.theme-crossfade-fallback #root {
   z-index: 1;
 }
 
-/* Full-page tab shell: matches app-tabbed-modal-window + app-sticky-tabs + big modal proportions */
+/* Full-page tab shell: matches app-tabbed-modal-window + app-sticky-tabs + big modal proportions.
+   Top corners square so the tab strip aligns with the header edge; rounding only on the bottom. */
 .app-tabbed-page-shell {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   width: 100%;
-  border-radius: 0.75rem;
+  border-radius: 0 0 0.75rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
   background: var(--surface-overlay);
   overflow: hidden;
@@ -564,6 +682,16 @@ html.theme-crossfade-fallback #root {
 
 .app-tabbed-page-shell .app-sticky-tabs > .p-tabview-nav-container {
   flex-shrink: 0;
+  border-radius: 0 !important;
+}
+
+/* App parameters: no rounded tab strip (Prime default radii on ul / links / container). */
+.app-tabbed-page-shell .app-sticky-tabs ul.p-tabview-nav {
+  border-radius: 0 !important;
+}
+
+.app-tabbed-page-shell .app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
+  border-radius: 0 !important;
 }
 
 .app-tabbed-page-shell .app-sticky-tabs > .p-tabview-panels {
@@ -598,6 +726,78 @@ html.theme-crossfade-fallback #root {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.app-parameter-card.p-card {
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  box-shadow: none;
+  background: var(--color-surface);
+}
+
+.app-parameter-card .p-card-body {
+  padding: 1rem 1.125rem;
+}
+
+/* App-Parameter: Asset-Typen-Dialog — dezente Karten (v. a. Dark), Farbwähler nur als Farbquadrat */
+.app-atyp-dialog .app-atyp-type-card {
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 7%, transparent);
+  background: var(--color-surface-container-low);
+}
+
+:root[data-theme="dark"] .app-atyp-dialog .app-atyp-type-card {
+  border-color: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-low) 88%, var(--color-surface) 12%);
+}
+
+.app-atyp-dialog .app-atyp-color-swatch-wrap {
+  --atyp-swatch: transparent;
+}
+
+.app-atyp-dialog .app-atyp-colorpicker.p-colorpicker {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+/*
+ * Globales .p-inputtext { background: … !important } würde sonst die Vorschau-Farbe
+ * überschreiben (Prime setzt nur backgroundColor inline). Swatch-Farbe kommt von --atyp-swatch.
+ */
+.app-atyp-dialog .app-atyp-color-swatch-wrap .app-atyp-colorpicker .p-colorpicker-preview.p-inputtext {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0.375rem !important;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 20%, transparent) !important;
+  box-shadow: none !important;
+  overflow: hidden;
+  cursor: pointer;
+  color: transparent !important;
+  caret-color: transparent;
+  text-indent: -9999px;
+  background: var(--atyp-swatch) !important;
+  background-color: var(--atyp-swatch) !important;
+}
+
+:root[data-theme="dark"]
+  .app-atyp-dialog
+  .app-atyp-color-swatch-wrap
+  .app-atyp-colorpicker
+  .p-colorpicker-preview.p-inputtext {
+  border-color: color-mix(in srgb, var(--color-on-surface) 26%, transparent) !important;
+}
+
+.app-atyp-dialog
+  .app-atyp-color-swatch-wrap
+  .app-atyp-colorpicker
+  .p-colorpicker-preview.p-inputtext:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .app-inline-icon-dropdown .p-dropdown-trigger {
@@ -676,6 +876,38 @@ html.theme-crossfade-fallback #root {
   border-right-width: 0 !important;
 }
 
+/* Headers: single line (no wrap), sort/filter icons stay with title; table may extend past viewport (wrapper scrolls). */
+.app-data-table.p-datatable thead > tr > th,
+.app-data-table.p-datatable .p-datatable-thead > tr > th,
+.app-data-table.p-treetable thead > tr > th,
+.app-data-table.p-treetable .p-treetable-thead > tr > th {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Title + sort/filter on one row (Prime @layer can lose to later CSS; TreeTable has no component flex rule). */
+.app-data-table.p-datatable .p-datatable-thead > tr > th .p-column-header-content,
+.app-data-table.p-datatable thead > tr > th .p-column-header-content,
+.app-data-table.p-datatable .p-datatable-scrollable-table .p-datatable-thead > tr > th .p-column-header-content,
+.app-data-table.p-datatable .p-datatable-scrollable-table thead > tr > th .p-column-header-content,
+.app-data-table.p-treetable .p-treetable-thead > tr > th .p-column-header-content,
+.app-data-table.p-treetable thead > tr > th .p-column-header-content {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.app-data-table .p-sortable-column-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
 .app-data-table .p-datatable-tbody > tr.p-highlight {
   background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
   color: var(--color-on-surface) !important;
@@ -690,8 +922,120 @@ html.theme-crossfade-fallback #root {
   background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
 }
 
+/* TreeTable: match DataTable chrome when using shared app-data-table class */
+.app-data-table.p-treetable {
+  min-width: 0;
+}
+
+.app-data-table.p-treetable .p-treetable-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-width: 100%;
+}
+
+.app-data-table.p-treetable .p-treetable-thead > tr > th,
+.app-data-table.p-treetable .p-treetable-tbody > tr > td {
+  font-size: 0.875rem;
+  border-width: 0 1px 1px 0;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.app-data-table.p-treetable .p-treetable-thead > tr > th {
+  border-width: 0 1px 1px 0 !important;
+  border-style: solid !important;
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+}
+
+.app-data-table.p-treetable .p-treetable-thead > tr > th:last-child,
+.app-data-table.p-treetable .p-treetable-tbody > tr > td:last-child {
+  border-right-width: 0;
+}
+
+.app-data-table.p-treetable .p-treetable-thead > tr > th:last-child {
+  border-right-width: 0 !important;
+}
+
+.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight > td {
+  background: transparent;
+  color: inherit;
+}
+
+.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight:hover {
+  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+}
+
+/* Assets list: tighter rows (table + tree) */
+.app-assets-data-grid.p-datatable .p-datatable-thead > tr > th,
+.app-assets-data-grid.p-datatable .p-datatable-tbody > tr > td,
+.app-assets-data-grid.p-treetable .p-treetable-thead > tr > th,
+.app-assets-data-grid.p-treetable .p-treetable-tbody > tr > td {
+  padding: 0.25rem 0.375rem;
+  line-height: 1.2;
+  font-size: 0.8125rem;
+  vertical-align: middle;
+}
+
+/* Assets tree: auto column widths + horizontal scroll; headers full label (no ellipsis), body cells may ellipsize */
+.app-assets-treetable.p-treetable .p-treetable-table {
+  table-layout: auto;
+  width: max-content;
+  max-width: none;
+}
+
+.app-assets-treetable.p-treetable .p-treetable-thead > tr > th {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td .flex.min-w-0 {
+  max-width: 100%;
+}
+
+.app-assets-treetable-ref-cell {
+  overflow: visible !important;
+  text-overflow: clip;
+}
+
+/* Assets tree: expand — child rows ease in when inserted (Prime <tr aria-level>); roots stay static. */
+@keyframes app-assets-tree-row-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) {
+  animation: app-assets-tree-row-reveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 .app-data-table .p-column-title {
+  flex: 0 1 auto;
   font-size: inherit;
+  white-space: nowrap;
 }
 
 /* Global table status check icon: use green accent instead of neutral text color. */
@@ -719,7 +1063,7 @@ html.theme-crossfade-fallback #root {
   vertical-align: top;
 }
 
-/* App shell page title: use ATHENE headline font + signature underline. */
+/* App shell page title: monospace (with logo); signature underscore accent. */
 .app-shell-title {
   white-space: nowrap;
 }

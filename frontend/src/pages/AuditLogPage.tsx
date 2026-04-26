@@ -171,7 +171,7 @@ export function AuditLogPage() {
 
   const opBody = (row: AuditLogEntry) => (
     <span
-      className={`inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[11px] ${operationBadgeClass(row.operation)}`}
+      className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] ${operationBadgeClass(row.operation)}`}
     >
       {row.operation}
     </span>
@@ -221,7 +221,7 @@ export function AuditLogPage() {
               setFilterRecordId(e.target.value);
               setPage(0);
             }}
-            className="font-mono text-sm"
+            className="text-sm"
             placeholder="uuid"
           />
         </div>
@@ -248,7 +248,7 @@ export function AuditLogPage() {
               setFilterFrom(e.target.value);
               setPage(0);
             }}
-            className="font-mono text-sm"
+            className="text-sm"
             placeholder="2026-01-01T00:00:00Z"
           />
         </div>
@@ -263,7 +263,7 @@ export function AuditLogPage() {
               setFilterTo(e.target.value);
               setPage(0);
             }}
-            className="font-mono text-sm"
+            className="text-sm"
             placeholder="2026-12-31T23:59:59Z"
           />
         </div>
@@ -305,13 +305,13 @@ export function AuditLogPage() {
             className="whitespace-nowrap"
           />
           <Column field="tableName" header={t("auditLog.colTable")} sortable />
-          <Column field="recordId" header={t("auditLog.colRecord")} body={(r) => <span className="font-mono">{r.recordId}</span>} />
+          <Column field="recordId" header={t("auditLog.colRecord")} body={(r) => <span>{r.recordId}</span>} />
           <Column header={t("auditLog.colOp")} body={opBody} className="w-28" />
           <Column field="changedByLogin" header={t("auditLog.colUser")} />
           <Column
             field="requestId"
             header={t("auditLog.colRequest")}
-            body={(r) => <span className="font-mono truncate max-w-[8rem] inline-block">{r.requestId ?? "—"}</span>}
+            body={(r) => <span className="truncate max-w-[8rem] inline-block">{r.requestId ?? "—"}</span>}
             className="min-w-48"
           />
         </DataTable>
@@ -340,13 +340,13 @@ export function AuditLogPage() {
           <div className="flex max-h-[70vh] flex-col gap-3 overflow-auto text-sm">
             <dl className="m-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1">
               <dt className="text-on-surface-variant">{t("auditLog.colTable")}</dt>
-              <dd className="m-0 font-mono">{detail.tableName}</dd>
+              <dd className="m-0">{detail.tableName}</dd>
               <dt className="text-on-surface-variant">{t("auditLog.colRecord")}</dt>
-              <dd className="m-0 font-mono text-xs">{detail.recordId}</dd>
+              <dd className="m-0 text-xs">{detail.recordId}</dd>
               <dt className="text-on-surface-variant">{t("auditLog.colOp")}</dt>
               <dd className="m-0">
                 <span
-                  className={`inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[11px] ${operationBadgeClass(detail.operation)}`}
+                  className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] ${operationBadgeClass(detail.operation)}`}
                 >
                   {detail.operation}
                 </span>
@@ -356,11 +356,11 @@ export function AuditLogPage() {
               <dt className="text-on-surface-variant">{t("auditLog.colUser")}</dt>
               <dd className="m-0">{detail.changedByLogin ?? detail.changedBy ?? "—"}</dd>
               <dt className="text-on-surface-variant">{t("auditLog.colRequest")}</dt>
-              <dd className="m-0 font-mono text-xs break-all">{detail.requestId ?? "—"}</dd>
+              <dd className="m-0 text-xs break-all">{detail.requestId ?? "—"}</dd>
               {detail.changedFields?.length ? (
                 <>
                   <dt className="text-on-surface-variant">{t("auditLog.changedFields")}</dt>
-                  <dd className="m-0 font-mono text-xs">{detail.changedFields.join(", ")}</dd>
+                  <dd className="m-0 text-xs">{detail.changedFields.join(", ")}</dd>
                 </>
               ) : null}
             </dl>
@@ -369,7 +369,7 @@ export function AuditLogPage() {
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
                   {t("auditLog.oldData")}
                 </div>
-                <pre className="max-h-64 overflow-auto rounded-sm border border-white/10 bg-black/30 p-2 text-xs font-mono">
+                <pre className="max-h-64 overflow-auto rounded-sm border border-white/10 bg-black/30 p-2 text-xs">
                   {detail.oldData != null ? JSON.stringify(detail.oldData, null, 2) : "—"}
                 </pre>
               </div>
@@ -377,7 +377,7 @@ export function AuditLogPage() {
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
                   {t("auditLog.newData")}
                 </div>
-                <pre className="max-h-64 overflow-auto rounded-sm border border-white/10 bg-black/30 p-2 text-xs font-mono">
+                <pre className="max-h-64 overflow-auto rounded-sm border border-white/10 bg-black/30 p-2 text-xs">
                   {detail.newData != null ? JSON.stringify(detail.newData, null, 2) : "—"}
                 </pre>
               </div>

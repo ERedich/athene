@@ -33,7 +33,7 @@ VALUES (
   'ASC',
   'Wahl des Buchungskreises',
   'Allow Site Change',
-  'Wenn aktiv (Y), dürfen Benutzer den Standort bei Stammdaten (z. B. Assets, Kostenstellen) selbst wählen und ändern. Wenn inaktiv (N), setzt das System den Standort bei Neuanlagen auf den Arbeitsstandort des Benutzers; bei bestehenden Datensätzen bleibt der gespeicherte Standort erhalten und das Feld ist nicht editierbar.',
+  'Wenn aktiv (Y), dürfen Benutzer den Buchungskreis bei Stammdaten (z. B. Assets, Kostenstellen) selbst wählen und ändern. Wenn inaktiv (N), setzt das System den Buchungskreis bei Neuanlagen auf den Arbeitsbuchungskreis des Benutzers; bei bestehenden Datensätzen bleibt der gespeicherte Buchungskreis erhalten und das Feld ist nicht editierbar.',
   'When enabled (Y), users can choose and edit the site on master data (e.g. assets, cost centers). When disabled (N), new records use the user''s working site; existing records keep their stored site and the field is read-only.',
   'boolean',
   false

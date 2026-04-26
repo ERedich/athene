@@ -45,23 +45,23 @@ export function AppShellLayout() {
 
   return (
     <div
-      className="text-on-surface min-h-screen flex bg-surface"
+      className="text-on-surface flex h-screen min-h-0 overflow-hidden bg-surface"
       style={{ fontFamily: "var(--font-family)" }}
     >
       <aside
-        className="app-chrome-bg w-[260px] shrink-0 flex flex-col border-r border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-low"
+        className="app-chrome-bg flex h-screen min-h-0 w-[260px] shrink-0 flex-col overflow-hidden border-r border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-low"
         aria-label={t("dashboard.navAria")}
         style={chromeBackground}
       >
-        <div className="p-4 border-b border-white/5">
-          <div className="font-headline text-lg font-bold tracking-tight">
+        <div className="shrink-0 p-4 border-b border-white/5">
+          <div className="font-mono text-lg font-bold tracking-tight">
             <AtheneWordmark brand={t("dashboard.brand")} />
           </div>
           <div className="text-[11px] uppercase tracking-widest text-on-surface-variant mt-1">
             {t("shell.product")}
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="shrink-0 p-3 space-y-1">
           <NavLink
             to="/dashboard"
             end
@@ -127,7 +127,7 @@ export function AppShellLayout() {
             {t("auditLog.navAudit")}
           </NavLink>
         </nav>
-        <div className="p-3 border-t border-white/5">
+        <div className="mt-auto shrink-0 p-3 border-t border-white/5">
           <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
             Misc
           </div>
@@ -170,7 +170,7 @@ export function AppShellLayout() {
           style={chromeBackground}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <h1 className="app-shell-title font-headline w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
+            <h1 className="app-shell-title font-mono w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
               {t(headerTitleKey(pathname))}
             </h1>
             {headerActions ? (

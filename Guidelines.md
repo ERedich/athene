@@ -22,6 +22,18 @@ All implementation work **must** follow this document.
 - All data have a unique id that will not be seen by user, a key and a name field
 - All basic apps / data will be assigned to a site with a `fkSiteId`
 - All columns and tables should use camel case
+- References to a **cost center** must respect **site consistency**: the cost center’s **`siteId`** must equal the owning record’s site (e.g. **`asset.siteId`** = **`costCenter.siteId`** when `asset.costCenterId` is set).
+
+### Site color marking (`site.colorHex`)
+
+- Every **site** (`Standort`) stores an accent color in **`colorHex`** (validated HEX, see migration `backend/migrations/004_site_add_color_hex.sql` and the Sites app).
+- Whenever the UI shows a **site reference** (assignment, key/name, filters, table cells, dropdown labels), the **color marking is text-only**:
+  - Render the site label as **plain text** (no color swatch, no filled badge/chip, no extra color box beside the name).
+  - Apply **`readableSiteColor`** from [`frontend/src/lib/siteColor.ts`](frontend/src/lib/siteColor.ts) as the **font color** of that text, derived from the site’s stored `colorHex`, so contrast stays acceptable on both themes.
+  - Put the full label and HEX in a **`title` / tooltip** (e.g. `KEY - Name (#rrggbb)`) where helpful.
+  - For **multi-select** lists of sites, do **not** use chip/pill presentation (e.g. PrimeReact `display="chip"`); prefer **`display="comma"`** or equivalent plain text.
+- **APIs** that expose site identity for other entities should include **`siteColorHex`** (joined from `site`) when they already return `siteKey` / `siteName`, so consumers can style text without an extra site fetch.
+- Do **not** invent unrelated per-screen colors for sites; always derive the text color from stored `colorHex` (fallback only to the shared default in `siteColor.ts` when a value is missing).
 
 ---
 
@@ -69,14 +81,15 @@ North star differs by theme but shared principles: **precision / industrial**, *
 - **PrimeReact themes**: use **Lara** (`lara-light-blue` / `lara-dark-blue`) loaded dynamically with `document.documentElement.dataset.theme` (`light` / `dark`) so Prime components match the active mode.
 - **Primary colours (current web tokens)**: map Lara to Athene orange via CSS variables on `:root[data-theme="light"]` and `:root[data-theme="dark"]` — **`--color-primary: #f97316`**, **`--color-primary-container: #ea580c`**. Use these (and Tailwind mappings `primary` / `primary-container`) for accents, CTAs, and focus; override Prime defaults where Lara would otherwise paint blue.
 - **Tables**: every PrimeReact `DataTable` in the app must use `app-data-table` so header and body cells share one font size. Do not add local `text-xs` / `text-sm` overrides inside table cells; use color, mono font, width, and alignment classes only unless a new table-specific design decision is documented here first.
+- **Tables (headers, icons, width)**: header labels must stay on one line (no word wrap): use the shared `app-data-table` rules in [`frontend/src/index.css`](frontend/src/index.css) so sort and filter icons stay **beside** the title on one horizontal row (`inline-flex` / `flex-direction: row` on `.p-column-header-content`, including scrollable header tables), not stacked under the label. The table may be wider than the viewport: the Prime wrapper (`.p-datatable-wrapper` / `.p-treetable-wrapper`) already scrolls horizontally; do not squeeze wide grids with `table-layout: fixed` plus `width: 100%` unless documented here. Prefer explicit column `min-w-*` classes and/or `tableStyle={{ minWidth: "…" }}` so headers and body columns stay aligned. **TreeTable** must not use `min-w-0` / tight `max-w-*` on columns that forces header truncation; match flat `DataTable` min widths where the same data is shown. **Documented exceptions** (different wrap/overflow) must stay called out in this file — e.g. **App parameters** tabbed tables use `app-parameters-data-table` with wrapped cells and no horizontal growth.
 - **Tables (row double-click)**: double-clicking a table row must trigger the same behavior as clicking that row's **Edit** action.
 - **Tables (status icon)**: check icons that represent active/true/plant states in tables must be green (use global `app-data-table` styling for `i.pi.pi-check`; avoid neutral white/gray checks).
-- **Search (mandatory per app)**: every app with a table/list view must provide a search field.
-  - **Placement**: search is part of the top header action row (`setHeaderActions`) and must be placed at the far right (`ml-auto`) while CRUD actions remain on the left.
-  - **Component pattern**: use PrimeReact `IconField` + `InputIcon` + `InputText` (left search icon).
-  - **Sizing**: compact header size (`h-9`, width around `w-56` unless app-specific constraints require otherwise).
-  - **Styling**: use a dedicated input class (e.g. `users-header-search-input`) and define padding/background in `frontend/src/index.css`; do not rely only on utility padding when global `.p-inputtext` `!important` rules exist.
-  - **Behavior**: search filters the currently visible list/table rows live (client-side unless explicitly specified otherwise).
+- **Search (mandatory per app)**: every main-window **app** that shows a primary **DataTable** or equivalent **scrollable list** must expose a **header search** field. That includes **App parameters** (tabbed tables), **Sites**, **Users**, **Cost centers**, **Assets**, **Audit log**, and any future list apps. **Dashboard** and other placeholder-only views are exempt until they ship a list or table.
+  - **Placement**: search is always part of the shell **header action row** via `setHeaderActions` from [`AppShellLayout.tsx`](frontend/src/layout/AppShellLayout.tsx). Put it at the **far right** (`<li className="ml-auto">`); CRUD or other actions stay to the left in the same `<ul>`. If an app has no other header actions, the `<ul>` still contains only the search item with `ml-auto` (same pattern as Audit log and App parameters).
+  - **Component pattern**: PrimeReact `IconField` + `InputIcon` + `InputText` (search icon on the left).
+  - **Sizing**: compact header control (`h-9`, about `w-56`) unless a screen documents a different width.
+  - **Styling**: use the shared class **`app-header-search-input`** on `InputText` (padding/overrides live in [`frontend/src/index.css`](frontend/src/index.css)); do not rely only on utility padding because global `.p-inputtext` rules use `!important`.
+  - **Behavior**: filter the **current** list or table **live** on the client (trimmed case-insensitive match), including within the **active tab** for tabbed apps, unless the product explicitly specifies server-side search.
 - **Consistency**: reuse the same surface / on-surface / outline tokens as login; keep the “no-line” and typography rules from **Shared rules** above.
 
 ### Reference affordances (“Referenzen” in tables)
@@ -86,11 +99,12 @@ Use these **background** colors for reference icon buttons (and matching border)
 | Reference kind | Meaning | Background (Tailwind token) | CSS class |
 | --- | --- | --- | --- |
 | **Documents** | Attached files (PDF, images, video, etc.) | **`cyan-300`** | `app-ref-button--documents` |
+| **Documents (inactive)** | Document column when **count = 0**; control stays **disabled**; **transparent** button background and border — only the file icon in a **soft blue** (`sky-300`, see [`frontend/src/index.css`](frontend/src/index.css)); must **not** use primary/orange fill. | — | `app-ref-button--documents-inactive` |
 | **Material** | Material / stock–related links | **`green-300`** | `app-ref-button--material` |
 | **Purchase (Einkauf)** | Procurement / purchasing links | **`pink-300`** | `app-ref-button--purchase` |
 
 - **Foreground**: keep icon and badge text **high contrast** on these pastel fills (the shared classes use a dark slate foreground; adjust only if documented here).
-- **Disabled / empty**: use neutral surface styling — **do not** use the cyan / green / pink fills when there is nothing to open.
+- **Disabled / empty (other kinds)**: for **material** and **purchase** (when implemented), use neutral surface styling when there is nothing to open — **do not** use the strong green / pink fills. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill).
 
 ---
 

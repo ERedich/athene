@@ -15,6 +15,7 @@ import { Toast } from "primereact/toast";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { readableSiteColor } from "../lib/siteColor";
 
 type Site = {
@@ -320,7 +321,7 @@ export function SitesPage() {
   const colorBody = (row: Site) => {
     const hex = row.colorHex ?? defaultColorHex;
     return (
-      <span className="font-mono" style={{ color: readableSiteColor(hex) }} title={hex}>
+      <span style={{ color: readableSiteColor(hex) }} title={hex}>
         {hex}
       </span>
     );
@@ -471,9 +472,9 @@ export function SitesPage() {
                   const raw = typeof v === "string" ? v : "";
                   setForm((f) => ({ ...f, colorHex: storedFromPickerValue(raw) }));
                 }}
-                appendTo={typeof document !== "undefined" ? document.body : undefined}
+                appendTo={overlayAppendTo}
               />
-              <span className="font-mono text-sm text-on-surface-variant">{form.colorHex}</span>
+              <span className="text-sm text-on-surface-variant">{form.colorHex}</span>
             </div>
           </div>
           <label className="flex items-center gap-3 cursor-pointer group">

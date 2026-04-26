@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
+  type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
@@ -21,6 +23,8 @@ import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
+import { TreeTable, type TreeTableEvent, type TreeTableSelectionEvent } from "primereact/treetable";
+import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
@@ -31,7 +35,9 @@ import {
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
+import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import { apiFetch } from "../lib/api";
+import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
@@ -60,6 +66,26 @@ function assetTypePrimeIconClass(type: AssetType): string {
 
 function assetTypeIconClassNames(type: AssetType): string {
   return `${assetTypePrimeIconClass(type)} app-asset-type-icon app-asset-type-icon--${type}`;
+}
+
+function assetTypeDisplayLabel(
+  type: AssetType,
+  cfg: AssetTypeDisplayConfig | null,
+  langDe: boolean,
+  t: (key: string) => string,
+): string {
+  const e = cfg?.[type];
+  if (e) {
+    const n = (langDe ? e.nameDe : e.nameEn).trim();
+    if (n) return n;
+  }
+  return t(`assets.types.${type}`);
+}
+
+function assetTypeIconColorStyle(type: AssetType, cfg: AssetTypeDisplayConfig | null): CSSProperties | undefined {
+  const hex = cfg?.[type]?.colorHex?.trim();
+  if (!hex) return undefined;
+  return { color: hex };
 }
 
 function resolveAssetTypeDropdownValue(incoming: unknown): AssetType | null {
@@ -107,6 +133,60 @@ type Asset = {
   updatedBy: string;
   documentCount: number;
 };
+
+const ASSETS_VIEW_MODE_STORAGE_KEY = "athene-assets-view-mode";
+const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
+
+/** Gecko (Firefox / FxiOS): VirtualScroller + scrollHeight="flex" often yields a zero-height body. */
+function isFirefoxLayoutUa(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /firefox\//i.test(ua) || /fxios/i.test(ua);
+}
+
+function readStoredAssetsViewMode(): "table" | "tree" {
+  try {
+    const v = localStorage.getItem(ASSETS_VIEW_MODE_STORAGE_KEY);
+    if (v === "tree" || v === "table") return v;
+  } catch {
+    /* ignore */
+  }
+  return "table";
+}
+
+/** Build tree roots from filtered rows; parents outside the set become implicit roots. */
+function buildFilteredAssetTreeNodes(assets: Asset[]): TreeNode[] {
+  const idSet = new Set(assets.map((a) => a.id));
+  const byParent = new Map<string | null, Asset[]>();
+
+  const effectiveParentId = (a: Asset): string | null => {
+    if (!a.parentAssetId) return null;
+    if (!idSet.has(a.parentAssetId)) return null;
+    return a.parentAssetId;
+  };
+
+  for (const a of assets) {
+    const p = effectiveParentId(a);
+    const list = byParent.get(p) ?? [];
+    list.push(a);
+    byParent.set(p, list);
+  }
+  for (const list of byParent.values()) {
+    list.sort((x, y) => x.key.localeCompare(y.key, undefined, { numeric: true, sensitivity: "base" }));
+  }
+
+  const toNodes = (parentId: string | null): TreeNode[] => {
+    const rows = byParent.get(parentId) ?? [];
+    return rows.map((row) => {
+      const children = toNodes(row.id);
+      const node: TreeNode = { key: row.id, data: row };
+      if (children.length > 0) node.children = children;
+      return node;
+    });
+  };
+
+  return toNodes(null);
+}
 
 type CostCenterListRow = {
   id: string;
@@ -368,7 +448,8 @@ function formatDateOnly(value: Date | null): string {
 
 export function AssetsPage() {
   const { t, i18n } = useTranslation();
-  const { user, appParameterBooleans } = useAuth();
+  const { user, appParameterBooleans, appParameterAssetTypes } = useAuth();
+  const langDe = i18n.language?.toLowerCase().startsWith("de");
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
@@ -397,6 +478,25 @@ export function AssetsPage() {
   const [documentEditDisplayName, setDocumentEditDisplayName] = useState("");
   const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
+  const [viewMode, setViewModeState] = useState<"table" | "tree">(readStoredAssetsViewMode);
+
+  const setViewMode = useCallback((mode: "table" | "tree") => {
+    setViewModeState(mode);
+    try {
+      localStorage.setItem(ASSETS_VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleTableTreeView = useCallback(() => {
+    setViewMode(viewMode === "table" ? "tree" : "table");
+  }, [setViewMode, viewMode]);
+
+  const assetsTableVirtualScrollerOptions = useMemo(
+    () => (isFirefoxLayoutUa() ? undefined : { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX }),
+    [],
+  );
 
   const editingIdRef = useRef<string | null>(null);
   const formRef = useRef(form);
@@ -430,20 +530,24 @@ export function AssetsPage() {
   const typeOptions = useMemo(
     () =>
       (["site", "structure", "line", "maintenanceObject"] as AssetType[]).map((type) => ({
-        label: t(`assets.types.${type}`),
+        label: assetTypeDisplayLabel(type, appParameterAssetTypes, langDe, t),
         value: type,
       })),
-    [t],
+    [appParameterAssetTypes, langDe, t],
   );
 
   const renderAssetTypeDropdownOption = useCallback(
     (option: { value: AssetType; label: string }) => (
       <span className="flex min-w-0 items-center gap-2">
-        <i className={assetTypeIconClassNames(option.value)} aria-hidden />
+        <i
+          className={assetTypeIconClassNames(option.value)}
+          style={assetTypeIconColorStyle(option.value, appParameterAssetTypes)}
+          aria-hidden
+        />
         <span className="truncate">{option.label}</span>
       </span>
     ),
-    [],
+    [appParameterAssetTypes],
   );
 
   const renderAssetTypeDropdownValue = useCallback(
@@ -454,22 +558,30 @@ export function AssetsPage() {
       }
       return (
         <span className="flex min-w-0 items-center gap-2">
-          <i className={assetTypeIconClassNames(type)} aria-hidden />
-          <span className="truncate">{t(`assets.types.${type}`)}</span>
+          <i
+            className={assetTypeIconClassNames(type)}
+            style={assetTypeIconColorStyle(type, appParameterAssetTypes)}
+            aria-hidden
+          />
+          <span className="truncate">{assetTypeDisplayLabel(type, appParameterAssetTypes, langDe, t)}</span>
         </span>
       );
     },
-    [t],
+    [appParameterAssetTypes, langDe, t],
   );
 
   const typeColumnBody = useCallback(
     (row: Asset) => (
       <span className="flex min-w-0 items-center gap-2">
-        <i className={assetTypeIconClassNames(row.type)} aria-hidden />
-        <span className="truncate">{t(`assets.types.${row.type}`)}</span>
+        <i
+          className={assetTypeIconClassNames(row.type)}
+          style={assetTypeIconColorStyle(row.type, appParameterAssetTypes)}
+          aria-hidden
+        />
+        <span className="truncate">{assetTypeDisplayLabel(row.type, appParameterAssetTypes, langDe, t)}</span>
       </span>
     ),
-    [t],
+    [appParameterAssetTypes, langDe, t],
   );
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
@@ -607,10 +719,10 @@ export function AssetsPage() {
       .filter((asset) => allowed.includes(asset.type))
       .filter((asset) => asset.id !== editingId)
       .map((asset) => ({
-        label: `${asset.key} - ${asset.name} (${t(`assets.types.${asset.type}`)})`,
+        label: `${asset.key} - ${asset.name} (${assetTypeDisplayLabel(asset.type, appParameterAssetTypes, langDe, t)})`,
         value: asset.id,
       }));
-  }, [assets, editingId, form.siteId, form.type, t]);
+  }, [appParameterAssetTypes, assets, editingId, form.siteId, form.type, langDe, t]);
 
   const costCenterDropdownOptions = useMemo(
     () =>
@@ -653,6 +765,29 @@ export function AssetsPage() {
         .includes(q),
     );
   }, [assets, searchTerm]);
+
+  const assetTreeNodes = useMemo(() => buildFilteredAssetTreeNodes(filteredAssets), [filteredAssets]);
+
+  /** Prime `selectionMode="single"`: `selectionKeys` must be the node key string or null — not `{ id: true }`. */
+  const treeSelectionKey = selectedAsset?.id ?? null;
+
+  const handleTreeSelectionChange = useCallback((e: TreeTableSelectionEvent) => {
+    const val = e.value as string | Record<string, boolean> | null | undefined;
+    if (val == null) {
+      setSelectedAsset(null);
+      return;
+    }
+    if (typeof val === "string") {
+      setSelectedAsset(assets.find((a) => a.id === val) ?? null);
+      return;
+    }
+    const id = Object.keys(val).find((k) => val[k] === true);
+    if (!id) {
+      setSelectedAsset(null);
+      return;
+    }
+    setSelectedAsset(assets.find((a) => a.id === id) ?? null);
+  }, [assets]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1138,6 +1273,30 @@ export function AssetsPage() {
             <span>{t("assets.delete")}</span>
           </button>
         </li>
+        <li
+          aria-hidden
+          className="mx-1 h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)]"
+        />
+        <li>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={viewMode === "tree"}
+            title={viewMode === "table" ? t("assets.viewToggleToTree") : t("assets.viewToggleToTable")}
+            aria-label={viewMode === "table" ? t("assets.viewToggleToTree") : t("assets.viewToggleToTable")}
+            className={`${primaryActionNavItem} !min-w-9 !justify-center !gap-0 !px-0`}
+            onClick={toggleTableTreeView}
+          >
+            <i
+              className={
+                viewMode === "table"
+                  ? `pi pi-table ${primaryActionIcon}`
+                  : `pi pi-sitemap ${primaryActionIcon}`
+              }
+              aria-hidden
+            />
+          </button>
+        </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
             <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
@@ -1154,23 +1313,37 @@ export function AssetsPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedAsset, setHeaderActions, t]);
+  }, [
+    confirmDelete,
+    openCreate,
+    openEdit,
+    searchTerm,
+    selectedAsset,
+    setHeaderActions,
+    t,
+    toggleTableTreeView,
+    viewMode,
+  ]);
 
   const parentBody = (row: Asset) => {
     if (!row.parentAssetId) return <span className="text-on-surface-variant">—</span>;
-    const typeLabel = row.parentAssetType ? t(`assets.types.${row.parentAssetType}`) : "—";
+    const typeLabel = row.parentAssetType
+      ? assetTypeDisplayLabel(row.parentAssetType, appParameterAssetTypes, langDe, t)
+      : "—";
+    const full = `${row.parentAssetKey} - ${row.parentAssetName} (${typeLabel})`;
     return (
-      <span>
-        {row.parentAssetKey} - {row.parentAssetName} ({typeLabel})
+      <span className="block min-w-0 truncate" title={full}>
+        {full}
       </span>
     );
   };
 
   const costCenterBody = (row: Asset) => {
     if (!row.costCenterId) return <span className="text-on-surface-variant">—</span>;
+    const full = `${row.costCenterKey} - ${row.costCenterName}`;
     return (
-      <span>
-        {row.costCenterKey} - {row.costCenterName}
+      <span className="block min-w-0 truncate" title={full}>
+        {full}
       </span>
     );
   };
@@ -1328,7 +1501,7 @@ export function AssetsPage() {
           badge={row.documentCount > 1 ? String(row.documentCount) : undefined}
           badgeClassName="!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0"
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-            hasDocuments ? "app-ref-button--documents" : "!bg-surface-300 !border-surface-300 !text-on-surface-variant/70"
+            hasDocuments ? "app-ref-button--documents" : "app-ref-button--documents-inactive"
           }`}
           disabled={!hasDocuments}
           onClick={() => openDocuments(row)}
@@ -1365,60 +1538,211 @@ export function AssetsPage() {
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <DataTable
-          className="app-data-table w-full"
-          value={filteredAssets}
-          loading={loading}
-          dataKey="id"
-          selection={selectedAsset}
-          onSelectionChange={(e) => setSelectedAsset(e.value as Asset | null)}
-          onRowDoubleClick={(e) => openEdit(e.data as Asset)}
-          selectionMode="single"
-          metaKeySelection={false}
-          stripedRows
-          showGridlines
-          scrollable
-          resizableColumns
-          columnResizeMode="expand"
-          scrollHeight="flex"
-          tableStyle={{ minWidth: "104rem" }}
-          stateStorage="local"
-          stateKey="athene-assets-table"
-          emptyMessage={t("assets.empty")}
-        >
-          <Column field="key" header={t("assets.key")} sortable />
-          <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
-          <Column field="type" header={t("assets.type")} sortable body={typeColumnBody} />
-          <Column field="siteName" header={t("assets.site")} sortable body={siteColumnBody} />
-          <Column field="costCenterName" header={t("assets.costCenter")} sortable body={costCenterBody} className="min-w-48" />
-          <Column header={t("assets.parentAsset")} body={parentBody} className="min-w-72" />
-          <Column field="serialNumber" header={t("assets.serialNumber")} body={(row: Asset) => nullableTextBody(row.serialNumber)} />
-          <Column field="buildDate" header={t("assets.buildDate")} body={(row: Asset) => dateOnlyBody(row.buildDate)} />
-          <Column
-            field="manufacturer"
-            header={t("assets.manufacturer")}
-            body={(row: Asset) => nullableTextBody(row.manufacturer)}
-            className="min-w-56"
-          />
-          <Column field="documentCount" header={t("assets.references")} body={referencesBody} className="min-w-32" />
-          <Column
-            field="createdAt"
-            header={t("assets.createdAt")}
-            body={(row: Asset) => formatShortDt(row.createdAt)}
-            sortable
-            className="whitespace-nowrap text-on-surface-variant"
-          />
-          <Column field="createdBy" header={t("assets.createdBy")} sortable className="text-on-surface-variant" />
-          <Column
-            field="updatedAt"
-            header={t("assets.updatedAt")}
-            body={(row: Asset) => formatShortDt(row.updatedAt)}
-            sortable
-            className="whitespace-nowrap text-on-surface-variant"
-          />
-          <Column field="updatedBy" header={t("assets.updatedBy")} sortable className="text-on-surface-variant" />
-        </DataTable>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* key=viewMode: remount subtree after switching modes so flex scroll / observers re-init (Tree→Table→Tree). */}
+        <div key={viewMode} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {viewMode === "table" ? (
+          <DataTable
+            className="app-data-table app-assets-data-grid flex min-h-0 min-w-0 w-full flex-1"
+            value={filteredAssets}
+            loading={loading}
+            dataKey="id"
+            selection={selectedAsset}
+            onSelectionChange={(e) => setSelectedAsset(e.value as Asset | null)}
+            onRowDoubleClick={(e) => openEdit(e.data as Asset)}
+            selectionMode="single"
+            metaKeySelection={false}
+            stripedRows
+            showGridlines
+            scrollable
+            resizableColumns
+            columnResizeMode="expand"
+            scrollHeight="flex"
+            virtualScrollerOptions={assetsTableVirtualScrollerOptions}
+            tableStyle={{ minWidth: "118rem" }}
+            stateStorage="local"
+            stateKey="athene-assets-table"
+            emptyMessage={t("assets.empty")}
+          >
+            <Column field="key" header={t("assets.key")} sortable className="min-w-28" />
+            <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
+            <Column field="type" header={t("assets.type")} sortable body={typeColumnBody} className="min-w-36" />
+            <Column field="siteName" header={t("assets.site")} sortable body={siteColumnBody} className="min-w-44" />
+            <Column
+              field="costCenterName"
+              header={t("assets.costCenter")}
+              sortable
+              body={costCenterBody}
+              className="min-w-48"
+            />
+            <Column header={t("assets.parentAsset")} body={parentBody} className="min-w-72" />
+            <Column
+              field="serialNumber"
+              header={t("assets.serialNumber")}
+              body={(row: Asset) => nullableTextBody(row.serialNumber)}
+              className="min-w-40"
+            />
+            <Column
+              field="buildDate"
+              header={t("assets.buildDate")}
+              body={(row: Asset) => dateOnlyBody(row.buildDate)}
+              className="min-w-28"
+            />
+            <Column
+              field="manufacturer"
+              header={t("assets.manufacturer")}
+              body={(row: Asset) => nullableTextBody(row.manufacturer)}
+              className="min-w-56"
+            />
+            <Column field="documentCount" header={t("assets.references")} body={referencesBody} className="min-w-32" />
+            <Column
+              field="createdAt"
+              header={t("assets.createdAt")}
+              body={(row: Asset) => formatShortDt(row.createdAt)}
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="createdBy"
+              header={t("assets.createdBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+            />
+            <Column
+              field="updatedAt"
+              header={t("assets.updatedAt")}
+              body={(row: Asset) => formatShortDt(row.updatedAt)}
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="updatedBy"
+              header={t("assets.updatedBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+            />
+          </DataTable>
+        ) : (
+          <TreeTable
+            className="app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1"
+            value={assetTreeNodes}
+            loading={loading}
+            selectionMode="single"
+            selectionKeys={treeSelectionKey}
+            onSelectionChange={handleTreeSelectionChange}
+            onRowClick={(e: TreeTableEvent) => {
+              const oe = e.originalEvent as MouseEvent<HTMLElement>;
+              if (oe.detail === 2) {
+                const row = e.node?.data as Asset | undefined;
+                if (row) openEdit(row);
+              }
+            }}
+            metaKeySelection={false}
+            stripedRows
+            showGridlines
+            scrollable
+            resizableColumns
+            columnResizeMode="expand"
+            scrollHeight="flex"
+            tableStyle={{ minWidth: "118rem" }}
+            stateStorage="local"
+            stateKey="athene-assets-tree-table"
+            emptyMessage={t("assets.empty")}
+          >
+            <Column field="key" header={t("assets.key")} expander sortable className="min-w-28" />
+            <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
+            <Column
+              field="type"
+              header={t("assets.type")}
+              sortable
+              className="min-w-36"
+              body={(node: TreeNode) => (node.data ? typeColumnBody(node.data as Asset) : null)}
+            />
+            <Column
+              field="siteName"
+              header={t("assets.site")}
+              sortable
+              className="min-w-44"
+              body={(node: TreeNode) => (node.data ? siteColumnBody(node.data as Asset) : null)}
+            />
+            <Column
+              field="costCenterName"
+              header={t("assets.costCenter")}
+              sortable
+              body={(node: TreeNode) => (node.data ? costCenterBody(node.data as Asset) : null)}
+              className="min-w-48"
+            />
+            <Column
+              header={t("assets.parentAsset")}
+              body={(node: TreeNode) => (node.data ? parentBody(node.data as Asset) : null)}
+              className="min-w-72"
+            />
+            <Column
+              field="serialNumber"
+              header={t("assets.serialNumber")}
+              className="min-w-40"
+              body={(node: TreeNode) =>
+                node.data ? nullableTextBody((node.data as Asset).serialNumber) : null
+              }
+            />
+            <Column
+              field="buildDate"
+              header={t("assets.buildDate")}
+              className="min-w-28"
+              body={(node: TreeNode) =>
+                node.data ? dateOnlyBody((node.data as Asset).buildDate) : null
+              }
+            />
+            <Column
+              field="manufacturer"
+              header={t("assets.manufacturer")}
+              body={(node: TreeNode) =>
+                node.data ? nullableTextBody((node.data as Asset).manufacturer) : null
+              }
+              className="min-w-56"
+            />
+            <Column
+              field="documentCount"
+              header={t("assets.references")}
+              body={(node: TreeNode) => (node.data ? referencesBody(node.data as Asset) : null)}
+              className="min-w-32"
+              bodyClassName="app-assets-treetable-ref-cell"
+            />
+            <Column
+              field="createdAt"
+              header={t("assets.createdAt")}
+              body={(node: TreeNode) =>
+                node.data ? formatShortDt((node.data as Asset).createdAt) : null
+              }
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="createdBy"
+              header={t("assets.createdBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+              body={(node: TreeNode) => (node.data ? (node.data as Asset).createdBy : null)}
+            />
+            <Column
+              field="updatedAt"
+              header={t("assets.updatedAt")}
+              body={(node: TreeNode) =>
+                node.data ? formatShortDt((node.data as Asset).updatedAt) : null
+              }
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="updatedBy"
+              header={t("assets.updatedBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+              body={(node: TreeNode) => (node.data ? (node.data as Asset).updatedBy : null)}
+            />
+          </TreeTable>
+        )}
+        </div>
       </div>
 
       <Dialog
@@ -1485,6 +1809,7 @@ export function AssetsPage() {
                   valueTemplate={renderSiteDropdownValue}
                   filter
                   disabled={siteFieldLocked}
+                  appendTo={overlayAppendTo}
                 />
               </div>
               <div className="space-y-2">
@@ -1504,6 +1829,7 @@ export function AssetsPage() {
                   disabled={!form.siteId}
                   filter
                   showClear
+                  appendTo={overlayAppendTo}
                 />
               </div>
               <div className="space-y-2">
@@ -1521,6 +1847,7 @@ export function AssetsPage() {
                   className="w-full app-inline-icon-dropdown"
                   itemTemplate={renderAssetTypeDropdownOption}
                   valueTemplate={renderAssetTypeDropdownValue}
+                  appendTo={overlayAppendTo}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -1537,6 +1864,7 @@ export function AssetsPage() {
                   disabled={!form.siteId}
                   filter
                   showClear
+                  appendTo={overlayAppendTo}
                 />
               </div>
               <div className="space-y-2">
@@ -1568,6 +1896,7 @@ export function AssetsPage() {
                     }}
                     dateFormat="yy-mm-dd"
                     className="w-full"
+                    appendTo={overlayAppendTo}
                   />
                   <i
                     className="pi pi-calendar pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
@@ -1842,6 +2171,7 @@ export function AssetsPage() {
                       valueTemplate={renderDocumentCategoryDropdownValue}
                       onChange={(e) => updateUploadDraft(index, { category: e.value as AssetDocumentCategory })}
                       className="w-full app-inline-icon-dropdown"
+                      appendTo={overlayAppendTo}
                     />
                   </div>
                 </div>
@@ -1913,6 +2243,7 @@ export function AssetsPage() {
                     onChange={(e) => setDocumentEditCategory(e.value as AssetDocumentCategory)}
                     className="w-full app-inline-icon-dropdown"
                     disabled={documentEditSaving}
+                    appendTo={overlayAppendTo}
                   />
                 </div>
               </div>

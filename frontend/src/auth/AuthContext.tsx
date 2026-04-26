@@ -1,5 +1,7 @@
 import { createContext, useContext } from "react";
 
+import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+
 export type AuthUser = {
   id: string;
   loginName: string;
@@ -10,6 +12,7 @@ export type AuthUser = {
 export type AuthSession = {
   user: AuthUser;
   appParameterBooleans: Record<string, boolean>;
+  appParameterAssetTypes: AssetTypeDisplayConfig | null;
   refresh: () => Promise<void>;
 };
 
