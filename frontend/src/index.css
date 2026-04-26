@@ -927,6 +927,13 @@ html.theme-crossfade-fallback #root {
   min-width: 0;
 }
 
+/* Same border model as DataTable — Firefox omits or clips cell borders on nested tree rows
+   when the table uses the default collapsed model plus row animations. */
+.app-data-table.p-treetable .p-treetable-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 .app-data-table.p-treetable .p-treetable-wrapper {
   overflow-x: auto;
   overflow-y: auto;
@@ -1009,24 +1016,29 @@ html.theme-crossfade-fallback #root {
   text-overflow: clip;
 }
 
-/* Assets tree: expand — child rows ease in when inserted (Prime <tr aria-level>); roots stay static. */
-@keyframes app-assets-tree-row-reveal {
+/* Assets tree: child rows ease in when inserted (Prime <tr aria-level>); roots stay static.
+   Avoid transform on table rows: Firefox omits cell borders for transformed <tr>.
+   Fade on <td> only (opacity) — transform on table cells can still glitch borders in some engines. */
+@keyframes app-assets-tree-td-reveal {
   from {
     opacity: 0;
-    transform: translateY(-0.35rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) {
-  animation: app-assets-tree-row-reveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) > td {
+  animation: app-assets-tree-td-reveal 0.28s cubic-bezier(0.25, 0.9, 0.35, 1) both;
+}
+
+/* Row toggler: small snap when switching chevron (Prime swaps icons; keep interaction snappy). */
+.app-assets-treetable.p-treetable .p-treetable-toggler {
+  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.18s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-assets-treetable.p-treetable .p-treetable-tbody > tr {
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
     animation: none !important;
     transition: none !important;
   }
