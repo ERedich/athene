@@ -137,11 +137,16 @@ type Asset = {
 const ASSETS_VIEW_MODE_STORAGE_KEY = "athene-assets-view-mode";
 const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
 
-/** Gecko (Firefox / FxiOS): VirtualScroller + scrollHeight="flex" often yields a zero-height body. */
-function isFirefoxLayoutUa(): boolean {
+/**
+ * VirtualScroller + scrollHeight="flex" is unstable on some engines (Chrome/Firefox):
+ * the scroll body can collapse to zero height and hide rows.
+ */
+function supportsAssetsTableVirtualScroller(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  return /firefox\//i.test(ua) || /fxios/i.test(ua);
+  const firefox = /firefox\//i.test(ua) || /fxios/i.test(ua);
+  const chromium = /chrome\//i.test(ua) || /crios/i.test(ua) || /edg\//i.test(ua) || /opr\//i.test(ua);
+  return !firefox && !chromium;
 }
 
 function readStoredAssetsViewMode(): "table" | "tree" {
@@ -494,7 +499,7 @@ export function AssetsPage() {
   }, [setViewMode, viewMode]);
 
   const assetsTableVirtualScrollerOptions = useMemo(
-    () => (isFirefoxLayoutUa() ? undefined : { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX }),
+    () => (supportsAssetsTableVirtualScroller() ? { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX } : undefined),
     [],
   );
 
@@ -1575,26 +1580,42 @@ export function AssetsPage() {
               body={costCenterBody}
               className="min-w-48"
             />
-            <Column header={t("assets.parentAsset")} body={parentBody} className="min-w-72" />
+            <Column
+              field="parentAssetName"
+              sortField="parentAssetName"
+              header={t("assets.parentAsset")}
+              body={parentBody}
+              sortable
+              className="min-w-72"
+            />
             <Column
               field="serialNumber"
               header={t("assets.serialNumber")}
               body={(row: Asset) => nullableTextBody(row.serialNumber)}
+              sortable
               className="min-w-40"
             />
             <Column
               field="buildDate"
               header={t("assets.buildDate")}
               body={(row: Asset) => dateOnlyBody(row.buildDate)}
+              sortable
               className="min-w-28"
             />
             <Column
               field="manufacturer"
               header={t("assets.manufacturer")}
               body={(row: Asset) => nullableTextBody(row.manufacturer)}
+              sortable
               className="min-w-56"
             />
-            <Column field="documentCount" header={t("assets.references")} body={referencesBody} className="min-w-32" />
+            <Column
+              field="documentCount"
+              header={t("assets.references")}
+              body={referencesBody}
+              sortable
+              className="min-w-32"
+            />
             <Column
               field="createdAt"
               header={t("assets.createdAt")}
@@ -1638,7 +1659,6 @@ export function AssetsPage() {
               }
             }}
             metaKeySelection={false}
-            stripedRows
             showGridlines
             scrollable
             resizableColumns
@@ -1673,13 +1693,17 @@ export function AssetsPage() {
               className="min-w-48"
             />
             <Column
+              field="parentAssetName"
+              sortField="parentAssetName"
               header={t("assets.parentAsset")}
               body={(node: TreeNode) => (node.data ? parentBody(node.data as Asset) : null)}
+              sortable
               className="min-w-72"
             />
             <Column
               field="serialNumber"
               header={t("assets.serialNumber")}
+              sortable
               className="min-w-40"
               body={(node: TreeNode) =>
                 node.data ? nullableTextBody((node.data as Asset).serialNumber) : null
@@ -1688,6 +1712,7 @@ export function AssetsPage() {
             <Column
               field="buildDate"
               header={t("assets.buildDate")}
+              sortable
               className="min-w-28"
               body={(node: TreeNode) =>
                 node.data ? dateOnlyBody((node.data as Asset).buildDate) : null
@@ -1696,6 +1721,7 @@ export function AssetsPage() {
             <Column
               field="manufacturer"
               header={t("assets.manufacturer")}
+              sortable
               body={(node: TreeNode) =>
                 node.data ? nullableTextBody((node.data as Asset).manufacturer) : null
               }
@@ -1705,6 +1731,7 @@ export function AssetsPage() {
               field="documentCount"
               header={t("assets.references")}
               body={(node: TreeNode) => (node.data ? referencesBody(node.data as Asset) : null)}
+              sortable
               className="min-w-32"
               bodyClassName="app-assets-treetable-ref-cell"
             />
