@@ -814,9 +814,12 @@ export function AssetsPage() {
 
   const treeRowClassName = useCallback(
     (node: TreeNode) => {
-      if (!coloredAssetTreeEnabled || !node.data) return "";
+      if (!coloredAssetTreeEnabled || !node.data) return {};
       const row = node.data as Asset;
-      return isAssetTypeValue(row.type) ? `app-assets-tree-row-colored-${row.type}` : "";
+      if (!isAssetTypeValue(row.type)) return {};
+      return {
+        [`app-assets-tree-row-colored-${row.type}`]: true,
+      };
     },
     [coloredAssetTreeEnabled],
   );
