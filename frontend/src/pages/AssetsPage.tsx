@@ -28,14 +28,17 @@ import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
+import {
+  APP_PARAM_KEY_ALLOW_SITE_CHANGE,
+  APP_PARAM_KEY_COLORED_ASSET_TREE,
+} from "../lib/appParameterKeys";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   type AssetDocumentCategory,
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
-import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+import { DEFAULT_ASSET_TYPE_DISPLAY_CONFIG, type AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
@@ -86,6 +89,22 @@ function assetTypeIconColorStyle(type: AssetType, cfg: AssetTypeDisplayConfig | 
   const hex = cfg?.[type]?.colorHex?.trim();
   if (!hex) return undefined;
   return { color: hex };
+}
+
+function colorHexToRgba(raw: string | null | undefined, alpha: number): string | null {
+  if (typeof raw !== "string") return null;
+  let s = raw.trim();
+  if (!s) return null;
+  if (!s.startsWith("#")) s = `#${s}`;
+  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(s);
+  if (!m) return null;
+  let h = m[1]!;
+  if (h.length === 3) h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  const r = Number.parseInt(h.slice(0, 2), 16);
+  const g = Number.parseInt(h.slice(2, 4), 16);
+  const b = Number.parseInt(h.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function resolveAssetTypeDropdownValue(incoming: unknown): AssetType | null {
@@ -456,6 +475,7 @@ export function AssetsPage() {
   const { user, appParameterBooleans, appParameterAssetTypes } = useAuth();
   const langDe = i18n.language?.toLowerCase().startsWith("de");
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
+  const coloredAssetTreeEnabled = appParameterBooleans[APP_PARAM_KEY_COLORED_ASSET_TREE] ?? true;
   const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -773,8 +793,33 @@ export function AssetsPage() {
 
   const assetTreeNodes = useMemo(() => buildFilteredAssetTreeNodes(filteredAssets), [filteredAssets]);
 
+  const assetTypeColorsForTree = appParameterAssetTypes ?? DEFAULT_ASSET_TYPE_DISPLAY_CONFIG;
+
+  const assetTreeTableStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!coloredAssetTreeEnabled) return undefined;
+    const siteBg = colorHexToRgba(assetTypeColorsForTree.site.colorHex, 0.2);
+    const structureBg = colorHexToRgba(assetTypeColorsForTree.structure.colorHex, 0.2);
+    const lineBg = colorHexToRgba(assetTypeColorsForTree.line.colorHex, 0.2);
+    const maintenanceObjectBg = colorHexToRgba(assetTypeColorsForTree.maintenanceObject.colorHex, 0.2);
+    return {
+      ["--app-assets-tree-row-bg-site" as string]: siteBg ?? "transparent",
+      ["--app-assets-tree-row-bg-structure" as string]: structureBg ?? "transparent",
+      ["--app-assets-tree-row-bg-line" as string]: lineBg ?? "transparent",
+      ["--app-assets-tree-row-bg-maintenanceObject" as string]: maintenanceObjectBg ?? "transparent",
+    };
+  }, [assetTypeColorsForTree, coloredAssetTreeEnabled]);
+
   /** Prime `selectionMode="single"`: `selectionKeys` must be the node key string or null — not `{ id: true }`. */
   const treeSelectionKey = selectedAsset?.id ?? null;
+
+  const treeRowClassName = useCallback(
+    (node: TreeNode) => {
+      if (!coloredAssetTreeEnabled || !node.data) return "";
+      const row = node.data as Asset;
+      return isAssetTypeValue(row.type) ? `app-assets-tree-row-colored-${row.type}` : "";
+    },
+    [coloredAssetTreeEnabled],
+  );
 
   const handleTreeSelectionChange = useCallback((e: TreeTableSelectionEvent) => {
     const val = e.value as string | Record<string, boolean> | null | undefined;
@@ -1664,10 +1709,12 @@ export function AssetsPage() {
             resizableColumns
             columnResizeMode="expand"
             scrollHeight="flex"
+            style={assetTreeTableStyle}
             tableStyle={{ minWidth: "118rem" }}
             stateStorage="local"
             stateKey="athene-assets-tree-table"
             emptyMessage={t("assets.empty")}
+            rowClassName={treeRowClassName}
           >
             <Column field="key" header={t("assets.key")} expander sortable className="min-w-28" />
             <Column field="name" header={t("assets.name")} sortable className="min-w-56" />

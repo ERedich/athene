@@ -6,6 +6,9 @@ import { pool } from "./db.js";
 /** Allgemein: freie Standortwahl bei Stammdaten (siteId). */
 export const APP_PARAM_KEY_ALLOW_SITE_CHANGE = "GN-ASC";
 
+/** Allgemein: Asset-Baumstruktur in Asset APP farbig nach Asset-Typ. */
+export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR";
+
 /** Allgemein: Anzeigenamen und Farben der Asset-Typen (JSON). */
 export const APP_PARAM_KEY_ASSET_TYPES = "GN-ATYP";
 
@@ -36,6 +39,10 @@ export type AppParameterRow = {
 };
 
 type DbQueryable = Pick<Pool, "query">;
+
+const DEFAULT_BOOLEAN_PARAMETERS: Record<string, boolean> = {
+  [APP_PARAM_KEY_COLORED_ASSET_TREE]: true,
+};
 
 /** Accepts #RGB / #RRGGBB or without #; returns normalized #rrggbb or null if invalid. */
 function parseColorHexStrict(raw: unknown): string | null {
@@ -104,7 +111,10 @@ export async function fetchAppParameterBooleans(client: DbQueryable): Promise<Re
   const { rows } = await client.query<{ key: string; boolValue: boolean }>(
     `SELECT "key", "boolValue" FROM "appParameter" WHERE "valueType" = 'boolean'`,
   );
-  return Object.fromEntries(rows.map((r) => [r.key, r.boolValue]));
+  return {
+    ...DEFAULT_BOOLEAN_PARAMETERS,
+    ...Object.fromEntries(rows.map((r) => [r.key, r.boolValue])),
+  };
 }
 
 export async function getAssetTypeDisplayConfig(client: DbQueryable): Promise<AssetTypeDisplayConfig | null> {

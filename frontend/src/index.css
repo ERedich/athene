@@ -1007,6 +1007,26 @@ html.theme-crossfade-fallback #root {
   background: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
 }
 
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-colored-site:not(.p-highlight) > td {
+  background: var(--app-assets-tree-row-bg-site, transparent);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-colored-structure:not(.p-highlight) > td {
+  background: var(--app-assets-tree-row-bg-structure, transparent);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-colored-line:not(.p-highlight) > td {
+  background: var(--app-assets-tree-row-bg-line, transparent);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-colored-maintenanceObject:not(.p-highlight) > td {
+  background: var(--app-assets-tree-row-bg-maintenanceObject, transparent);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr[class*="app-assets-tree-row-colored-"]:not(.p-highlight):hover > td {
+  filter: brightness(0.97);
+}
+
 .app-assets-treetable.p-treetable .p-treetable-thead > tr > th {
   white-space: nowrap;
   overflow: visible;
