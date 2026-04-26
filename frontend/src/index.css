@@ -1009,29 +1009,6 @@ html.theme-crossfade-fallback #root {
   text-overflow: clip;
 }
 
-/* Assets tree: expand — child rows ease in when inserted (Prime <tr aria-level>); roots stay static. */
-@keyframes app-assets-tree-row-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-0.35rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) {
-  animation: app-assets-tree-row-reveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-assets-treetable.p-treetable .p-treetable-tbody > tr {
-    animation: none !important;
-    transition: none !important;
-  }
-}
-
 .app-data-table .p-column-title {
   flex: 0 1 auto;
   font-size: inherit;
