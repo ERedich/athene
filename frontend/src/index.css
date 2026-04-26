@@ -1013,21 +1013,40 @@ html.theme-crossfade-fallback #root {
 @keyframes app-assets-tree-row-reveal {
   from {
     opacity: 0;
-    transform: translateY(-0.35rem);
+    transform: translateY(-0.5rem) scaleY(0.96);
+    transform-origin: top center;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scaleY(1);
+    transform-origin: top center;
   }
 }
 
 .app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) {
-  animation: app-assets-tree-row-reveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: app-assets-tree-row-reveal 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Assets tree: toggler — one chevron rotates with easing (see AssetsPage togglerTemplate). */
+.app-assets-treetable.p-treetable .app-assets-treetable-toggler .app-assets-treetable-toggler-chevron {
+  display: inline-block;
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: rotate(0deg);
+}
+
+.app-assets-treetable.p-treetable
+  .app-assets-treetable-toggler[aria-expanded="true"]
+  .app-assets-treetable-toggler-chevron {
+  transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-assets-treetable.p-treetable .p-treetable-tbody > tr {
     animation: none !important;
+    transition: none !important;
+  }
+
+  .app-assets-treetable.p-treetable .app-assets-treetable-toggler .app-assets-treetable-toggler-chevron {
     transition: none !important;
   }
 }

@@ -63,6 +63,8 @@
     "searchPlaceholder": "Search assets",
     "viewToggleToTree": "Show tree table",
     "viewToggleToTable": "Show table",
+    "treeExpandBranch": "Expand branch",
+    "treeCollapseBranch": "Collapse branch",
     "save": "Save",
     "cancel": "Cancel",
     "createTitle": "Create asset",
