@@ -378,6 +378,14 @@ html.theme-crossfade-fallback #root {
   color: inherit !important;
 }
 
+/* Keep "no documents" icon alignment like rows with a visible badge chip. */
+.app-ref-badge--placeholder.p-badge {
+  background: transparent !important;
+  color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled {
   background: transparent !important;
@@ -934,7 +942,17 @@ html.theme-crossfade-fallback #root {
   border-spacing: 0;
 }
 
-.app-data-table.p-treetable .p-treetable-wrapper {
+/* Scrollable TreeTable: header + body are split (Prime). Do not make the outer wrapper a vertical
+   scroller or the whole block (including the header) scrolls — use the inner scrollable body only,
+   like DataTable’s behavior. */
+.app-data-table.p-treetable .p-treetable-wrapper.p-treetable-scrollable-wrapper {
+  overflow: hidden;
+  max-width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.app-data-table.p-treetable .p-treetable-wrapper:not(.p-treetable-scrollable-wrapper) {
   overflow-x: auto;
   overflow-y: auto;
   max-width: 100%;
@@ -1012,6 +1030,48 @@ html.theme-crossfade-fallback #root {
 
 .app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):hover > td {
   background: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
+}
+
+/* Optional type colorization for assets tree rows (controlled via GN-CATR boolean). */
+.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-site:not(.p-highlight) > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-site) 20%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-structure:not(.p-highlight) > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-structure) 20%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-line:not(.p-highlight) > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-line) 20%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-maintenanceObject:not(.p-highlight)
+  > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-maintenance-object) 20%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-site:not(.p-highlight):hover > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-site) 26%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-structure:not(.p-highlight):hover
+  > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-structure) 26%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-line:not(.p-highlight):hover > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-line) 26%, transparent) !important;
+}
+
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-maintenanceObject:not(.p-highlight):hover
+  > td {
+  background: color-mix(in srgb, var(--app-asset-type-row-maintenance-object) 26%, transparent) !important;
 }
 
 .app-assets-treetable.p-treetable .p-treetable-thead > tr > th {

@@ -1,6 +1,6 @@
 # Athene CMMS
 
-Monorepo: `backend`, `frontend`, `mobile` (mobile scaffold — see `mobile/README.md`).
+Monorepo: `backend`, `frontend`, `mobile` (Expo + React Native Web — see [`mobile/README.md`](./mobile/README.md)).
 
 ## Dev
 
@@ -12,6 +12,7 @@ npm run dev
 ```
 
 - Root `npm run dev` runs backend + frontend together.
+- Mobile web: `npm run dev:mobile` (backend must run separately or use a second terminal with `npm run dev -w backend`).
 - DB migrations: `npm run migrate` (from root) after `DATABASE_URL` is set.
 
 See [Guidelines.md](./Guidelines.md).

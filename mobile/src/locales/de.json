@@ -1,0 +1,93 @@
+{
+  "login": {
+    "brand": "ATHENE",
+    "tagline": "Precision Architecture Interface",
+    "systemAccess": "System Access",
+    "operatorId": "Operator Identifier",
+    "password": "Security Cipher",
+    "remember": "Remember device",
+    "submit": "LOGIN",
+    "requestAccess": "Request Access",
+    "recovery": "Account Recovery",
+    "footerEnv": "Environment: Production",
+    "footerTls": "Connection: Encrypted TLS 1.3",
+    "secureCore": "SECURE_CORE",
+    "errorRequired": "Identifier and password are required.",
+    "errorInvalid": "Invalid identifier or password.",
+    "errorGeneric": "Sign-in failed. Please try again.",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "langToggle": "DE / EN"
+  },
+  "drawer": {
+    "navStart": "Start",
+    "navCostCenters": "Kostenstellen",
+    "navAssets": "Assets",
+    "hint": "Öffnen Sie das Menü (☰) oben links, um zwischen den Apps zu wechseln."
+  },
+  "home": {
+    "title": "Start",
+    "subtitle": "Willkommen",
+    "costCenters": "Kostenstellen",
+    "costCentersDesc": "Cost centers by site",
+    "assets": "Assets",
+    "assetsDesc": "Maintenance objects and hierarchy"
+  },
+  "shell": {
+    "signOut": "Sign out",
+    "search": "Search",
+    "themeToggleToDark": "Dunkles Design",
+    "themeToggleToLight": "Helles Design"
+  },
+  "costCenters": {
+    "title": "Kostenstellen",
+    "new": "New",
+    "edit": "Edit",
+    "key": "Key",
+    "name": "Name",
+    "site": "Site",
+    "active": "Active",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this cost center?",
+    "empty": "No cost centers.",
+    "loadError": "Failed to load.",
+    "saveError": "Save failed.",
+    "siteLocked": "Site is fixed for your account."
+  },
+  "assets": {
+    "title": "Assets",
+    "new": "New",
+    "edit": "Edit",
+    "key": "Key",
+    "name": "Name",
+    "site": "Site",
+    "type": "Type",
+    "parent": "Parent asset",
+    "parentNone": "None",
+    "serial": "Serial number",
+    "buildDate": "Build date (YYYY-MM-DD)",
+    "manufacturer": "Manufacturer",
+    "costCenter": "Cost center",
+    "costCenterNone": "None",
+    "remark": "Remark",
+    "remarkCount": "{{count}} / {{max}}",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this asset?",
+    "empty": "No assets.",
+    "loadError": "Failed to load.",
+    "saveError": "Save failed.",
+    "remarkTooLong": "Remark max 2000 characters.",
+    "invalidDate": "Invalid date format.",
+    "siteLocked": "Site is fixed for your account.",
+    "types": {
+      "site": "Site",
+      "structure": "Structure",
+      "line": "Line",
+      "maintenanceObject": "Maintenance object"
+    }
+  }
+}

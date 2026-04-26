@@ -28,14 +28,14 @@ import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE, APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS } from "../lib/appParameterKeys";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   type AssetDocumentCategory,
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
-import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+import { DEFAULT_ASSET_TYPE_DISPLAY_CONFIG, type AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
@@ -456,6 +456,7 @@ export function AssetsPage() {
   const { user, appParameterBooleans, appParameterAssetTypes } = useAuth();
   const langDe = i18n.language?.toLowerCase().startsWith("de");
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
+  const colorizeTreeRows = Boolean(appParameterBooleans[APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS]);
   const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -464,6 +465,8 @@ export function AssetsPage() {
   const [costCenters, setCostCenters] = useState<CostCenterListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  /** Until `assets` is loaded, Prime state restore may fire `onSelectionChange` with an id we cannot resolve yet. */
+  const [pendingTreeSelectionId, setPendingTreeSelectionId] = useState<string | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [activeTabIndex, setActiveTabIndex] = useState<AssetDialogTab>(assetDialogTabs.General);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -502,6 +505,16 @@ export function AssetsPage() {
     () => (supportsAssetsTableVirtualScroller() ? { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX } : undefined),
     [],
   );
+  const treeTypeColors = appParameterAssetTypes ?? DEFAULT_ASSET_TYPE_DISPLAY_CONFIG;
+  const treeTableStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!colorizeTreeRows) return undefined;
+    return {
+      ["--app-asset-type-row-site" as string]: treeTypeColors.site.colorHex,
+      ["--app-asset-type-row-structure" as string]: treeTypeColors.structure.colorHex,
+      ["--app-asset-type-row-line" as string]: treeTypeColors.line.colorHex,
+      ["--app-asset-type-row-maintenance-object" as string]: treeTypeColors.maintenanceObject.colorHex,
+    };
+  }, [colorizeTreeRows, treeTypeColors.line.colorHex, treeTypeColors.maintenanceObject.colorHex, treeTypeColors.site.colorHex, treeTypeColors.structure.colorHex]);
 
   const editingIdRef = useRef<string | null>(null);
   const formRef = useRef(form);
@@ -773,26 +786,55 @@ export function AssetsPage() {
 
   const assetTreeNodes = useMemo(() => buildFilteredAssetTreeNodes(filteredAssets), [filteredAssets]);
 
-  /** Prime `selectionMode="single"`: `selectionKeys` must be the node key string or null — not `{ id: true }`. */
-  const treeSelectionKey = selectedAsset?.id ?? null;
+  /** Prime `selectionMode="single"`: `selectionKeys` is the node key string or null — not `{ id: true }`. */
+  const treeSelectionKey = selectedAsset?.id ?? pendingTreeSelectionId ?? null;
 
   const handleTreeSelectionChange = useCallback((e: TreeTableSelectionEvent) => {
     const val = e.value as string | Record<string, boolean> | null | undefined;
     if (val == null) {
+      setPendingTreeSelectionId(null);
       setSelectedAsset(null);
       return;
     }
-    if (typeof val === "string") {
-      setSelectedAsset(assets.find((a) => a.id === val) ?? null);
-      return;
-    }
-    const id = Object.keys(val).find((k) => val[k] === true);
+    const id =
+      typeof val === "string"
+        ? val
+        : (Object.keys(val).find((k) => val[k] === true) ?? null);
     if (!id) {
+      setPendingTreeSelectionId(null);
       setSelectedAsset(null);
       return;
     }
-    setSelectedAsset(assets.find((a) => a.id === id) ?? null);
+    const row = assets.find((a) => a.id === id);
+    if (row) {
+      setPendingTreeSelectionId(null);
+      setSelectedAsset(row);
+      return;
+    }
+    if (assets.length === 0) {
+      setPendingTreeSelectionId(id);
+      return;
+    }
+    setPendingTreeSelectionId(null);
+    setSelectedAsset(null);
   }, [assets]);
+
+  useEffect(() => {
+    if (viewMode !== "tree") {
+      setPendingTreeSelectionId(null);
+      return;
+    }
+    if (!pendingTreeSelectionId || assets.length === 0) return;
+    const row = assets.find((a) => a.id === pendingTreeSelectionId);
+    setPendingTreeSelectionId(null);
+    setSelectedAsset(row ?? null);
+  }, [assets, pendingTreeSelectionId, viewMode]);
+
+  const treeRowClassName = useCallback((node: TreeNode): Record<string, boolean> => {
+    if (!colorizeTreeRows || !node.data) return {};
+    const row = node.data as Asset;
+    return { [`app-asset-row-type-${row.type}`]: true };
+  }, [colorizeTreeRows]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1498,13 +1540,17 @@ export function AssetsPage() {
 
   const referencesBody = (row: Asset) => {
     const hasDocuments = row.documentCount > 0;
+    const badgeValue = hasDocuments ? String(row.documentCount) : " ";
+    const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0 ${
+      hasDocuments ? "" : "app-ref-badge--placeholder"
+    }`;
     return (
       <div className="flex items-center">
         <Button
           type="button"
           icon="pi pi-file"
-          badge={row.documentCount > 1 ? String(row.documentCount) : undefined}
-          badgeClassName="!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0"
+          badge={badgeValue}
+          badgeClassName={badgeClassName}
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
             hasDocuments ? "app-ref-button--documents" : "app-ref-button--documents-inactive"
           }`}
@@ -1645,12 +1691,15 @@ export function AssetsPage() {
           </DataTable>
         ) : (
           <TreeTable
-            className="app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1"
+            className={`app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1 ${
+              colorizeTreeRows ? "app-assets-treetable--type-colored" : ""
+            }`}
             value={assetTreeNodes}
             loading={loading}
             selectionMode="single"
             selectionKeys={treeSelectionKey}
             onSelectionChange={handleTreeSelectionChange}
+            rowClassName={treeRowClassName}
             onRowClick={(e: TreeTableEvent) => {
               const oe = e.originalEvent as MouseEvent<HTMLElement>;
               if (oe.detail === 2) {
@@ -1659,12 +1708,14 @@ export function AssetsPage() {
               }
             }}
             metaKeySelection={false}
+            stripedRows
             showGridlines
             scrollable
             resizableColumns
             columnResizeMode="expand"
             scrollHeight="flex"
             tableStyle={{ minWidth: "118rem" }}
+            style={treeTableStyle}
             stateStorage="local"
             stateKey="athene-assets-tree-table"
             emptyMessage={t("assets.empty")}

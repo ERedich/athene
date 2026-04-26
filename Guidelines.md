@@ -162,7 +162,7 @@ Use these **background** colors for reference icon buttons (and matching border)
 
 - `backend/` — API, migrations (`backend/migrations/*.sql`), server-side logic; apply with root script `npm run migrate`
 - `frontend/` — web app (PrimeReact)
-- `mobile/` — React Native app (future focus)
+- `mobile/` — Expo + React Native Web client (`mobile/README.md`)
 
 ---
 

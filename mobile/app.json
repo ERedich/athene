@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Athene Mobile",
+    "slug": "athene-mobile",
+    "scheme": "athene-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

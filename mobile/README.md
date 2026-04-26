@@ -1,21 +1,64 @@
-# Athene Mobile (React Native)
+# Athene Mobile (Expo + React Native Web)
 
-Planned React Native client for field / CMMS workflows. Share API contracts and i18n keys with `frontend` / `backend`.
+Field client for **Kostenstellen** and **Assets** with the same backend session cookie as the web app (`HttpOnly` `athene.sid`). **Expo Web** is the primary target for now; native iOS/Android is possible later with extra auth work.
 
-## Next steps
+## Prerequisites
 
-- Initialize with React Native CLI or Expo (team choice).
-- Align auth with backend session/JWT once defined.
-- Reuse DE/EN strings (e.g. export JSON from `frontend/src/locales` or a future `packages/i18n` workspace).
+- Node 20+ (recommended)
+- Backend running on `http://localhost:3001` (see repo root `README.md`)
+- PostgreSQL + migrations applied
 
-## Scripts (placeholder)
+## Setup
 
-From repo root after a RN app exists:
+```bash
+# from repo root
+npm install
+
+cd mobile
+cp .env.example .env
+# default EXPO_PUBLIC_API_BASE_URL=http://localhost:3001 is fine for local dev
+```
+
+## Run (browser)
+
+Terminal 1 — API:
+
+```bash
+cd ..   # repo root
+npm run dev -w backend
+```
+
+Terminal 2 — Expo Web:
 
 ```bash
 cd mobile
-npm install
-npm run android   # or ios
+npm run web
 ```
 
-Until the native app is generated, use `npm run dev` at repo root for web + API only.
+Open the URL printed by Expo (typically `http://localhost:8081`). Sign in with a valid user; then use **Apps** → Kostenstellen or Assets.
+
+From repo root you can also run:
+
+```bash
+npm run dev:mobile
+```
+
+## API base URL
+
+- **Local:** `EXPO_PUBLIC_API_BASE_URL=http://localhost:3001` in `mobile/.env`
+- **Cross-origin:** Backend already uses `cors({ origin: true, credentials: true })`. Browser session cookies work for `localhost` → `localhost` (different ports, same site).
+
+## Design notes
+
+- **Login only:** visual tokens live in [`src/screens/login/loginDesign.ts`](src/screens/login/loginDesign.ts) (light + dark). Do not import that file from post-login screens.
+- **Post-login shell:** light/dark tokens in [`src/styles/appTheme.ts`](src/styles/appTheme.ts), toggled in the header (sun/moon) next to language; preference is persisted with AsyncStorage (`athene.appShellColorScheme`).
+
+## Phase 2 (not in v1)
+
+- **Asset documents:** upload, categories, content URLs (`/api/assets/:id/documents/...`).
+- **Asset tree** view (hierarchy table like web).
+- **Native apps without browser cookies:** add a token-based login (e.g. extend `/api/auth/login` to return a bearer token for mobile) — cookies do not apply the same way outside the web runtime.
+
+## Shared i18n (future)
+
+Strings are duplicated under `src/locales/` for now. A future `packages/i18n` workspace can merge keys with `frontend/src/locales`.
