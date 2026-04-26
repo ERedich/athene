@@ -11,6 +11,10 @@ export function DashboardPage() {
     __GIT_COMMIT_HASH__ && __GIT_COMMIT_HASH__ !== "unavailable"
       ? __GIT_COMMIT_HASH__
       : unavailableText;
+  const currentBranch =
+    __GIT_BRANCH__ && __GIT_BRANCH__ !== "unavailable"
+      ? __GIT_BRANCH__
+      : unavailableText;
   const commitTimestamp = (() => {
     if (!__GIT_COMMIT_TIMESTAMP__ || __GIT_COMMIT_TIMESTAMP__ === "unavailable") {
       return unavailableText;
@@ -41,6 +45,10 @@ export function DashboardPage() {
           <div className="flex items-center justify-between gap-4">
             <dt className="text-on-surface-variant">{t("dashboard.versionLabel")}</dt>
             <dd className="font-mono text-on-surface">{appVersion}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-on-surface-variant">{t("dashboard.branchLabel")}</dt>
+            <dd className="font-mono text-on-surface">{currentBranch}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
             <dt className="text-on-surface-variant">{t("dashboard.commitTimestampLabel")}</dt>

@@ -32,6 +32,7 @@
     "navDashboard": "Dashboard",
     "signOut": "Sign out",
     "buildInfoTitle": "Build information",
+    "branchLabel": "Branch",
     "recentCommitLabel": "Recent commit",
     "versionLabel": "Version",
     "commitTimestampLabel": "Commit timestamp",

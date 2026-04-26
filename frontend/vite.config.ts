@@ -22,6 +22,7 @@ const packageJson = JSON.parse(
 const appVersion = packageJson.version?.trim() || "unavailable";
 const latestCommitHash = runGitCommand("git rev-parse --short HEAD");
 const latestCommitTimestamp = runGitCommand("git log -1 --format=%cI");
+const currentBranch = runGitCommand("git rev-parse --abbrev-ref HEAD");
 
 export default defineConfig({
   plugins: [react()],
@@ -29,6 +30,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_COMMIT_HASH__: JSON.stringify(latestCommitHash),
     __GIT_COMMIT_TIMESTAMP__: JSON.stringify(latestCommitTimestamp),
+    __GIT_BRANCH__: JSON.stringify(currentBranch),
   },
   server: {
     port: 5173,
