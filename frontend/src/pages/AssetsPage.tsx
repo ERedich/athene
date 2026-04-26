@@ -8,6 +8,8 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type MouseEvent,
+  type ReactElement,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
@@ -21,9 +23,15 @@ import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
+import { Ripple } from "primereact/ripple";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
-import { TreeTable, type TreeTableEvent, type TreeTableSelectionEvent } from "primereact/treetable";
+import {
+  TreeTable,
+  type TreeTableEvent,
+  type TreeTableProps,
+  type TreeTableSelectionEvent,
+} from "primereact/treetable";
 import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
@@ -186,6 +194,41 @@ function buildFilteredAssetTreeNodes(assets: Asset[]): TreeNode[] {
   };
 
   return toNodes(null);
+}
+
+type AssetTreeTogglerTemplateOptions = Parameters<
+  Exclude<NonNullable<TreeTableProps["togglerTemplate"]>, ReactNode>
+>[1];
+
+/** Single chevron + CSS rotate so expand/collapse eases instead of swapping icons. */
+function assetTreeTogglerTemplate(
+  t: (key: string) => string,
+  node: TreeNode,
+  options: AssetTreeTogglerTemplateOptions,
+): ReactElement {
+  const { onClick, expanded, buttonStyle, containerClassName, iconClassName, element } = options;
+  const hasBranch = node.leaf === false || !!(node.children && node.children.length);
+  if (!hasBranch) {
+    /* Prime types `element` as DOM Element; runtime value is the default toggler React element. */
+    return element as unknown as ReactElement;
+  }
+  const label = expanded ? t("assets.treeCollapseBranch") : t("assets.treeExpandBranch");
+  return (
+    <button
+      type="button"
+      className={`${containerClassName} app-assets-treetable-toggler`}
+      style={buttonStyle}
+      onClick={onClick}
+      tabIndex={-1}
+      aria-label={label}
+      aria-expanded={expanded}
+    >
+      <span className={iconClassName} aria-hidden>
+        <i className="pi pi-chevron-right app-assets-treetable-toggler-chevron" />
+      </span>
+      <Ripple />
+    </button>
+  );
 }
 
 type CostCenterListRow = {
@@ -788,6 +831,11 @@ export function AssetsPage() {
     }
     setSelectedAsset(assets.find((a) => a.id === id) ?? null);
   }, [assets]);
+
+  const assetTreeTogglerTemplateFn = useCallback(
+    (node: TreeNode, options: AssetTreeTogglerTemplateOptions) => assetTreeTogglerTemplate(t, node, options),
+    [t],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1626,6 +1674,7 @@ export function AssetsPage() {
           <TreeTable
             className="app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1"
             value={assetTreeNodes}
+            togglerTemplate={assetTreeTogglerTemplateFn}
             loading={loading}
             selectionMode="single"
             selectionKeys={treeSelectionKey}

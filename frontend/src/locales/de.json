@@ -63,6 +63,8 @@
     "searchPlaceholder": "Assets suchen",
     "viewToggleToTree": "Baumtabelle anzeigen",
     "viewToggleToTable": "Tabelle anzeigen",
+    "treeExpandBranch": "Zweig ausklappen",
+    "treeCollapseBranch": "Zweig einklappen",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "createTitle": "Asset anlegen",
