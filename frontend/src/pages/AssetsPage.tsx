@@ -752,7 +752,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
   const [treeExpandedKeys, setTreeExpandedKeys] = useState<
     Record<string, boolean>
   >({});
-  const [treeAnimatedExpandingKeys, setTreeAnimatedExpandingKeys] = useState<
+  const [treeAnimatedCollapsingRows, setTreeAnimatedCollapsingRows] = useState<
     Record<string, boolean>
   >({});
   const [treeAnimatedEnteringRows, setTreeAnimatedEnteringRows] = useState<
@@ -762,6 +762,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
   const assetsGridHostRef = useRef<HTMLDivElement | null>(null);
   const treePendingCollapseKeysRef = useRef<Record<string, boolean>>({});
   const treeCollapseTimersRef = useRef(new Map<string, number>());
+  const treeCollapseRowsByParentRef = useRef(new Map<string, string[]>());
   const treeEnterTimersRef = useRef(new Map<string, number>());
   const treeMode = mode === "tree";
   const debouncedSearchTerm = useDebouncedValue(searchTermInput, 180);
@@ -878,15 +879,20 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     [clearTreeEnterTimer],
   );
 
+  const syncTreeAnimatedCollapsingRows = useCallback(() => {
+    const next: Record<string, boolean> = {};
+    for (const rowIds of treeCollapseRowsByParentRef.current.values()) {
+      for (const id of rowIds) next[id] = true;
+    }
+    setTreeAnimatedCollapsingRows(next);
+  }, []);
+
   const updateTreeExpansionWithAnimation = useCallback(
     (nextExpandedKeys: Record<string, boolean>) => {
       const activeNext: Record<string, boolean> = {};
       for (const [key, enabled] of Object.entries(nextExpandedKeys)) {
         if (enabled) activeNext[key] = true;
       }
-
-      setTreeExpandedKeys(activeNext);
-      setTreeAnimatedExpandingKeys(activeNext);
 
       const currentExpanded = new Set(
         Object.entries(treeExpandedKeys)
@@ -923,37 +929,48 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       }
 
       const pendingCollapse = treePendingCollapseKeysRef.current;
+      const collapseRowsByParent = treeCollapseRowsByParentRef.current;
+
       for (const key of Object.keys(pendingCollapse)) {
         if (!collapsedKeys.includes(key)) {
           delete pendingCollapse[key];
           clearTreeCollapseTimer(key);
+          collapseRowsByParent.delete(key);
         }
       }
 
       for (const key of collapsedKeys) {
+        const visibleDescendantIds = collectDescendantIds(
+          key,
+          assets,
+          currentExpanded,
+        );
+        if (visibleDescendantIds.length === 0) {
+          delete pendingCollapse[key];
+          clearTreeCollapseTimer(key);
+          collapseRowsByParent.delete(key);
+          continue;
+        }
         pendingCollapse[key] = true;
+        collapseRowsByParent.set(key, visibleDescendantIds);
         clearTreeCollapseTimer(key);
         const timer = window.setTimeout(() => {
           delete treePendingCollapseKeysRef.current[key];
           treeCollapseTimersRef.current.delete(key);
-          setTreeAnimatedExpandingKeys((current) => {
-            if (!(key in current)) return current;
-            const next = { ...current };
-            delete next[key];
-            return next;
-          });
+          treeCollapseRowsByParentRef.current.delete(key);
+          syncTreeAnimatedCollapsingRows();
         }, ASSETS_TREE_ROW_ANIMATION_MS);
         treeCollapseTimersRef.current.set(key, timer);
       }
 
-      if (collapsedKeys.length === 0) {
-        setTreeAnimatedExpandingKeys(activeNext);
-      }
+      syncTreeAnimatedCollapsingRows();
+      setTreeExpandedKeys(activeNext);
     },
     [
       assets,
       clearTreeCollapseTimer,
       scheduleTreeEnterAnimationRows,
+      syncTreeAnimatedCollapsingRows,
       treeExpandedKeys,
     ],
   );
@@ -1296,9 +1313,8 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     () => ({
       ...treeExpandedKeys,
       ...treePendingCollapseKeysRef.current,
-      ...treeAnimatedExpandingKeys,
     }),
-    [treeAnimatedExpandingKeys, treeExpandedKeys],
+    [treeAnimatedCollapsingRows, treeExpandedKeys],
   );
   const treeAnimatedExpandedKeySet = useMemo(
     () =>
@@ -1369,7 +1385,8 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       clearAllTreeCollapseTimers();
       clearAllTreeEnterTimers();
       treePendingCollapseKeysRef.current = {};
-      setTreeAnimatedExpandingKeys({});
+      treeCollapseRowsByParentRef.current.clear();
+      setTreeAnimatedCollapsingRows({});
       setTreeAnimatedEnteringRows({});
       setPendingTreeSelectionId(null);
       return;
@@ -1396,21 +1413,31 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       return next;
     });
 
-    setTreeAnimatedExpandingKeys((current) => {
-      const next: Record<string, boolean> = {};
-      for (const [k, v] of Object.entries(current)) {
-        if (v && existingIds.has(k)) next[k] = true;
-      }
-      return next;
-    });
-
     const pendingCollapse = treePendingCollapseKeysRef.current;
+    const collapseRowsByParent = treeCollapseRowsByParentRef.current;
     for (const key of Object.keys(pendingCollapse)) {
       if (!existingIds.has(key)) {
         delete pendingCollapse[key];
         clearTreeCollapseTimer(key);
+        collapseRowsByParent.delete(key);
       }
     }
+
+    for (const [parentId, rowIds] of collapseRowsByParent.entries()) {
+      if (!existingIds.has(parentId)) {
+        collapseRowsByParent.delete(parentId);
+        continue;
+      }
+      const filteredRowIds = rowIds.filter((id) => existingIds.has(id));
+      if (filteredRowIds.length === 0) {
+        collapseRowsByParent.delete(parentId);
+        continue;
+      }
+      if (filteredRowIds.length !== rowIds.length) {
+        collapseRowsByParent.set(parentId, filteredRowIds);
+      }
+    }
+    syncTreeAnimatedCollapsingRows();
 
     setTreeAnimatedEnteringRows((current) => {
       const next: Record<string, boolean> = {};
@@ -1419,13 +1446,14 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       }
       return next;
     });
-  }, [filteredAssets]);
+  }, [clearTreeCollapseTimer, filteredAssets, syncTreeAnimatedCollapsingRows]);
 
   useEffect(() => {
     return () => {
       clearAllTreeCollapseTimers();
       clearAllTreeEnterTimers();
       treePendingCollapseKeysRef.current = {};
+      treeCollapseRowsByParentRef.current.clear();
     };
   }, [clearAllTreeCollapseTimers, clearAllTreeEnterTimers]);
 
@@ -1437,10 +1465,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       if (colorizeTreeRows) {
         classes[`app-asset-row-type-${row.type}`] = true;
       }
-      if (treeAnimatedExpandingKeys[row.id]) {
-        classes["app-assets-tree-row-expanding"] = true;
-      }
-      if (treePendingCollapseKeysRef.current[row.id]) {
+      if (treeAnimatedCollapsingRows[row.id]) {
         classes["app-assets-tree-row-collapsing"] = true;
       }
       if (treeAnimatedEnteringRows[row.id]) {
@@ -1448,7 +1473,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       }
       return classes;
     },
-    [colorizeTreeRows, treeAnimatedEnteringRows, treeAnimatedExpandingKeys],
+    [colorizeTreeRows, treeAnimatedCollapsingRows, treeAnimatedEnteringRows],
   );
 
   useLayoutEffect(() => {
@@ -2482,7 +2507,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
               selectionKeys={treeSelectionKey}
               onSelectionChange={handleTreeSelectionChange}
               {...treeCtx.treeTableProps}
-              expandedKeys={treeExpandedKeys}
+              expandedKeys={treeMergedExpandedKeys}
               onToggle={handleTreeRowToggle}
               rowClassName={treeRowClassName}
               onRowClick={(e: TreeTableEvent) => {
