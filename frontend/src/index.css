@@ -95,7 +95,11 @@
 }
 
 .app-asset-type-icon--line {
-  color: color-mix(in srgb, var(--color-on-surface-variant) 50%, var(--color-primary) 50%);
+  color: color-mix(
+    in srgb,
+    var(--color-on-surface-variant) 50%,
+    var(--color-primary) 50%
+  );
 }
 
 .app-asset-type-icon--maintenanceObject {
@@ -218,8 +222,13 @@ html.theme-crossfade-fallback #root {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: color-mix(in srgb, var(--color-surface-container-low) 82%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-low) 82%,
+    transparent
+  );
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--color-on-surface) 10%, transparent);
 }
 
 [data-theme="light"] .app-chrome-bg::before {
@@ -227,16 +236,28 @@ html.theme-crossfade-fallback #root {
 }
 
 [data-theme="light"] .app-chrome-bg::after {
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 86%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 86%,
+    transparent
+  );
 }
 
 .orange-glow {
-  background: radial-gradient(circle, rgb(249 115 22 / 0.14) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgb(249 115 22 / 0.14) 0%,
+    transparent 70%
+  );
   filter: blur(80px);
 }
 
 [data-theme="light"] .orange-glow {
-  background: radial-gradient(circle, rgb(249 115 22 / 0.1) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgb(249 115 22 / 0.1) 0%,
+    transparent 70%
+  );
   filter: blur(72px);
 }
 
@@ -245,7 +266,11 @@ html.theme-crossfade-fallback #root {
   z-index: 1;
   /* Fallback if color-mix unsupported */
   background: rgba(26, 31, 38, 0.92);
-  background: color-mix(in srgb, var(--color-surface-container) 92%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container) 92%,
+    transparent
+  );
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(24px);
@@ -253,7 +278,11 @@ html.theme-crossfade-fallback #root {
 
 [data-theme="light"] .professional-panel {
   background: rgba(255, 255, 255, 0.94);
-  background: color-mix(in srgb, var(--color-surface-container) 92%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container) 92%,
+    transparent
+  );
   box-shadow: 0 24px 48px rgba(25, 28, 30, 0.06);
   border: 1px solid color-mix(in srgb, var(--color-tertiary) 12%, transparent);
 }
@@ -289,7 +318,11 @@ html.theme-crossfade-fallback #root {
 .p-inputtext,
 .p-password-input {
   width: 100%;
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 65%,
+    transparent
+  ) !important;
   border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
   color: var(--color-on-surface) !important;
   border-radius: 0.5rem !important;
@@ -298,7 +331,11 @@ html.theme-crossfade-fallback #root {
 
 .p-dropdown,
 .p-multiselect {
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 65%,
+    transparent
+  ) !important;
   border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
   border-radius: 0.5rem !important;
   color: var(--color-on-surface) !important;
@@ -316,7 +353,11 @@ html.theme-crossfade-fallback #root {
 [data-theme="light"] .p-dropdown,
 [data-theme="light"] .p-multiselect {
   background: var(--color-surface-container-low) !important;
-  border-color: color-mix(in srgb, var(--color-outline) 45%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-outline) 45%,
+    transparent
+  ) !important;
 }
 
 .p-inputtext:enabled:focus,
@@ -417,13 +458,23 @@ html.theme-crossfade-fallback #root {
   color: transparent !important;
 }
 
-[data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon,
-[data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled .p-button-icon {
+[data-theme="dark"]
+  .app-ref-button--employees-inactive.p-button.p-disabled
+  .p-button-icon,
+[data-theme="dark"]
+  .app-ref-button--employees-inactive.p-button:disabled
+  .p-button-icon {
   color: rgb(148 163 184) !important;
 }
 
-[data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon .pi,
-[data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled .p-button-icon .pi {
+[data-theme="dark"]
+  .app-ref-button--employees-inactive.p-button.p-disabled
+  .p-button-icon
+  .pi,
+[data-theme="dark"]
+  .app-ref-button--employees-inactive.p-button:disabled
+  .p-button-icon
+  .pi {
   color: inherit !important;
 }
 
@@ -464,42 +515,73 @@ html.theme-crossfade-fallback #root {
   color: transparent !important;
 }
 
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon,
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled .p-button-icon {
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button.p-disabled
+  .p-button-icon,
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button:disabled
+  .p-button-icon {
   color: rgb(125 211 252) !important;
 }
 
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button.p-disabled
+  .p-button-icon
+  .pi,
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button:disabled
+  .p-button-icon
+  .pi {
   color: inherit !important;
 }
 
 /* Work orders: status column — full cell background, plain text (no badge). */
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell {
   font-size: 0.8125rem;
   line-height: 1.2;
   font-weight: 600;
   vertical-align: middle;
 }
 
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-open {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-open {
   background: color-mix(in srgb, rgb(203 213 225) 30%, transparent) !important;
   color: rgb(15 23 42) !important;
 }
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-assigned {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-assigned {
   background: color-mix(in srgb, rgb(125 211 252) 30%, transparent) !important;
   color: rgb(15 23 42) !important;
 }
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-started {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-started {
   background: color-mix(in srgb, rgb(59 130 246) 30%, transparent) !important;
   color: rgb(30 64 175) !important;
 }
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-paused {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-paused {
   background: color-mix(in srgb, rgb(251 146 60) 30%, transparent) !important;
   color: rgb(15 23 42) !important;
 }
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-ended,
-.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-done {
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-ended,
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-done {
   background: color-mix(in srgb, rgb(74 222 128) 30%, transparent) !important;
   color: rgb(15 23 42) !important;
 }
@@ -579,7 +661,10 @@ html.theme-crossfade-fallback #root {
   padding: 0.6rem 1.1rem;
   border-radius: 6px;
   font-weight: 500;
-  transition: background-color 0.2s, color 0.2s, border-color 0.2s,
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    border-color 0.2s,
     box-shadow 0.2s;
 }
 
@@ -686,7 +771,11 @@ html.theme-crossfade-fallback #root {
 .p-checkbox .p-checkbox-box {
   border-width: 1px !important;
   border-style: solid !important;
-  border-color: color-mix(in srgb, var(--color-outline) 58%, var(--color-surface)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-outline) 58%,
+    var(--color-surface)
+  ) !important;
 }
 
 .p-checkbox.p-checkbox-checked .p-checkbox-box {
@@ -694,11 +783,16 @@ html.theme-crossfade-fallback #root {
 }
 
 .p-checkbox.p-disabled .p-checkbox-box {
-  border-color: color-mix(in srgb, var(--color-outline) 40%, var(--color-surface)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-outline) 40%,
+    var(--color-surface)
+  ) !important;
 }
 
 .p-dialog .p-dialog-header {
-  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-on-surface) 12%, transparent);
 }
 
 /* Subtle card border token used across dialogs/lists. Defined explicitly so
@@ -773,11 +867,13 @@ html.theme-crossfade-fallback #root {
 
 .app-sticky-tabs .p-tabview-nav {
   position: relative;
-  border-bottom: 2px solid color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
 }
 
 .app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
-  border-bottom: 2px solid color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
+  border-bottom: 2px solid
+    color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
   margin-bottom: -2px;
 }
 
@@ -794,7 +890,8 @@ html.theme-crossfade-fallback #root {
   width: var(--app-ink-w, 0);
   transform: translateX(var(--app-ink-x, 0));
   background: var(--color-primary);
-  transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+  transition:
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
     width 240ms cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
   z-index: 1;
@@ -812,7 +909,8 @@ html.theme-crossfade-fallback #root {
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
   background: var(--surface-overlay);
   overflow: hidden;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  box-shadow: 0 1px 3px
+    color-mix(in srgb, var(--color-on-surface) 8%, transparent);
 }
 
 .app-tabbed-page-shell .app-tabview-with-ink {
@@ -897,7 +995,11 @@ html.theme-crossfade-fallback #root {
 
 :root[data-theme="dark"] .app-atyp-dialog .app-atyp-type-card {
   border-color: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
-  background: color-mix(in srgb, var(--color-surface-container-low) 88%, var(--color-surface) 12%);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-low) 88%,
+    var(--color-surface) 12%
+  );
 }
 
 .app-atyp-dialog .app-atyp-color-swatch-wrap {
@@ -914,7 +1016,10 @@ html.theme-crossfade-fallback #root {
  * Globales .p-inputtext { background: … !important } würde sonst die Vorschau-Farbe
  * überschreiben (Prime setzt nur backgroundColor inline). Swatch-Farbe kommt von --atyp-swatch.
  */
-.app-atyp-dialog .app-atyp-color-swatch-wrap .app-atyp-colorpicker .p-colorpicker-preview.p-inputtext {
+.app-atyp-dialog
+  .app-atyp-color-swatch-wrap
+  .app-atyp-colorpicker
+  .p-colorpicker-preview.p-inputtext {
   width: 2rem;
   height: 2rem;
   min-width: 2rem;
@@ -938,7 +1043,11 @@ html.theme-crossfade-fallback #root {
   .app-atyp-color-swatch-wrap
   .app-atyp-colorpicker
   .p-colorpicker-preview.p-inputtext {
-  border-color: color-mix(in srgb, var(--color-on-surface) 26%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-on-surface) 26%,
+    transparent
+  ) !important;
 }
 
 .app-atyp-dialog
@@ -1048,7 +1157,11 @@ html.theme-crossfade-fallback #root {
 .app-data-table.p-datatable .p-datatable-thead > tr > th {
   border-width: 0 1px 1px 0 !important;
   border-style: solid !important;
-  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-on-surface) 12%,
+    transparent
+  ) !important;
 }
 
 .app-data-table .p-datatable-thead > tr > th:last-child,
@@ -1071,11 +1184,29 @@ html.theme-crossfade-fallback #root {
 }
 
 /* Title + sort/filter on one row (Prime @layer can lose to later CSS; TreeTable has no component flex rule). */
-.app-data-table.p-datatable .p-datatable-thead > tr > th .p-column-header-content,
+.app-data-table.p-datatable
+  .p-datatable-thead
+  > tr
+  > th
+  .p-column-header-content,
 .app-data-table.p-datatable thead > tr > th .p-column-header-content,
-.app-data-table.p-datatable .p-datatable-scrollable-table .p-datatable-thead > tr > th .p-column-header-content,
-.app-data-table.p-datatable .p-datatable-scrollable-table thead > tr > th .p-column-header-content,
-.app-data-table.p-treetable .p-treetable-thead > tr > th .p-column-header-content,
+.app-data-table.p-datatable
+  .p-datatable-scrollable-table
+  .p-datatable-thead
+  > tr
+  > th
+  .p-column-header-content,
+.app-data-table.p-datatable
+  .p-datatable-scrollable-table
+  thead
+  > tr
+  > th
+  .p-column-header-content,
+.app-data-table.p-treetable
+  .p-treetable-thead
+  > tr
+  > th
+  .p-column-header-content,
 .app-data-table.p-treetable thead > tr > th .p-column-header-content {
   display: inline-flex !important;
   flex-direction: row !important;
@@ -1093,7 +1224,11 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-data-table .p-datatable-tbody > tr.p-highlight {
-  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 18%,
+    transparent
+  ) !important;
   color: var(--color-on-surface) !important;
 }
 
@@ -1103,7 +1238,11 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-data-table .p-datatable-tbody > tr.p-highlight:hover {
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 24%,
+    transparent
+  ) !important;
 }
 
 /* TreeTable: match DataTable chrome when using shared app-data-table class */
@@ -1121,7 +1260,8 @@ html.theme-crossfade-fallback #root {
 /* Scrollable TreeTable: header + body are split (Prime). Do not make the outer wrapper a vertical
    scroller or the whole block (including the header) scrolls — use the inner scrollable body only,
    like DataTable’s behavior. */
-.app-data-table.p-treetable .p-treetable-wrapper.p-treetable-scrollable-wrapper {
+.app-data-table.p-treetable
+  .p-treetable-wrapper.p-treetable-scrollable-wrapper {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: 100%;
@@ -1136,7 +1276,8 @@ html.theme-crossfade-fallback #root {
   min-height: 0;
 }
 
-.app-data-table.p-treetable .p-treetable-wrapper:not(.p-treetable-scrollable-wrapper) {
+.app-data-table.p-treetable
+  .p-treetable-wrapper:not(.p-treetable-scrollable-wrapper) {
   overflow-x: auto;
   overflow-y: auto;
   max-width: 100%;
@@ -1153,7 +1294,11 @@ html.theme-crossfade-fallback #root {
 .app-data-table.p-treetable .p-treetable-thead > tr > th {
   border-width: 0 1px 1px 0 !important;
   border-style: solid !important;
-  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-on-surface) 12%,
+    transparent
+  ) !important;
 }
 
 .app-data-table.p-treetable .p-treetable-thead > tr > th:last-child,
@@ -1166,7 +1311,11 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight {
-  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 18%,
+    transparent
+  ) !important;
   color: var(--color-on-surface) !important;
 }
 
@@ -1176,14 +1325,34 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight:hover {
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 24%,
+    transparent
+  ) !important;
 }
 
 /* Global table density: compact mode (all DataTable / TreeTable with app-data-table). */
-:root[data-table-density="compact"] .app-data-table.p-datatable .p-datatable-thead > tr > th,
-:root[data-table-density="compact"] .app-data-table.p-datatable .p-datatable-tbody > tr > td,
-:root[data-table-density="compact"] .app-data-table.p-treetable .p-treetable-thead > tr > th,
-:root[data-table-density="compact"] .app-data-table.p-treetable .p-treetable-tbody > tr > td {
+:root[data-table-density="compact"]
+  .app-data-table.p-datatable
+  .p-datatable-thead
+  > tr
+  > th,
+:root[data-table-density="compact"]
+  .app-data-table.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td,
+:root[data-table-density="compact"]
+  .app-data-table.p-treetable
+  .p-treetable-thead
+  > tr
+  > th,
+:root[data-table-density="compact"]
+  .app-data-table.p-treetable
+  .p-treetable-tbody
+  > tr
+  > td {
   padding: 0.25rem 0.375rem;
   line-height: 1.2;
   font-size: 0.8125rem;
@@ -1204,58 +1373,114 @@ html.theme-crossfade-fallback #root {
 }
 
 /* Asset tree view: zebra striping based on currently visible rows (after expand/collapse). */
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):nth-child(even) > td {
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
+  > tr:not(.p-highlight):nth-child(even)
+  > td {
   background: color-mix(in srgb, var(--color-on-surface) 4%, transparent);
 }
 
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):nth-child(odd) > td {
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
+  > tr:not(.p-highlight):nth-child(odd)
+  > td {
   background: transparent;
 }
 
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr:not(.p-highlight):hover > td {
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
+  > tr:not(.p-highlight):hover
+  > td {
   background: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
 }
 
 /* Optional type colorization for assets tree rows (controlled via GN-CATR boolean). */
-.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-site:not(.p-highlight) > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-site) 20%, transparent) !important;
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-site:not(.p-highlight)
+  > td {
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-site) 20%,
+    transparent
+  ) !important;
 }
 
-.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-structure:not(.p-highlight) > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-structure) 20%, transparent) !important;
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-structure:not(.p-highlight)
+  > td {
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-structure) 20%,
+    transparent
+  ) !important;
 }
 
-.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-line:not(.p-highlight) > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-line) 20%, transparent) !important;
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-line:not(.p-highlight)
+  > td {
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-line) 20%,
+    transparent
+  ) !important;
 }
 
 .app-assets-treetable--type-colored.p-treetable
   .p-treetable-tbody
   > tr.app-asset-row-type-maintenanceObject:not(.p-highlight)
   > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-maintenance-object) 20%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-maintenance-object) 20%,
+    transparent
+  ) !important;
 }
 
-.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-site:not(.p-highlight):hover > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-site) 26%, transparent) !important;
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-site:not(.p-highlight):hover
+  > td {
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-site) 26%,
+    transparent
+  ) !important;
 }
 
 .app-assets-treetable--type-colored.p-treetable
   .p-treetable-tbody
   > tr.app-asset-row-type-structure:not(.p-highlight):hover
   > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-structure) 26%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-structure) 26%,
+    transparent
+  ) !important;
 }
 
-.app-assets-treetable--type-colored.p-treetable .p-treetable-tbody > tr.app-asset-row-type-line:not(.p-highlight):hover > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-line) 26%, transparent) !important;
+.app-assets-treetable--type-colored.p-treetable
+  .p-treetable-tbody
+  > tr.app-asset-row-type-line:not(.p-highlight):hover
+  > td {
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-line) 26%,
+    transparent
+  ) !important;
 }
 
 .app-assets-treetable--type-colored.p-treetable
   .p-treetable-tbody
   > tr.app-asset-row-type-maintenanceObject:not(.p-highlight):hover
   > td {
-  background: color-mix(in srgb, var(--app-asset-type-row-maintenance-object) 26%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--app-asset-type-row-maintenance-object) 26%,
+    transparent
+  ) !important;
 }
 
 .app-assets-treetable.p-treetable .p-treetable-thead > tr > th {
@@ -1279,31 +1504,74 @@ html.theme-crossfade-fallback #root {
   text-overflow: clip;
 }
 
-/* Assets tree: child rows ease in when inserted (Prime <tr aria-level>); roots stay static.
-   Avoid transform on table rows: Firefox omits cell borders for transformed <tr>.
-   Fade on <td> only (opacity) — transform on table cells can still glitch borders in some engines. */
-@keyframes app-assets-tree-td-reveal {
+/* Assets tree animation:
+   - animate only cell backgrounds/contents (not table geometry) to preserve borders/gridlines
+   - explicit collapsing class keeps visual continuity when children are removed from DOM
+   - transitions are scoped to the tree table to avoid side effects in other tables */
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
+  transition:
+    background-color 1000ms cubic-bezier(0.25, 0.9, 0.35, 1),
+    color 180ms ease;
+}
+
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
+  > tr.app-assets-tree-row-entering
+  > td {
+  animation: app-assets-tree-row-enter 1000ms cubic-bezier(0.22, 0.95, 0.32, 1);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
+  > tr.app-assets-tree-row-collapsing
+  > td {
+  animation: app-assets-tree-row-collapse 1000ms
+    cubic-bezier(0.25, 0.9, 0.35, 1);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+@keyframes app-assets-tree-row-enter {
   from {
     opacity: 0;
+    transform: translateY(-14px) scaleY(0.92);
   }
   to {
     opacity: 1;
+    transform: translateY(0) scaleY(1);
   }
 }
 
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr[aria-level]:not([aria-level="1"]) > td {
-  animation: app-assets-tree-td-reveal 0.28s cubic-bezier(0.25, 0.9, 0.35, 1) both;
+@keyframes app-assets-tree-row-collapse {
+  from {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+  to {
+    opacity: 0.08;
+    transform: translateY(-14px) scaleY(0.92);
+  }
 }
 
 /* Row toggler: small snap when switching chevron (Prime swaps icons; keep interaction snappy). */
 .app-assets-treetable.p-treetable .p-treetable-toggler {
-  transition: color 0.15s ease, background-color 0.15s ease, opacity 0.18s ease;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    opacity 0.18s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
     animation: none !important;
     transition: none !important;
+  }
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
   }
 }
 .app-data-table .p-column-title {
@@ -1356,7 +1624,11 @@ html.theme-crossfade-fallback #root {
   min-height: 2.5rem;
   border-radius: 0.375rem;
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 72%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 72%,
+    transparent
+  );
 }
 
 .p-paginator .p-paginator-rpp-options .p-dropdown-label,
@@ -1370,7 +1642,8 @@ html.theme-crossfade-fallback #root {
 .p-paginator .p-paginator-rpp-options .p-dropdown-trigger,
 .p-paginator .p-paginator-rpp-dropdown .p-dropdown-trigger {
   width: 2.5rem;
-  border-left: 1px solid color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+  border-left: 1px solid
+    color-mix(in srgb, var(--color-on-surface) 14%, transparent);
   background: transparent;
 }
 
@@ -1401,7 +1674,11 @@ html.theme-crossfade-fallback #root {
   align-items: center;
   justify-content: center;
   pointer-events: all;
-  background: color-mix(in srgb, var(--color-surface-container) 24%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container) 24%,
+    transparent
+  );
   backdrop-filter: blur(10px);
 }
 
@@ -1413,8 +1690,13 @@ html.theme-crossfade-fallback #root {
   height: 3rem;
   border-radius: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 24%, transparent);
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 84%, transparent);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-on-surface) 16%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 84%,
+    transparent
+  );
+  box-shadow: 0 8px 24px
+    color-mix(in srgb, var(--color-on-surface) 16%, transparent);
 }
 
 .theme-swap-overlay__spinner {
@@ -1450,4 +1732,3 @@ html.theme-crossfade-fallback #root {
 .app-table-context-menu .p-menuitem-separator {
   margin: 0.125rem 0.25rem;
 }
-
