@@ -1510,17 +1510,17 @@ html.theme-crossfade-fallback #root {
    - transitions are scoped to the tree table to avoid side effects in other tables */
 .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
   transition:
-    background-color 220ms cubic-bezier(0.25, 0.9, 0.35, 1),
+    background-color 1000ms cubic-bezier(0.25, 0.9, 0.35, 1),
     color 180ms ease,
-    opacity 220ms cubic-bezier(0.25, 0.9, 0.35, 1),
-    filter 220ms cubic-bezier(0.25, 0.9, 0.35, 1);
+    opacity 1000ms cubic-bezier(0.25, 0.9, 0.35, 1),
+    filter 1000ms cubic-bezier(0.25, 0.9, 0.35, 1);
 }
 
 .app-assets-treetable.p-treetable
   .p-treetable-tbody
   > tr.app-assets-tree-row-expanding
   > td {
-  animation: app-assets-tree-row-expand 240ms cubic-bezier(0.25, 0.9, 0.35, 1)
+  animation: app-assets-tree-row-expand 1000ms cubic-bezier(0.25, 0.9, 0.35, 1)
     both;
 }
 
@@ -1528,7 +1528,7 @@ html.theme-crossfade-fallback #root {
   .p-treetable-tbody
   > tr.app-assets-tree-row-entering
   > td {
-  animation: app-assets-tree-row-enter 240ms cubic-bezier(0.22, 0.95, 0.32, 1)
+  animation: app-assets-tree-row-enter 1000ms cubic-bezier(0.22, 0.95, 0.32, 1)
     both;
 }
 
@@ -1536,8 +1536,8 @@ html.theme-crossfade-fallback #root {
   .p-treetable-tbody
   > tr.app-assets-tree-row-collapsing
   > td {
-  animation: app-assets-tree-row-collapse 240ms cubic-bezier(0.25, 0.9, 0.35, 1)
-    both;
+  animation: app-assets-tree-row-collapse 1000ms
+    cubic-bezier(0.25, 0.9, 0.35, 1) both;
 }
 
 @keyframes app-assets-tree-row-expand {
@@ -1597,7 +1597,7 @@ html.theme-crossfade-fallback #root {
   > tr.app-assets-tree-row-expanding
   > td
   > *:not(.p-column-resizer) {
-  animation: app-assets-tree-content-expand 240ms
+  animation: app-assets-tree-content-expand 1000ms
     cubic-bezier(0.25, 0.9, 0.35, 1) both;
 }
 
@@ -1606,7 +1606,7 @@ html.theme-crossfade-fallback #root {
   > tr.app-assets-tree-row-entering
   > td
   > *:not(.p-column-resizer) {
-  animation: app-assets-tree-content-enter 240ms
+  animation: app-assets-tree-content-enter 1000ms
     cubic-bezier(0.22, 0.95, 0.32, 1) both;
 }
 
@@ -1615,7 +1615,7 @@ html.theme-crossfade-fallback #root {
   > tr.app-assets-tree-row-collapsing
   > td
   > *:not(.p-column-resizer) {
-  animation: app-assets-tree-content-collapse 240ms
+  animation: app-assets-tree-content-collapse 1000ms
     cubic-bezier(0.25, 0.9, 0.35, 1) both;
 }
 

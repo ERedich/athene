@@ -163,7 +163,7 @@ type Asset = {
 
 const ASSETS_TREE_TABLE_STATE_STORAGE_KEY = "athene-assets-tree-table";
 const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
-const ASSETS_TREE_ROW_ANIMATION_MS = 240;
+const ASSETS_TREE_ROW_ANIMATION_MS = 1000;
 
 /**
  * PrimeReact TreeTable._restoreState has a bug: when a persisted state contains
