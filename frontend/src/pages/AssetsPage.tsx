@@ -198,7 +198,15 @@ function writeAssetsTreeTableState(state: object): void {
 }
 
 function supportsAssetsTableVirtualScroller(): boolean {
-  return typeof window !== "undefined";
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  const firefox = /firefox\//i.test(ua) || /fxios/i.test(ua);
+  const chromium =
+    /chrome\//i.test(ua) ||
+    /crios/i.test(ua) ||
+    /edg\//i.test(ua) ||
+    /opr\//i.test(ua);
+  return !firefox && !chromium;
 }
 
 /**
