@@ -1028,6 +1028,36 @@ html.theme-crossfade-fallback #root {
   text-overflow: clip;
 }
 
+/* Assets tree expand/collapse motion:
+   - FLIP on existing rows (transform applied inline from JS)
+   - enter animation for rows that become visible after expand
+   Keep animation on row/cell paint props only (transform/opacity) so borders/layout stay intact. */
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row {
+  will-change: transform;
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-enter > td {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-enter-active > td {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 190ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-enter > td,
+  .app-assets-treetable.p-treetable .p-treetable-tbody > tr.app-assets-tree-row-enter-active > td {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
 .app-data-table .p-column-title {
   flex: 0 1 auto;
   font-size: inherit;

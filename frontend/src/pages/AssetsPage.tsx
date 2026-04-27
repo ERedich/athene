@@ -23,7 +23,13 @@ import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
-import { TreeTable, type TreeTableEvent, type TreeTableSelectionEvent } from "primereact/treetable";
+import {
+  TreeTable,
+  type TreeTableEvent,
+  type TreeTableExpandedKeysType,
+  type TreeTableSelectionEvent,
+  type TreeTableToggleEvent,
+} from "primereact/treetable";
 import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
@@ -136,6 +142,14 @@ type Asset = {
 
 const ASSETS_VIEW_MODE_STORAGE_KEY = "athene-assets-view-mode";
 const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
+const ASSETS_TREE_TOGGLE_MOVE_DURATION_MS = 220;
+const ASSETS_TREE_TOGGLE_ENTER_DURATION_MS = 190;
+const ASSETS_TREE_ROW_KEY_CLASS_PREFIX = "app-assets-tree-row-key--";
+
+type PendingTreeToggleAnimation = {
+  beforeRowTopsByKey: Map<string, number>;
+  afterVisibleKeys: string[];
+};
 
 /**
  * VirtualScroller + scrollHeight="flex" is unstable on some engines (Chrome/Firefox):
@@ -157,6 +171,57 @@ function readStoredAssetsViewMode(): "table" | "tree" {
     /* ignore */
   }
   return "table";
+}
+
+function flattenVisibleTreeNodeKeys(
+  nodes: TreeNode[],
+  expandedKeys: TreeTableExpandedKeysType,
+  pathPrefix = "root",
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    const nodeKey = node.key != null ? String(node.key) : `${pathPrefix}:${i}`;
+    out.push(nodeKey);
+    if (node.children && node.children.length > 0 && expandedKeys[nodeKey]) {
+      out.push(...flattenVisibleTreeNodeKeys(node.children, expandedKeys, nodeKey));
+    }
+  }
+  return out;
+}
+
+function areTreeExpandedKeysEqual(a: TreeTableExpandedKeysType, b: TreeTableExpandedKeysType): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+function normalizeTreeExpandedKeys(
+  incoming: Pick<TreeTableToggleEvent, "value"> | { value?: unknown; data?: unknown } | unknown,
+): TreeTableExpandedKeysType {
+  if (!incoming || typeof incoming !== "object") return {};
+  const source = incoming as { value?: unknown; data?: unknown };
+  const raw = source.value ?? source.data;
+  if (!raw || typeof raw !== "object") return {};
+  const normalized: TreeTableExpandedKeysType = {};
+  for (const [key, isExpanded] of Object.entries(raw as Record<string, unknown>)) {
+    if (Boolean(isExpanded)) normalized[key] = true;
+  }
+  return normalized;
+}
+
+function reduceMotionPreferred(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function treeRowKeyClassName(rowKey: string): string {
+  const safeKey = (rowKey || "missing").replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${ASSETS_TREE_ROW_KEY_CLASS_PREFIX}${safeKey}`;
 }
 
 /** Build tree roots from filtered rows; parents outside the set become implicit roots. */
@@ -484,6 +549,7 @@ export function AssetsPage() {
   const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
   const [viewMode, setViewModeState] = useState<"table" | "tree">(readStoredAssetsViewMode);
+  const [treeExpandedKeys, setTreeExpandedKeys] = useState<TreeTableExpandedKeysType>({});
 
   const setViewMode = useCallback((mode: "table" | "tree") => {
     setViewModeState(mode);
@@ -509,6 +575,10 @@ export function AssetsPage() {
   const pendingAutoTimersRef = useRef(new Map<string, number>());
   const assetCreateLockRef = useRef<Promise<string | null> | null>(null);
   const runAutoUploadForPendingRef = useRef<(doc: PendingDocumentUpload) => Promise<void>>(async () => {});
+  const treeTableHostRef = useRef<HTMLDivElement | null>(null);
+  const pendingTreeToggleAnimationRef = useRef<PendingTreeToggleAnimation | null>(null);
+  const treeAnimationFrameRef = useRef<number | null>(null);
+  const treeAnimationCleanupTimerRef = useRef<number | null>(null);
 
   const clearPendingAutoTimer = useCallback((localId: string) => {
     const existing = pendingAutoTimersRef.current.get(localId);
@@ -772,6 +842,71 @@ export function AssetsPage() {
   }, [assets, searchTerm]);
 
   const assetTreeNodes = useMemo(() => buildFilteredAssetTreeNodes(filteredAssets), [filteredAssets]);
+  const treeVisibleNodeKeys = useMemo(
+    () => flattenVisibleTreeNodeKeys(assetTreeNodes, treeExpandedKeys),
+    [assetTreeNodes, treeExpandedKeys],
+  );
+
+  const cleanupTreeRowAnimations = useCallback(() => {
+    if (treeAnimationFrameRef.current != null) {
+      window.cancelAnimationFrame(treeAnimationFrameRef.current);
+      treeAnimationFrameRef.current = null;
+    }
+    if (treeAnimationCleanupTimerRef.current != null) {
+      window.clearTimeout(treeAnimationCleanupTimerRef.current);
+      treeAnimationCleanupTimerRef.current = null;
+    }
+
+    const tbody = treeTableHostRef.current?.querySelector<HTMLTableSectionElement>(".p-treetable-tbody");
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll<HTMLTableRowElement>("tr.app-assets-tree-row");
+    rows.forEach((row) => {
+      row.style.transition = "";
+      row.style.transform = "";
+      row.style.willChange = "";
+      row.style.zIndex = "";
+      row.classList.remove("app-assets-tree-row-enter", "app-assets-tree-row-enter-active");
+    });
+  }, []);
+
+  const handleTreeToggle = useCallback((event: TreeTableToggleEvent) => {
+    const nextExpandedKeys = normalizeTreeExpandedKeys(event);
+    if (areTreeExpandedKeysEqual(treeExpandedKeys, nextExpandedKeys)) return;
+
+    if (viewMode !== "tree" || reduceMotionPreferred()) {
+      pendingTreeToggleAnimationRef.current = null;
+      setTreeExpandedKeys(nextExpandedKeys);
+      return;
+    }
+
+    const tbody = treeTableHostRef.current?.querySelector<HTMLTableSectionElement>(".p-treetable-tbody");
+    if (!tbody) {
+      pendingTreeToggleAnimationRef.current = null;
+      setTreeExpandedKeys(nextExpandedKeys);
+      return;
+    }
+
+    cleanupTreeRowAnimations();
+    const beforeRowTopsByKey = new Map<string, number>();
+    for (const key of treeVisibleNodeKeys) {
+      const row = tbody.querySelector<HTMLTableRowElement>(`tr.${treeRowKeyClassName(key)}`);
+      if (row) beforeRowTopsByKey.set(key, row.getBoundingClientRect().top);
+    }
+
+    pendingTreeToggleAnimationRef.current = {
+      beforeRowTopsByKey,
+      afterVisibleKeys: flattenVisibleTreeNodeKeys(assetTreeNodes, nextExpandedKeys),
+    };
+    setTreeExpandedKeys(nextExpandedKeys);
+  }, [assetTreeNodes, cleanupTreeRowAnimations, treeExpandedKeys, treeVisibleNodeKeys, viewMode]);
+
+  const treeRowClassName = useCallback((node: TreeNode) => {
+    const key = node.key != null ? String(node.key) : "";
+    return {
+      "app-assets-tree-row": true,
+      [treeRowKeyClassName(key)]: true,
+    };
+  }, []);
 
   /** Prime `selectionMode="single"`: `selectionKeys` must be the node key string or null — not `{ id: true }`. */
   const treeSelectionKey = selectedAsset?.id ?? null;
@@ -793,6 +928,72 @@ export function AssetsPage() {
     }
     setSelectedAsset(assets.find((a) => a.id === id) ?? null);
   }, [assets]);
+
+  useLayoutEffect(() => {
+    if (viewMode !== "tree") {
+      pendingTreeToggleAnimationRef.current = null;
+      cleanupTreeRowAnimations();
+      return;
+    }
+    if (reduceMotionPreferred()) {
+      pendingTreeToggleAnimationRef.current = null;
+      cleanupTreeRowAnimations();
+      return;
+    }
+
+    const pending = pendingTreeToggleAnimationRef.current;
+    if (!pending) return;
+    pendingTreeToggleAnimationRef.current = null;
+
+    const tbody = treeTableHostRef.current?.querySelector<HTMLTableSectionElement>(".p-treetable-tbody");
+    if (!tbody) return;
+
+    const movedRows: HTMLTableRowElement[] = [];
+    const enteredRows: HTMLTableRowElement[] = [];
+
+    for (const key of pending.afterVisibleKeys) {
+      const row = tbody.querySelector<HTMLTableRowElement>(`tr.${treeRowKeyClassName(key)}`);
+      if (!row) continue;
+
+      const beforeTop = pending.beforeRowTopsByKey.get(key);
+      if (beforeTop == null) {
+        row.classList.add("app-assets-tree-row-enter");
+        enteredRows.push(row);
+        continue;
+      }
+
+      const afterTop = row.getBoundingClientRect().top;
+      const delta = beforeTop - afterTop;
+      if (Math.abs(delta) < 0.5) continue;
+
+      row.style.transition = "none";
+      row.style.transform = `translateY(${delta}px)`;
+      row.style.willChange = "transform";
+      row.style.zIndex = "1";
+      movedRows.push(row);
+    }
+
+    if (movedRows.length === 0 && enteredRows.length === 0) return;
+    void tbody.getBoundingClientRect();
+
+    treeAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      treeAnimationFrameRef.current = null;
+      for (const row of movedRows) {
+        row.style.transition = `transform ${ASSETS_TREE_TOGGLE_MOVE_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+        row.style.transform = "translateY(0)";
+      }
+      for (const row of enteredRows) {
+        row.classList.add("app-assets-tree-row-enter-active");
+      }
+    });
+
+    treeAnimationCleanupTimerRef.current = window.setTimeout(
+      cleanupTreeRowAnimations,
+      Math.max(ASSETS_TREE_TOGGLE_MOVE_DURATION_MS, ASSETS_TREE_TOGGLE_ENTER_DURATION_MS) + 80,
+    );
+  }, [cleanupTreeRowAnimations, treeExpandedKeys, viewMode]);
+
+  useEffect(() => () => cleanupTreeRowAnimations(), [cleanupTreeRowAnimations]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1644,130 +1845,135 @@ export function AssetsPage() {
             />
           </DataTable>
         ) : (
-          <TreeTable
-            className="app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1"
-            value={assetTreeNodes}
-            loading={loading}
-            selectionMode="single"
-            selectionKeys={treeSelectionKey}
-            onSelectionChange={handleTreeSelectionChange}
-            onRowClick={(e: TreeTableEvent) => {
-              const oe = e.originalEvent as MouseEvent<HTMLElement>;
-              if (oe.detail === 2) {
-                const row = e.node?.data as Asset | undefined;
-                if (row) openEdit(row);
-              }
-            }}
-            metaKeySelection={false}
-            showGridlines
-            scrollable
-            resizableColumns
-            columnResizeMode="expand"
-            scrollHeight="flex"
-            tableStyle={{ minWidth: "118rem" }}
-            stateStorage="local"
-            stateKey="athene-assets-tree-table"
-            emptyMessage={t("assets.empty")}
-          >
-            <Column field="key" header={t("assets.key")} expander sortable className="min-w-28" />
-            <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
-            <Column
-              field="type"
-              header={t("assets.type")}
-              sortable
-              className="min-w-36"
-              body={(node: TreeNode) => (node.data ? typeColumnBody(node.data as Asset) : null)}
-            />
-            <Column
-              field="siteName"
-              header={t("assets.site")}
-              sortable
-              className="min-w-44"
-              body={(node: TreeNode) => (node.data ? siteColumnBody(node.data as Asset) : null)}
-            />
-            <Column
-              field="costCenterName"
-              header={t("assets.costCenter")}
-              sortable
-              body={(node: TreeNode) => (node.data ? costCenterBody(node.data as Asset) : null)}
-              className="min-w-48"
-            />
-            <Column
-              field="parentAssetName"
-              sortField="parentAssetName"
-              header={t("assets.parentAsset")}
-              body={(node: TreeNode) => (node.data ? parentBody(node.data as Asset) : null)}
-              sortable
-              className="min-w-72"
-            />
-            <Column
-              field="serialNumber"
-              header={t("assets.serialNumber")}
-              sortable
-              className="min-w-40"
-              body={(node: TreeNode) =>
-                node.data ? nullableTextBody((node.data as Asset).serialNumber) : null
-              }
-            />
-            <Column
-              field="buildDate"
-              header={t("assets.buildDate")}
-              sortable
-              className="min-w-28"
-              body={(node: TreeNode) =>
-                node.data ? dateOnlyBody((node.data as Asset).buildDate) : null
-              }
-            />
-            <Column
-              field="manufacturer"
-              header={t("assets.manufacturer")}
-              sortable
-              body={(node: TreeNode) =>
-                node.data ? nullableTextBody((node.data as Asset).manufacturer) : null
-              }
-              className="min-w-56"
-            />
-            <Column
-              field="documentCount"
-              header={t("assets.references")}
-              body={(node: TreeNode) => (node.data ? referencesBody(node.data as Asset) : null)}
-              sortable
-              className="min-w-32"
-              bodyClassName="app-assets-treetable-ref-cell"
-            />
-            <Column
-              field="createdAt"
-              header={t("assets.createdAt")}
-              body={(node: TreeNode) =>
-                node.data ? formatShortDt((node.data as Asset).createdAt) : null
-              }
-              sortable
-              className="min-w-44 whitespace-nowrap text-on-surface-variant"
-            />
-            <Column
-              field="createdBy"
-              header={t("assets.createdBy")}
-              sortable
-              className="min-w-36 text-on-surface-variant"
-              body={(node: TreeNode) => (node.data ? (node.data as Asset).createdBy : null)}
-            />
-            <Column
-              field="updatedAt"
-              header={t("assets.updatedAt")}
-              body={(node: TreeNode) =>
-                node.data ? formatShortDt((node.data as Asset).updatedAt) : null
-              }
-              sortable
-              className="min-w-44 whitespace-nowrap text-on-surface-variant"
-            />
-            <Column
-              field="updatedBy"
-              header={t("assets.updatedBy")}
-              sortable
-              className="min-w-36 text-on-surface-variant"
-              body={(node: TreeNode) => (node.data ? (node.data as Asset).updatedBy : null)}
-            />
-          </TreeTable>
+          <div ref={treeTableHostRef} className="flex min-h-0 min-w-0 w-full flex-1">
+            <TreeTable
+              className="app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1"
+              value={assetTreeNodes}
+              loading={loading}
+              selectionMode="single"
+              selectionKeys={treeSelectionKey}
+              onSelectionChange={handleTreeSelectionChange}
+              expandedKeys={treeExpandedKeys}
+              onToggle={handleTreeToggle}
+              rowClassName={treeRowClassName}
+              onRowClick={(e: TreeTableEvent) => {
+                const oe = e.originalEvent as MouseEvent<HTMLElement>;
+                if (oe.detail === 2) {
+                  const row = e.node?.data as Asset | undefined;
+                  if (row) openEdit(row);
+                }
+              }}
+              metaKeySelection={false}
+              showGridlines
+              scrollable
+              resizableColumns
+              columnResizeMode="expand"
+              scrollHeight="flex"
+              tableStyle={{ minWidth: "118rem" }}
+              stateStorage="local"
+              stateKey="athene-assets-tree-table"
+              emptyMessage={t("assets.empty")}
+            >
+              <Column field="key" header={t("assets.key")} expander sortable className="min-w-28" />
+              <Column field="name" header={t("assets.name")} sortable className="min-w-56" />
+              <Column
+                field="type"
+                header={t("assets.type")}
+                sortable
+                className="min-w-36"
+                body={(node: TreeNode) => (node.data ? typeColumnBody(node.data as Asset) : null)}
+              />
+              <Column
+                field="siteName"
+                header={t("assets.site")}
+                sortable
+                className="min-w-44"
+                body={(node: TreeNode) => (node.data ? siteColumnBody(node.data as Asset) : null)}
+              />
+              <Column
+                field="costCenterName"
+                header={t("assets.costCenter")}
+                sortable
+                body={(node: TreeNode) => (node.data ? costCenterBody(node.data as Asset) : null)}
+                className="min-w-48"
+              />
+              <Column
+                field="parentAssetName"
+                sortField="parentAssetName"
+                header={t("assets.parentAsset")}
+                body={(node: TreeNode) => (node.data ? parentBody(node.data as Asset) : null)}
+                sortable
+                className="min-w-72"
+              />
+              <Column
+                field="serialNumber"
+                header={t("assets.serialNumber")}
+                sortable
+                className="min-w-40"
+                body={(node: TreeNode) =>
+                  node.data ? nullableTextBody((node.data as Asset).serialNumber) : null
+                }
+              />
+              <Column
+                field="buildDate"
+                header={t("assets.buildDate")}
+                sortable
+                className="min-w-28"
+                body={(node: TreeNode) =>
+                  node.data ? dateOnlyBody((node.data as Asset).buildDate) : null
+                }
+              />
+              <Column
+                field="manufacturer"
+                header={t("assets.manufacturer")}
+                sortable
+                body={(node: TreeNode) =>
+                  node.data ? nullableTextBody((node.data as Asset).manufacturer) : null
+                }
+                className="min-w-56"
+              />
+              <Column
+                field="documentCount"
+                header={t("assets.references")}
+                body={(node: TreeNode) => (node.data ? referencesBody(node.data as Asset) : null)}
+                sortable
+                className="min-w-32"
+                bodyClassName="app-assets-treetable-ref-cell"
+              />
+              <Column
+                field="createdAt"
+                header={t("assets.createdAt")}
+                body={(node: TreeNode) =>
+                  node.data ? formatShortDt((node.data as Asset).createdAt) : null
+                }
+                sortable
+                className="min-w-44 whitespace-nowrap text-on-surface-variant"
+              />
+              <Column
+                field="createdBy"
+                header={t("assets.createdBy")}
+                sortable
+                className="min-w-36 text-on-surface-variant"
+                body={(node: TreeNode) => (node.data ? (node.data as Asset).createdBy : null)}
+              />
+              <Column
+                field="updatedAt"
+                header={t("assets.updatedAt")}
+                body={(node: TreeNode) =>
+                  node.data ? formatShortDt((node.data as Asset).updatedAt) : null
+                }
+                sortable
+                className="min-w-44 whitespace-nowrap text-on-surface-variant"
+              />
+              <Column
+                field="updatedBy"
+                header={t("assets.updatedBy")}
+                sortable
+                className="min-w-36 text-on-surface-variant"
+                body={(node: TreeNode) => (node.data ? (node.data as Asset).updatedBy : null)}
+              />
+            </TreeTable>
+          </div>
         )}
         </div>
       </div>
