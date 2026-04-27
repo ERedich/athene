@@ -18,6 +18,7 @@ import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useTableContextMenu } from "../lib/useTableContextMenu";
 
 type SiteOption = {
   id: string;
@@ -34,11 +35,25 @@ type User = {
   workingSiteId: string;
   workingSiteKey: string;
   workingSiteName: string;
+  employeeId: string | null;
+  employeeKey: string | null;
+  employeeName: string | null;
+  employeeSiteKey: string | null;
+  employeeSiteName: string | null;
+  employeeSiteColorHex: string | null;
+  employeeIsActive: boolean | null;
   siteIds: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+};
+
+type EmployeeOption = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
 };
 
 type FormState = {
@@ -47,6 +62,7 @@ type FormState = {
   password: string;
   workingSiteId: string;
   additionalSiteIds: string[];
+  employeeId: string | null;
 };
 
 const emptyForm = (): FormState => ({
@@ -55,6 +71,7 @@ const emptyForm = (): FormState => ({
   password: "",
   workingSiteId: "",
   additionalSiteIds: [],
+  employeeId: null,
 });
 
 const actionNavItem =
@@ -70,12 +87,30 @@ function uniqueSiteIds(ids: string[]): string[] {
   return [...new Set(ids)];
 }
 
+/** PrimeReact Dropdown may pass `optionValue` (string) or the full option object. */
+function resolveEmployeeIdFromDropdownValue(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === "object" && value !== null && "id" in value) {
+    const id = (value as { id: unknown }).id;
+    if (typeof id === "string" && id.trim().length > 0) return id.trim();
+  }
+  return null;
+}
+
 export function UsersPage() {
   const { t, i18n } = useTranslation();
-  const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
+  const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [sites, setSites] = useState<SiteOption[]>([]);
+  /** Sites the editor may set as primary (Zugriff des Bearbeiters). */
+  const [primarySiteChoices, setPrimarySiteChoices] = useState<SiteOption[]>([]);
+  /** Alle Buchungskreise für „Weitere BK“ und Tabellen-Anzeige. */
+  const [allSites, setAllSites] = useState<SiteOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -84,16 +119,16 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const siteLookup = useMemo(() => new Map(sites.map((site) => [site.id, site])), [sites]);
+  const siteLookup = useMemo(() => new Map(allSites.map((site) => [site.id, site])), [allSites]);
 
   const workingSiteOptions = useMemo(
-    () => sites.filter((site) => site.isPlant),
-    [sites],
+    () => primarySiteChoices.filter((site) => site.isPlant),
+    [primarySiteChoices],
   );
 
   const accessSiteOptions = useMemo(
-    () => sites.filter((site) => site.id !== form.workingSiteId),
-    [sites, form.workingSiteId],
+    () => allSites.filter((site) => site.id !== form.workingSiteId),
+    [allSites, form.workingSiteId],
   );
 
   const filteredUsers = useMemo(() => {
@@ -103,6 +138,10 @@ export function UsersPage() {
       const haystack = [
         user.loginName,
         user.name,
+        user.employeeKey ?? "",
+        user.employeeName ?? "",
+        user.employeeSiteKey ?? "",
+        user.employeeSiteName ?? "",
         user.workingSiteKey,
         user.workingSiteName,
         ...user.siteIds
@@ -116,17 +155,35 @@ export function UsersPage() {
     });
   }, [users, searchTerm, siteLookup]);
 
+  useEffect(() => {
+    setHeaderRowCount(filteredUsers.length);
+    return () => {
+      setHeaderRowCount(null);
+    };
+  }, [filteredUsers.length, setHeaderRowCount]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersRes, sitesRes] = await Promise.all([apiFetch("/api/users"), apiFetch("/api/sites")]);
-      if (!usersRes.ok || !sitesRes.ok) throw new Error("load");
-      const [usersData, sitesData] = (await Promise.all([
+      const [usersRes, primarySitesRes, allSitesRes, employeesRes] = await Promise.all([
+        apiFetch("/api/users"),
+        apiFetch("/api/sites"),
+        apiFetch("/api/users/all-sites"),
+        apiFetch("/api/employees"),
+      ]);
+      if (!usersRes.ok || !primarySitesRes.ok || !allSitesRes.ok || !employeesRes.ok) {
+        throw new Error("load");
+      }
+      const [usersData, primarySitesData, allSitesData, employeesData] = (await Promise.all([
         usersRes.json(),
-        sitesRes.json(),
-      ])) as [User[], SiteOption[]];
+        primarySitesRes.json(),
+        allSitesRes.json(),
+        employeesRes.json(),
+      ])) as [User[], SiteOption[], SiteOption[], EmployeeOption[]];
       setUsers(usersData);
-      setSites(sitesData);
+      setPrimarySiteChoices(primarySitesData);
+      setAllSites(allSitesData);
+      setEmployees(employeesData);
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -156,6 +213,7 @@ export function UsersPage() {
       password: "",
       workingSiteId: row.workingSiteId,
       additionalSiteIds: row.siteIds.filter((id) => id !== row.workingSiteId),
+      employeeId: row.employeeId,
     });
     setDialogVisible(true);
   }, []);
@@ -172,6 +230,10 @@ export function UsersPage() {
     if (code === "duplicate_login_name") detail = t("users.duplicateLoginName");
     if (code === "invalid_working_site") detail = t("users.invalidWorkingSite");
     if (code === "foreign_key_violation") detail = t("users.foreignKey");
+    if (code === "site_mismatch") detail = t("users.errors.site_mismatch");
+    if (code === "employee_already_linked") detail = t("users.errors.employee_already_linked");
+    if (code === "employee_not_found") detail = t("users.foreignKey");
+    if (code === "invalid_site_ids") detail = t("users.invalidSiteIds");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -196,6 +258,7 @@ export function UsersPage() {
         name,
         workingSiteId,
         siteIds,
+        employeeId: form.employeeId,
       };
       if (!editingId || form.password.length > 0) {
         payload.password = form.password;
@@ -278,6 +341,13 @@ export function UsersPage() {
     },
     [deleteRow, t],
   );
+
+  const tableCtx = useTableContextMenu<User>({
+    labels: { new: t("users.new"), edit: t("users.edit"), delete: t("users.delete") },
+    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    selection: selectedUser,
+    setSelection: setSelectedUser,
+  });
 
   useEffect(() => {
     if (selectedUser && !users.some((u) => u.id === selectedUser.id)) {
@@ -369,6 +439,43 @@ export function UsersPage() {
     );
   };
 
+  const employeeBody = (row: User) => {
+    if (!row.employeeId || !row.employeeName) {
+      return <span className="text-on-surface-variant">—</span>;
+    }
+    return (
+      <span title={row.employeeKey ? `${row.employeeKey} - ${row.employeeName}` : row.employeeName}>
+        {row.employeeKey ? `${row.employeeKey} - ${row.employeeName}` : row.employeeName}
+      </span>
+    );
+  };
+
+  const employeeSiteBody = (row: User) => {
+    if (!row.employeeId || !row.employeeSiteName) {
+      return <span className="text-on-surface-variant">—</span>;
+    }
+    const hex = row.employeeSiteColorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = row.employeeSiteKey
+      ? `${row.employeeSiteKey} - ${row.employeeSiteName}`
+      : row.employeeSiteName;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {label}
+      </span>
+    );
+  };
+
+  const employeeActiveBody = (row: User) => {
+    if (!row.employeeId) return <span className="text-on-surface-variant">—</span>;
+    if (row.employeeIsActive === true) {
+      return <i className="pi pi-check text-green-500" aria-label={t("employees.active")} title={t("employees.active")} />;
+    }
+    if (row.employeeIsActive === false) {
+      return <span className="text-on-surface-variant">{t("employees.inactive")}</span>;
+    }
+    return <span className="text-on-surface-variant">—</span>;
+  };
+
   const renderSiteOption = (site: SiteOption) => {
     const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
     const label = `${site.key} - ${site.name}`;
@@ -413,6 +520,52 @@ export function UsersPage() {
     return undefined;
   };
 
+  const linkedEmployeeIds = useMemo(
+    () =>
+      new Set(
+        users
+          .filter((user) => user.id !== editingId)
+          .map((user) => user.employeeId)
+          .filter((employeeId): employeeId is string => Boolean(employeeId)),
+      ),
+    [users, editingId],
+  );
+
+  const employeeOptions = useMemo(
+    () =>
+      employees.filter(
+        (employee) =>
+          employee.siteId === form.workingSiteId &&
+          (!linkedEmployeeIds.has(employee.id) || employee.id === form.employeeId),
+      ),
+    [employees, form.workingSiteId, form.employeeId, linkedEmployeeIds],
+  );
+
+  /** Selected MA must stay in `options`, otherwise the closed Dropdown shows no label. */
+  const employeeDropdownOptions = useMemo(() => {
+    const base = employeeOptions;
+    const id = form.employeeId;
+    if (!id) return base;
+    if (base.some((o) => o.id === id)) return base;
+    const fromEmployees = employees.find((e) => e.id === id);
+    if (fromEmployees) return [fromEmployees, ...base];
+    if (editingId) {
+      const u = users.find((x) => x.id === editingId);
+      if (u?.employeeId === id && (u.employeeName || u.employeeKey)) {
+        return [
+          {
+            id,
+            key: u.employeeKey ?? "",
+            name: u.employeeName ?? "",
+            siteId: form.workingSiteId,
+          },
+          ...base,
+        ];
+      }
+    }
+    return base;
+  }, [employeeOptions, form.employeeId, employees, users, editingId, form.workingSiteId]);
+
   const formatShortDt = (iso: string) => {
     try {
       return new Intl.DateTimeFormat(i18n.language, {
@@ -448,8 +601,9 @@ export function UsersPage() {
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
+      {tableCtx.ContextMenuEl}
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col" {...tableCtx.wrapperProps}>
         <DataTable
           className="app-data-table w-full"
           value={filteredUsers}
@@ -458,6 +612,7 @@ export function UsersPage() {
           selection={selectedUser}
           onSelectionChange={(e) => setSelectedUser(e.value as User | null)}
           onRowDoubleClick={(e) => openEdit(e.data as User)}
+          {...tableCtx.tableProps}
           selectionMode="single"
           metaKeySelection={false}
           stripedRows
@@ -466,13 +621,34 @@ export function UsersPage() {
           resizableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
-          tableStyle={{ minWidth: "72rem" }}
+          tableStyle={{ minWidth: "88rem" }}
           stateStorage="local"
-          stateKey="athene-users-table"
+          stateKey="athene-users-table-v3"
           emptyMessage={t("users.empty")}
         >
           <Column field="loginName" header={t("users.loginName")} sortable />
           <Column field="name" header={t("users.name")} sortable className="min-w-56" />
+          <Column
+            field="employeeName"
+            header={t("users.employee.column")}
+            body={employeeBody}
+            sortable
+            className="min-w-56"
+          />
+          <Column
+            field="employeeSiteName"
+            header={t("users.employee.siteColumn")}
+            body={employeeSiteBody}
+            sortable
+            className="min-w-48"
+          />
+          <Column
+            field="employeeIsActive"
+            header={t("users.employee.activeColumn")}
+            body={employeeActiveBody}
+            sortable
+            className="min-w-28"
+          />
           <Column field="workingSiteName" header={t("users.primarySite")} body={primarySiteBody} sortable />
           <Column header={t("users.accessSites")} body={accessSitesBody} className="min-w-72" />
           <Column
@@ -587,11 +763,86 @@ export function UsersPage() {
                 }
                 return renderSiteOption(selected);
               }}
-              onChange={(e) => setForm((f) => ({ ...f, workingSiteId: String(e.value ?? "") }))}
+              onChange={(e) => {
+                const nextWorkingSiteId = String(e.value ?? "");
+                setForm((f) => {
+                  const keepEmployee =
+                    f.employeeId !== null &&
+                    employees.some(
+                      (employee) =>
+                        employee.id === f.employeeId && employee.siteId === nextWorkingSiteId,
+                    );
+                  return {
+                    ...f,
+                    workingSiteId: nextWorkingSiteId,
+                    employeeId: keepEmployee ? f.employeeId : null,
+                  };
+                });
+              }}
               placeholder={t("users.primarySitePlaceholder")}
               className="w-full"
               filter
               appendTo={overlayAppendTo}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label
+              htmlFor="user-employee"
+              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+            >
+              {t("users.employee.label")}
+            </label>
+            <Dropdown
+              inputId="user-employee"
+              value={form.employeeId}
+              options={employeeDropdownOptions}
+              optionLabel="name"
+              optionValue="id"
+              placeholder={
+                form.workingSiteId
+                  ? t("users.employee.selectPlaceholder")
+                  : t("users.employee.placeholder")
+              }
+              className="w-full"
+              showClear
+              disabled={!form.workingSiteId}
+              filter
+              appendTo={overlayAppendTo}
+              itemTemplate={(employee: EmployeeOption) => (
+                <span>{employee.key ? `${employee.key} - ${employee.name}` : employee.name}</span>
+              )}
+              valueTemplate={(value) => {
+                const selectedId = resolveEmployeeIdFromDropdownValue(value);
+                if (!selectedId) {
+                  return (
+                    <span className="text-on-surface-variant">
+                      {form.workingSiteId
+                        ? t("users.employee.selectPlaceholder")
+                        : t("users.employee.placeholder")}
+                    </span>
+                  );
+                }
+                const selected = employeeDropdownOptions.find((employee) => employee.id === selectedId);
+                if (!selected) {
+                  return (
+                    <span className="text-on-surface-variant">
+                      {form.workingSiteId
+                        ? t("users.employee.selectPlaceholder")
+                        : t("users.employee.placeholder")}
+                    </span>
+                  );
+                }
+                return (
+                  <span>
+                    {selected.key ? `${selected.key} - ${selected.name}` : selected.name}
+                  </span>
+                );
+              }}
+              onChange={(e) => {
+                const nextId = resolveEmployeeIdFromDropdownValue(e.value);
+                setForm((f) => ({ ...f, employeeId: nextId }));
+              }}
             />
           </div>
 

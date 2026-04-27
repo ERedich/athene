@@ -293,7 +293,7 @@ html.theme-crossfade-fallback #root {
   border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
   color: var(--color-on-surface) !important;
   border-radius: 0.5rem !important;
-  padding: 1rem !important;
+  padding: 0.65rem 0.75rem !important;
 }
 
 .p-dropdown,
@@ -307,6 +307,8 @@ html.theme-crossfade-fallback #root {
 .p-dropdown .p-dropdown-label,
 .p-multiselect .p-multiselect-label {
   color: var(--color-on-surface) !important;
+  padding-top: 0.65rem !important;
+  padding-bottom: 0.65rem !important;
 }
 
 [data-theme="light"] .p-inputtext,
@@ -345,6 +347,11 @@ html.theme-crossfade-fallback #root {
 }
 
 /* Reference column icon buttons — Guidelines “Referenzen” (Tailwind 300 palette) */
+[class*="app-ref-button--"].p-button {
+  min-width: 50px !important;
+  max-width: 60px !important;
+}
+
 .app-ref-button--documents.p-button:not(:disabled),
 .app-ref-button--documents.p-button:not(.p-disabled) {
   background: rgb(103 232 249) !important; /* cyan-300 */
@@ -355,6 +362,69 @@ html.theme-crossfade-fallback #root {
 .app-ref-button--documents.p-button:not(.p-disabled):hover {
   background: rgb(34 211 238) !important; /* cyan-400 */
   border-color: rgb(34 211 238) !important;
+}
+
+.app-ref-button--documents-asset.p-button:not(:disabled),
+.app-ref-button--documents-asset.p-button:not(.p-disabled) {
+  background: rgb(134 239 172) !important; /* green-300 */
+  border-color: rgb(134 239 172) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--documents-asset.p-button:not(:disabled):hover,
+.app-ref-button--documents-asset.p-button:not(.p-disabled):hover {
+  background: rgb(74 222 128) !important; /* green-400 */
+  border-color: rgb(74 222 128) !important;
+}
+
+.app-ref-button--employees.p-button:not(:disabled),
+.app-ref-button--employees.p-button:not(.p-disabled) {
+  background: rgb(203 213 225) !important; /* slate-300 */
+  border-color: rgb(203 213 225) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--employees.p-button:not(:disabled):hover,
+.app-ref-button--employees.p-button:not(.p-disabled):hover {
+  background: rgb(148 163 184) !important; /* slate-400 */
+  border-color: rgb(148 163 184) !important;
+}
+
+/* Employee assignment references with zero entries: icon only, transparent button. */
+.app-ref-button--employees-inactive.p-button.p-disabled,
+.app-ref-button--employees-inactive.p-button:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon,
+.app-ref-button--employees-inactive.p-button:disabled .p-button-icon {
+  color: rgb(148 163 184) !important; /* slate-400 */
+}
+
+.app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon .pi,
+.app-ref-button--employees-inactive.p-button:disabled .p-button-icon .pi {
+  color: inherit !important;
+}
+
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon,
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled .p-button-icon {
+  color: rgb(148 163 184) !important;
+}
+
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon .pi,
+[data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled .p-button-icon .pi {
+  color: inherit !important;
 }
 
 /* Document references with zero files: no fill; icon only, soft blue (overrides Prime disabled → primary) */
@@ -402,6 +472,77 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
   color: inherit !important;
+}
+
+/* Work orders: status column — full cell background, plain text (no badge). */
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell {
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-open {
+  background: color-mix(in srgb, rgb(203 213 225) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-assigned {
+  background: color-mix(in srgb, rgb(125 211 252) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-started {
+  background: color-mix(in srgb, rgb(59 130 246) 30%, transparent) !important;
+  color: rgb(30 64 175) !important;
+}
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-paused {
+  background: color-mix(in srgb, rgb(251 146 60) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-ended,
+.app-work-orders-data-grid.p-datatable .p-datatable-tbody > tr > td.app-wo-status-cell.app-wo-status-done {
+  background: color-mix(in srgb, rgb(74 222 128) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+
+/* Modal header: status text only (no badge / pill). */
+.app-wo-status-modal {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.app-wo-status-modal.app-wo-status-open {
+  color: rgb(100 116 139);
+}
+.app-wo-status-modal.app-wo-status-assigned {
+  color: rgb(2 132 199);
+}
+.app-wo-status-modal.app-wo-status-started {
+  color: rgb(37 99 235);
+}
+.app-wo-status-modal.app-wo-status-paused {
+  color: rgb(234 88 12);
+}
+.app-wo-status-modal.app-wo-status-ended,
+.app-wo-status-modal.app-wo-status-done {
+  color: rgb(22 163 74);
+}
+
+/* Work-order start: text button; play icon = Tailwind green-500 */
+.app-wo-start-action.p-button.p-button-text {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+
+.app-wo-start-action.p-button.p-button-text .p-button-icon,
+.app-wo-start-action.p-button.p-button-text .p-button-icon .pi {
+  color: rgb(34 197 94) !important; /* green-500 */
+}
+
+.app-wo-start-action.p-button.p-button-text:hover {
+  background: color-mix(in srgb, rgb(34 197 94) 14%, transparent) !important;
+  border-color: transparent !important;
 }
 
 .app-ref-button--material.p-button:not(:disabled),
@@ -842,6 +983,41 @@ html.theme-crossfade-fallback #root {
   color: var(--color-on-surface-variant) !important;
 }
 
+.app-inline-icon-multiselect .p-multiselect-trigger {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: 2.5rem !important;
+  height: 100% !important;
+  min-height: 2.25rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border-left: 0 !important;
+  box-shadow: none !important;
+  color: var(--color-on-surface-variant) !important;
+  padding: 0 !important;
+}
+
+.app-inline-icon-multiselect .p-multiselect-label-container {
+  padding-right: 2.5rem !important;
+}
+
+.app-inline-icon-multiselect.p-multiselect {
+  position: relative !important;
+  background: var(--color-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent) !important;
+}
+
+.app-inline-icon-multiselect.p-multiselect .p-multiselect-clear-icon {
+  right: 2.5rem !important;
+}
+
+.app-inline-icon-multiselect .p-multiselect-trigger-icon {
+  color: var(--color-on-surface-variant) !important;
+}
+
 .p-inputswitch-slider {
   border-radius: 2px !important;
 }
@@ -946,10 +1122,18 @@ html.theme-crossfade-fallback #root {
    scroller or the whole block (including the header) scrolls — use the inner scrollable body only,
    like DataTable’s behavior. */
 .app-data-table.p-treetable .p-treetable-wrapper.p-treetable-scrollable-wrapper {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   max-width: 100%;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+/* Keep header fixed while body is the vertical scroller. */
+.app-data-table.p-treetable .p-treetable-scrollable-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .app-data-table.p-treetable .p-treetable-wrapper:not(.p-treetable-scrollable-wrapper) {
@@ -995,11 +1179,11 @@ html.theme-crossfade-fallback #root {
   background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
 }
 
-/* Assets list: tighter rows (table + tree) */
-.app-assets-data-grid.p-datatable .p-datatable-thead > tr > th,
-.app-assets-data-grid.p-datatable .p-datatable-tbody > tr > td,
-.app-assets-data-grid.p-treetable .p-treetable-thead > tr > th,
-.app-assets-data-grid.p-treetable .p-treetable-tbody > tr > td {
+/* Global table density: compact mode (all DataTable / TreeTable with app-data-table). */
+:root[data-table-density="compact"] .app-data-table.p-datatable .p-datatable-thead > tr > th,
+:root[data-table-density="compact"] .app-data-table.p-datatable .p-datatable-tbody > tr > td,
+:root[data-table-density="compact"] .app-data-table.p-treetable .p-treetable-thead > tr > th,
+:root[data-table-density="compact"] .app-data-table.p-treetable .p-treetable-tbody > tr > td {
   padding: 0.25rem 0.375rem;
   line-height: 1.2;
   font-size: 0.8125rem;
@@ -1158,7 +1342,7 @@ html.theme-crossfade-fallback #root {
   white-space: nowrap;
 }
 
-.app-shell-title::after {
+.app-shell-title__name::after {
   content: "_";
   margin-left: 0.05em;
   color: color-mix(in srgb, var(--color-primary-container) 80%, white);
@@ -1237,3 +1421,33 @@ html.theme-crossfade-fallback #root {
   font-size: 1.25rem;
   color: var(--color-primary);
 }
+
+/* DataTable / TreeTable context menu — compact panel (theme default text/icon colors). */
+.app-table-context-menu.p-contextmenu {
+  min-width: 6.75rem;
+}
+
+.app-table-context-menu .p-contextmenu-root-list,
+.app-table-context-menu .p-menu-list {
+  padding: 0.125rem;
+}
+
+.app-table-context-menu .p-menuitem-link {
+  padding: 0.3125rem 0.5rem;
+  column-gap: 0.375rem;
+}
+
+.app-table-context-menu .p-menuitem-text {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+}
+
+.app-table-context-menu .p-menuitem-icon {
+  font-size: 0.75rem;
+  width: 0.875rem;
+}
+
+.app-table-context-menu .p-menuitem-separator {
+  margin: 0.125rem 0.25rem;
+}
+

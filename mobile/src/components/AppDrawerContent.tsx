@@ -21,6 +21,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const activeHome = pathname === "/home" || pathname.endsWith("/home");
   const activeCc = pathname.startsWith("/cost-centers");
   const activeAssets = pathname.startsWith("/assets");
+  const activeWorkOrders = pathname.startsWith("/work-orders");
 
   const styles = useMemo(
     () =>
@@ -68,8 +69,8 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
     [colors, isDark],
   );
 
-  function closeAndGo(href: "/home" | "/cost-centers" | "/assets") {
-    router.push(href);
+  function closeAndGo(href: "/home" | "/cost-centers" | "/assets" | "/work-orders") {
+    router.push(href as never);
     navigation.closeDrawer();
   }
 
@@ -114,6 +115,20 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
           color={activeAssets ? colors.primary : colors.onSurfaceVariant}
         />
         <Text style={activeAssets ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navAssets")}</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => closeAndGo("/work-orders")}
+        style={[styles.navItem, activeWorkOrders && styles.navItemActive]}
+      >
+        <MaterialIcons
+          name="assignment"
+          size={24}
+          color={activeWorkOrders ? colors.primary : colors.onSurfaceVariant}
+        />
+        <Text style={activeWorkOrders ? styles.navLabel : styles.navLabelMuted}>
+          {t("drawer.navWorkOrders")}
+        </Text>
       </Pressable>
 
       <View style={styles.spacer} />

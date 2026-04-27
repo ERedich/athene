@@ -8,11 +8,13 @@ import { AuthContext } from "./AuthContext";
 type MeResponse = {
   user: AuthUser;
   appParameterBooleans?: Record<string, boolean>;
+  appParameterDefaultWorkgroupId?: string | null;
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
+  const [appParameterDefaultWorkgroupId, setAppParameterDefaultWorkgroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -21,14 +23,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         setUser(null);
         setAppParameterBooleans({});
+        setAppParameterDefaultWorkgroupId(null);
         return;
       }
       const data = (await res.json()) as MeResponse;
       setUser(data.user);
       setAppParameterBooleans(data.appParameterBooleans ?? {});
+      setAppParameterDefaultWorkgroupId(data.appParameterDefaultWorkgroupId ?? null);
     } catch {
       setUser(null);
       setAppParameterBooleans({});
+      setAppParameterDefaultWorkgroupId(null);
     }
   }, []);
 
@@ -65,18 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setAppParameterBooleans({});
+    setAppParameterDefaultWorkgroupId(null);
   }, []);
 
   const value = useMemo(
     () => ({
       user,
       appParameterBooleans,
+      appParameterDefaultWorkgroupId,
       loading,
       refresh,
       signIn,
       signOut,
     }),
-    [user, appParameterBooleans, loading, refresh, signIn, signOut],
+    [user, appParameterBooleans, appParameterDefaultWorkgroupId, loading, refresh, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

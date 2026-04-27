@@ -5,7 +5,7 @@ import type { QueryResult } from "pg";
 
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
-import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
+import { assertSiteAccess, type SiteAccessClient, siteAccessSql } from "./siteAccess.js";
 
 export type UserRow = {
   id: string;
@@ -14,6 +14,13 @@ export type UserRow = {
   workingSiteId: string;
   workingSiteKey: string;
   workingSiteName: string;
+  employeeId: string | null;
+  employeeKey: string | null;
+  employeeName: string | null;
+  employeeSiteKey: string | null;
+  employeeSiteName: string | null;
+  employeeSiteColorHex: string | null;
+  employeeIsActive: boolean | null;
   siteIds: string[];
   createdAt: string;
   updatedAt: string;
@@ -26,6 +33,7 @@ type MutableUserFields = {
   name: string;
   workingSiteId: string;
   siteIds: string[];
+  employeeId: string | null;
 };
 
 const router = Router();
@@ -50,13 +58,19 @@ function withPrimarySite(siteIds: string[], workingSiteId: string): string[] {
   return [...all];
 }
 
-async function assertSitesAccess(
-  client: Parameters<typeof assertSiteAccess>[0],
-  userId: string,
-  siteIds: string[],
-): Promise<void> {
-  for (const siteId of siteIds) {
-    await assertSiteAccess(client, userId, siteId);
+/** Ensures every id exists in `site` (Benutzer-Zugriffskreise dürfen alle BKs umfassen). */
+async function assertAllSitesExist(client: SiteAccessClient, siteIds: string[]): Promise<void> {
+  if (siteIds.length === 0) return;
+  const { rows } = await client.query<{ c: number }>(
+    `
+    SELECT COUNT(*)::int AS c
+    FROM "site"
+    WHERE "id" = ANY($1::uuid[])
+    `,
+    [siteIds],
+  );
+  if (rows[0]?.c !== siteIds.length) {
+    throw new Error("invalid_site_ids");
   }
 }
 
@@ -66,13 +80,34 @@ function parseMutableFields(body: unknown): MutableUserFields | null {
   const loginName = typeof o.loginName === "string" ? o.loginName.trim() : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
   const workingSiteId = typeof o.workingSiteId === "string" ? o.workingSiteId.trim() : "";
+  const rawEmployeeId = o.employeeId;
+  if (
+    rawEmployeeId !== undefined &&
+    rawEmployeeId !== null &&
+    typeof rawEmployeeId !== "string"
+  ) {
+    return null;
+  }
+  const employeeId =
+    typeof rawEmployeeId === "string" && rawEmployeeId.trim().length > 0
+      ? rawEmployeeId.trim()
+      : null;
   const parsedSiteIds = parseSiteIds(o.siteIds);
-  if (!loginName || !name || !isUuid(workingSiteId) || !parsedSiteIds) return null;
+  if (
+    !loginName ||
+    !name ||
+    !isUuid(workingSiteId) ||
+    !parsedSiteIds ||
+    (employeeId !== null && !isUuid(employeeId))
+  ) {
+    return null;
+  }
   return {
     loginName,
     name,
     workingSiteId,
     siteIds: withPrimarySite(parsedSiteIds, workingSiteId),
+    employeeId,
   };
 }
 
@@ -107,6 +142,13 @@ function sendPgError(res: Response, err: unknown) {
   if (e.code === "23505") {
     if (e.constraint === "users_loginName_key") {
       res.status(409).json({ error: "duplicate_login_name", message: e.detail ?? e.message });
+      return;
+    }
+    if (
+      e.constraint === "users_employeeid_unique_idx" ||
+      e.constraint === "users_employeeId_unique_idx"
+    ) {
+      res.status(409).json({ error: "employee_already_linked", message: e.detail ?? e.message });
       return;
     }
     res.status(409).json({ error: "duplicate_key", message: e.detail ?? e.message });
@@ -149,6 +191,30 @@ async function ensureWorkingSiteIsPlant(siteId: string): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
+async function ensureEmployeeMatchesWorkingSite(
+  client: SiteAccessClient,
+  employeeId: string | null,
+  workingSiteId: string,
+): Promise<void> {
+  if (!employeeId) return;
+  const { rows } = await client.query<{ siteId: string }>(
+    `
+    SELECT e."siteId"::text AS "siteId"
+    FROM "employee" e
+    WHERE e."id" = $1::uuid
+    LIMIT 1
+    `,
+    [employeeId],
+  );
+  const employeeSiteId = rows[0]?.siteId;
+  if (!employeeSiteId) {
+    throw new Error("employee_not_found");
+  }
+  if (employeeSiteId !== workingSiteId) {
+    throw new Error("site_mismatch");
+  }
+}
+
 const selectUsersSql = `
   SELECT
     u."id",
@@ -157,6 +223,13 @@ const selectUsersSql = `
     u."workingSiteId",
     ws."key" AS "workingSiteKey",
     ws."name" AS "workingSiteName",
+    u."employeeId",
+    emp."key" AS "employeeKey",
+    emp."name" AS "employeeName",
+    emp."isActive" AS "employeeIsActive",
+    emp_site."key" AS "employeeSiteKey",
+    emp_site."name" AS "employeeSiteName",
+    emp_site."colorHex" AS "employeeSiteColorHex",
     COALESCE(
       array_agg(DISTINCT us."siteId"::text) FILTER (WHERE us."siteId" IS NOT NULL),
       ARRAY[]::text[]
@@ -167,6 +240,8 @@ const selectUsersSql = `
     COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy"
   FROM "users" u
   JOIN "site" ws ON ws."id" = u."workingSiteId"
+  LEFT JOIN "employee" emp ON emp."id" = u."employeeId"
+  LEFT JOIN "site" emp_site ON emp_site."id" = emp."siteId"
   LEFT JOIN "userSite" us ON us."userId" = u."id"
   LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
@@ -189,7 +264,7 @@ router.get("/", async (req: Request, res: Response) => {
           WHERE target_us."userId" = u."id"
             AND ${siteAccessSql('target_us."siteId"', "$1")}
         )
-      GROUP BY u."id", ws."id", created_by."id", updated_by."id"
+      GROUP BY u."id", ws."id", emp."id", emp_site."id", created_by."id", updated_by."id"
       ORDER BY u."loginName" ASC
       `,
       [userId],
@@ -204,13 +279,46 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+export type UserSiteOptionRow = {
+  id: string;
+  key: string;
+  name: string;
+  isPlant: boolean;
+  colorHex: string;
+};
+
+router.get("/all-sites", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<UserSiteOptionRow>(
+      `
+      SELECT
+        s."id",
+        s."key",
+        s."name",
+        s."isPlant",
+        s."colorHex"
+      FROM "site" s
+      ORDER BY s."key" ASC
+      `,
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.post("/", async (req: Request, res: Response) => {
   const parsed = parseCreateBody(req.body);
   if (!parsed) {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { loginName, name, workingSiteId, password, siteIds } = parsed;
+  const { loginName, name, workingSiteId, password, siteIds, employeeId } = parsed;
 
   if (!(await ensureWorkingSiteIsPlant(workingSiteId))) {
     res.status(400).json({ error: "invalid_working_site" });
@@ -220,14 +328,16 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      await assertSitesAccess(client, meta.userId, siteIds);
+      await assertSiteAccess(client, meta.userId, workingSiteId);
+      await assertAllSitesExist(client, siteIds);
+      await ensureEmployeeMatchesWorkingSite(client, employeeId, workingSiteId);
       const inserted = await client.query<{ id: string }>(
         `
-        INSERT INTO "users" ("loginName", "name", "passwordHash", "workingSiteId")
-        VALUES ($1, $2, crypt($3, gen_salt('bf')), $4::uuid)
+        INSERT INTO "users" ("loginName", "name", "passwordHash", "workingSiteId", "employeeId")
+        VALUES ($1, $2, crypt($3, gen_salt('bf')), $4::uuid, $5::uuid)
         RETURNING "id"
         `,
-        [loginName, name, password, workingSiteId],
+        [loginName, name, password, workingSiteId, employeeId],
       );
       const userId = inserted.rows[0]?.id;
       if (!userId) return null;
@@ -250,7 +360,7 @@ router.post("/", async (req: Request, res: Response) => {
         `
         ${selectUsersSql}
         WHERE u."id" = $1::uuid
-        GROUP BY u."id", ws."id", created_by."id", updated_by."id"
+        GROUP BY u."id", ws."id", emp."id", emp_site."id", created_by."id", updated_by."id"
         `,
         [userId],
       );
@@ -272,6 +382,18 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(403).json({ error: "site_access_denied" });
       return;
     }
+    if ((err as Error).message === "invalid_site_ids") {
+      res.status(400).json({ error: "invalid_site_ids" });
+      return;
+    }
+    if ((err as Error).message === "site_mismatch") {
+      res.status(400).json({ error: "site_mismatch" });
+      return;
+    }
+    if ((err as Error).message === "employee_not_found") {
+      res.status(400).json({ error: "employee_not_found" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -288,7 +410,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { loginName, name, workingSiteId, password, siteIds } = parsed;
+  const { loginName, name, workingSiteId, password, siteIds, employeeId } = parsed;
 
   if (!(await ensureWorkingSiteIsPlant(workingSiteId))) {
     res.status(400).json({ error: "invalid_working_site" });
@@ -317,7 +439,9 @@ router.put("/:id", async (req: Request, res: Response) => {
       );
       if (existing.rowCount === 0) return null;
 
-      await assertSitesAccess(client, meta.userId, siteIds);
+      await assertSiteAccess(client, meta.userId, workingSiteId);
+      await assertAllSitesExist(client, siteIds);
+      await ensureEmployeeMatchesWorkingSite(client, employeeId, workingSiteId);
       if (password) {
         await client.query(
           `
@@ -326,10 +450,11 @@ router.put("/:id", async (req: Request, res: Response) => {
             "loginName" = $1,
             "name" = $2,
             "workingSiteId" = $3::uuid,
-            "passwordHash" = crypt($4, gen_salt('bf'))
-          WHERE "id" = $5::uuid
+            "passwordHash" = crypt($4, gen_salt('bf')),
+            "employeeId" = $5::uuid
+          WHERE "id" = $6::uuid
           `,
-          [loginName, name, workingSiteId, password, id],
+          [loginName, name, workingSiteId, password, employeeId, id],
         );
       } else {
         await client.query(
@@ -338,10 +463,11 @@ router.put("/:id", async (req: Request, res: Response) => {
           SET
             "loginName" = $1,
             "name" = $2,
-            "workingSiteId" = $3::uuid
-          WHERE "id" = $4::uuid
+            "workingSiteId" = $3::uuid,
+            "employeeId" = $4::uuid
+          WHERE "id" = $5::uuid
           `,
-          [loginName, name, workingSiteId, id],
+          [loginName, name, workingSiteId, employeeId, id],
         );
       }
 
@@ -364,7 +490,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         `
         ${selectUsersSql}
         WHERE u."id" = $1::uuid
-        GROUP BY u."id", ws."id", created_by."id", updated_by."id"
+        GROUP BY u."id", ws."id", emp."id", emp_site."id", created_by."id", updated_by."id"
         `,
         [id],
       );
@@ -384,6 +510,18 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if ((err as Error).message === "site_access_denied") {
       res.status(403).json({ error: "site_access_denied" });
+      return;
+    }
+    if ((err as Error).message === "invalid_site_ids") {
+      res.status(400).json({ error: "invalid_site_ids" });
+      return;
+    }
+    if ((err as Error).message === "site_mismatch") {
+      res.status(400).json({ error: "site_mismatch" });
+      return;
+    }
+    if ((err as Error).message === "employee_not_found") {
+      res.status(400).json({ error: "employee_not_found" });
       return;
     }
     sendPgError(res, err);

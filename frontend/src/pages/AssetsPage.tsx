@@ -39,6 +39,7 @@ import { DEFAULT_ASSET_TYPE_DISPLAY_CONFIG, type AssetTypeDisplayConfig } from "
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useTableContextMenu, useTreeTableContextMenu } from "../lib/useTableContextMenu";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
@@ -135,11 +136,43 @@ type Asset = {
 };
 
 const ASSETS_VIEW_MODE_STORAGE_KEY = "athene-assets-view-mode";
+const ASSETS_TREE_TABLE_STATE_STORAGE_KEY = "athene-assets-tree-table";
 const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
 
 /**
- * VirtualScroller + scrollHeight="flex" is unstable on some engines (Chrome/Firefox):
- * the scroll body can collapse to zero height and hide rows.
+ * PrimeReact TreeTable._restoreState has a bug: when a persisted state contains
+ * `expandedKeysState` and `onToggle` is set, it calls `props.onRowToggle(...)`,
+ * which is not declared on the component (-> runtime TypeError, or DOM warning if
+ * the prop is passed in). Tree expansion is owned by our own React state anyway,
+ * so we plug into `stateStorage="custom"` and strip `expandedKeysState` from the
+ * restored payload to avoid that codepath entirely.
+ */
+function readAssetsTreeTableStoredState(): Record<string, unknown> | undefined {
+  try {
+    const raw = localStorage.getItem(ASSETS_TREE_TABLE_STATE_STORAGE_KEY);
+    if (!raw) return undefined;
+    const isoDate = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
+    const parsed = JSON.parse(raw, (_k, v) =>
+      typeof v === "string" && isoDate.test(v) ? new Date(v) : v,
+    ) as Record<string, unknown>;
+    delete parsed.expandedKeysState;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeAssetsTreeTableState(state: object): void {
+  try {
+    localStorage.setItem(ASSETS_TREE_TABLE_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * VirtualScroller can become unstable on Chromium/Firefox with dynamic/flex layouts.
+ * Keep virtualization only where it is known to render consistently.
  */
 function supportsAssetsTableVirtualScroller(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -159,8 +192,11 @@ function readStoredAssetsViewMode(): "table" | "tree" {
   return "table";
 }
 
-/** Build tree roots from filtered rows; parents outside the set become implicit roots. */
-function buildFilteredAssetTreeNodes(assets: Asset[]): TreeNode[] {
+/**
+ * Build tree roots from filtered rows; parents outside the set become implicit roots.
+ * Children are materialized lazily only for expanded branches to keep large trees responsive.
+ */
+function buildFilteredAssetTreeNodes(assets: Asset[], expandedKeys: Set<string>): TreeNode[] {
   const idSet = new Set(assets.map((a) => a.id));
   const byParent = new Map<string | null, Asset[]>();
 
@@ -183,9 +219,14 @@ function buildFilteredAssetTreeNodes(assets: Asset[]): TreeNode[] {
   const toNodes = (parentId: string | null): TreeNode[] => {
     const rows = byParent.get(parentId) ?? [];
     return rows.map((row) => {
-      const children = toNodes(row.id);
       const node: TreeNode = { key: row.id, data: row };
-      if (children.length > 0) node.children = children;
+      const hasChildren = (byParent.get(row.id)?.length ?? 0) > 0;
+      if (hasChildren) {
+        node.leaf = false;
+        if (expandedKeys.has(row.id)) {
+          node.children = toNodes(row.id);
+        }
+      }
       return node;
     });
   };
@@ -455,9 +496,10 @@ export function AssetsPage() {
   const { t, i18n } = useTranslation();
   const { user, appParameterBooleans, appParameterAssetTypes } = useAuth();
   const langDe = i18n.language?.toLowerCase().startsWith("de");
+  const calendarDateFormat = langDe ? "dd.mm.yy" : "mm/dd/yy";
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const colorizeTreeRows = Boolean(appParameterBooleans[APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS]);
-  const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
+  const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -487,6 +529,9 @@ export function AssetsPage() {
   const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
   const [viewMode, setViewModeState] = useState<"table" | "tree">(readStoredAssetsViewMode);
+  const [treeExpandedKeys, setTreeExpandedKeys] = useState<Record<string, boolean>>({});
+  const [assetsGridScrollHeight, setAssetsGridScrollHeight] = useState("60vh");
+  const assetsGridHostRef = useRef<HTMLDivElement | null>(null);
 
   const setViewMode = useCallback((mode: "table" | "tree") => {
     setViewModeState(mode);
@@ -502,7 +547,7 @@ export function AssetsPage() {
   }, [setViewMode, viewMode]);
 
   const assetsTableVirtualScrollerOptions = useMemo(
-    () => (supportsAssetsTableVirtualScroller() ? { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX } : undefined),
+    () => (supportsAssetsTableVirtualScroller() ? { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX, showLoader: true } : undefined),
     [],
   );
   const treeTypeColors = appParameterAssetTypes ?? DEFAULT_ASSET_TYPE_DISPLAY_CONFIG;
@@ -784,7 +829,14 @@ export function AssetsPage() {
     );
   }, [assets, searchTerm]);
 
-  const assetTreeNodes = useMemo(() => buildFilteredAssetTreeNodes(filteredAssets), [filteredAssets]);
+  const expandedKeySet = useMemo(
+    () => new Set(Object.entries(treeExpandedKeys).filter(([, v]) => Boolean(v)).map(([k]) => k)),
+    [treeExpandedKeys],
+  );
+  const assetTreeNodes = useMemo(
+    () => buildFilteredAssetTreeNodes(filteredAssets, expandedKeySet),
+    [expandedKeySet, filteredAssets],
+  );
 
   /** Prime `selectionMode="single"`: `selectionKeys` is the node key string or null — not `{ id: true }`. */
   const treeSelectionKey = selectedAsset?.id ?? pendingTreeSelectionId ?? null;
@@ -819,6 +871,10 @@ export function AssetsPage() {
     setSelectedAsset(null);
   }, [assets]);
 
+  const handleTreeRowToggle = useCallback((e: { value?: Record<string, boolean> }) => {
+    setTreeExpandedKeys((e.value ?? {}) as Record<string, boolean>);
+  }, []);
+
   useEffect(() => {
     if (viewMode !== "tree") {
       setPendingTreeSelectionId(null);
@@ -830,11 +886,36 @@ export function AssetsPage() {
     setSelectedAsset(row ?? null);
   }, [assets, pendingTreeSelectionId, viewMode]);
 
+  useEffect(() => {
+    const existingIds = new Set(filteredAssets.map((a) => a.id));
+    setTreeExpandedKeys((current) => {
+      const next: Record<string, boolean> = {};
+      for (const [k, v] of Object.entries(current)) {
+        if (v && existingIds.has(k)) next[k] = true;
+      }
+      return next;
+    });
+  }, [filteredAssets]);
+
   const treeRowClassName = useCallback((node: TreeNode): Record<string, boolean> => {
     if (!colorizeTreeRows || !node.data) return {};
     const row = node.data as Asset;
     return { [`app-asset-row-type-${row.type}`]: true };
   }, [colorizeTreeRows]);
+
+  useLayoutEffect(() => {
+    const recalcAssetsGridHeight = () => {
+      const host = assetsGridHostRef.current;
+      if (!host) return;
+      const top = host.getBoundingClientRect().top;
+      // Keep a small bottom gap so paginator/scrollbars do not touch viewport edge.
+      const next = Math.max(280, Math.floor(window.innerHeight - top - 12));
+      setAssetsGridScrollHeight(`${next}px`);
+    };
+    recalcAssetsGridHeight();
+    window.addEventListener("resize", recalcAssetsGridHeight);
+    return () => window.removeEventListener("resize", recalcAssetsGridHeight);
+  }, [viewMode]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1279,11 +1360,33 @@ export function AssetsPage() {
     [deleteRow, t],
   );
 
+  const tableCtx = useTableContextMenu<Asset>({
+    labels: { new: t("assets.new"), edit: t("assets.edit"), delete: t("assets.delete") },
+    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    selection: selectedAsset,
+    setSelection: setSelectedAsset,
+  });
+
+  const treeCtx = useTreeTableContextMenu<Asset>({
+    labels: { new: t("assets.new"), edit: t("assets.edit"), delete: t("assets.delete") },
+    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    selection: selectedAsset,
+    setSelection: setSelectedAsset,
+    rows: assets,
+  });
+
   useEffect(() => {
     if (selectedAsset && !assets.some((asset) => asset.id === selectedAsset.id)) {
       setSelectedAsset(null);
     }
   }, [assets, selectedAsset]);
+
+  useEffect(() => {
+    setHeaderRowCount(filteredAssets.length);
+    return () => {
+      setHeaderRowCount(null);
+    };
+  }, [filteredAssets.length, setHeaderRowCount]);
 
   useEffect(() => {
     setHeaderActions(
@@ -1588,19 +1691,25 @@ export function AssetsPage() {
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
+      {tableCtx.ContextMenuEl}
+      {treeCtx.ContextMenuEl}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* key=viewMode: remount subtree after switching modes so flex scroll / observers re-init (Tree→Table→Tree). */}
-        <div key={viewMode} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {viewMode === "table" ? (
+      <div ref={assetsGridHostRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Preload both views once; switch visibility only for faster table<->tree toggles. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            className={viewMode === "table" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}
+            {...tableCtx.wrapperProps}
+          >
           <DataTable
-            className="app-data-table app-assets-data-grid flex min-h-0 min-w-0 w-full flex-1"
+            className="app-data-table flex min-h-0 min-w-0 w-full flex-1"
             value={filteredAssets}
             loading={loading}
             dataKey="id"
             selection={selectedAsset}
             onSelectionChange={(e) => setSelectedAsset(e.value as Asset | null)}
             onRowDoubleClick={(e) => openEdit(e.data as Asset)}
+            {...tableCtx.tableProps}
             selectionMode="single"
             metaKeySelection={false}
             stripedRows
@@ -1608,7 +1717,7 @@ export function AssetsPage() {
             scrollable
             resizableColumns
             columnResizeMode="expand"
-            scrollHeight="flex"
+            scrollHeight={assetsGridScrollHeight}
             virtualScrollerOptions={assetsTableVirtualScrollerOptions}
             tableStyle={{ minWidth: "118rem" }}
             stateStorage="local"
@@ -1660,7 +1769,7 @@ export function AssetsPage() {
               header={t("assets.references")}
               body={referencesBody}
               sortable
-              className="min-w-32"
+              style={{ width: "8rem", minWidth: "8rem", maxWidth: "8rem" }}
             />
             <Column
               field="createdAt"
@@ -1689,9 +1798,13 @@ export function AssetsPage() {
               className="min-w-36 text-on-surface-variant"
             />
           </DataTable>
-        ) : (
+          </div>
+          <div
+            className={viewMode === "tree" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}
+            {...treeCtx.wrapperProps}
+          >
           <TreeTable
-            className={`app-data-table app-assets-data-grid app-assets-treetable flex min-h-0 min-w-0 w-full flex-1 ${
+            className={`app-data-table app-assets-treetable flex min-h-0 min-w-0 w-full flex-1 ${
               colorizeTreeRows ? "app-assets-treetable--type-colored" : ""
             }`}
             value={assetTreeNodes}
@@ -1699,6 +1812,9 @@ export function AssetsPage() {
             selectionMode="single"
             selectionKeys={treeSelectionKey}
             onSelectionChange={handleTreeSelectionChange}
+            {...treeCtx.treeTableProps}
+            expandedKeys={treeExpandedKeys}
+            onToggle={handleTreeRowToggle}
             rowClassName={treeRowClassName}
             onRowClick={(e: TreeTableEvent) => {
               const oe = e.originalEvent as MouseEvent<HTMLElement>;
@@ -1713,11 +1829,13 @@ export function AssetsPage() {
             scrollable
             resizableColumns
             columnResizeMode="expand"
-            scrollHeight="flex"
+            scrollHeight={assetsGridScrollHeight}
             tableStyle={{ minWidth: "118rem" }}
             style={treeTableStyle}
-            stateStorage="local"
-            stateKey="athene-assets-tree-table"
+            stateStorage="custom"
+            stateKey={ASSETS_TREE_TABLE_STATE_STORAGE_KEY}
+            customRestoreState={readAssetsTreeTableStoredState}
+            customSaveState={writeAssetsTreeTableState}
             emptyMessage={t("assets.empty")}
           >
             <Column field="key" header={t("assets.key")} expander sortable className="min-w-28" />
@@ -1783,7 +1901,7 @@ export function AssetsPage() {
               header={t("assets.references")}
               body={(node: TreeNode) => (node.data ? referencesBody(node.data as Asset) : null)}
               sortable
-              className="min-w-32"
+              style={{ width: "8rem", minWidth: "8rem", maxWidth: "8rem" }}
               bodyClassName="app-assets-treetable-ref-cell"
             />
             <Column
@@ -1819,7 +1937,7 @@ export function AssetsPage() {
               body={(node: TreeNode) => (node.data ? (node.data as Asset).updatedBy : null)}
             />
           </TreeTable>
-        )}
+          </div>
         </div>
       </div>
 
@@ -1972,7 +2090,7 @@ export function AssetsPage() {
                       const next = e.value instanceof Date ? formatDateOnly(e.value) : "";
                       setForm((cur) => ({ ...cur, buildDate: next }));
                     }}
-                    dateFormat="yy-mm-dd"
+                    dateFormat={calendarDateFormat}
                     className="w-full"
                     appendTo={overlayAppendTo}
                   />

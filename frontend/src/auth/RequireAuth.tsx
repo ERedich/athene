@@ -12,12 +12,14 @@ type MeResponse = {
   user: AuthUser;
   appParameterBooleans?: Record<string, boolean>;
   appParameterAssetTypes?: AssetTypeDisplayConfig | null;
+  appParameterDefaultWorkgroupId?: string | null;
 };
 
 type SessionBase = {
   user: AuthUser;
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
+  appParameterDefaultWorkgroupId: string | null;
 };
 
 type ShellEnterPhase = "none" | "initial" | "animate";
@@ -36,6 +38,7 @@ export function RequireAuth() {
       user: data.user,
       appParameterBooleans: data.appParameterBooleans ?? {},
       appParameterAssetTypes: data.appParameterAssetTypes ?? null,
+      appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
     });
   }, []);
 
@@ -53,6 +56,7 @@ export function RequireAuth() {
           user: data.user,
           appParameterBooleans: data.appParameterBooleans ?? {},
           appParameterAssetTypes: data.appParameterAssetTypes ?? null,
+          appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
         });
         setPhase("ok");
       })
@@ -114,6 +118,7 @@ export function RequireAuth() {
     user: sessionBase.user,
     appParameterBooleans: sessionBase.appParameterBooleans,
     appParameterAssetTypes: sessionBase.appParameterAssetTypes,
+    appParameterDefaultWorkgroupId: sessionBase.appParameterDefaultWorkgroupId,
     refresh,
   };
 

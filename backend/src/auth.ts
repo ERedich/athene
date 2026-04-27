@@ -1,6 +1,10 @@
 import { Router, type Request, type Response } from "express";
 
-import { fetchAppParameterBooleans, getAssetTypeDisplayConfig } from "./appParameters.js";
+import {
+  fetchAppParameterBooleans,
+  getAssetTypeDisplayConfig,
+  getDefaultWorkOrderWorkgroupId,
+} from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
 import { clearSessionCookie, writeSessionCookie } from "./sessionToken.js";
@@ -10,9 +14,25 @@ export type AuthUserRow = {
   loginName: string;
   name: string;
   workingSiteId: string;
+  employeeId: string | null;
+  employeeKey: string | null;
+  employeeName: string | null;
 };
 
 const router = Router();
+
+const authUserSelect = `
+  SELECT
+    u."id",
+    u."loginName",
+    u."name",
+    u."workingSiteId",
+    u."employeeId",
+    emp."key" AS "employeeKey",
+    emp."name" AS "employeeName"
+  FROM "users" u
+  LEFT JOIN "employee" emp ON emp."id" = u."employeeId"
+`;
 
 router.post("/login", async (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown> | null | undefined;
@@ -25,10 +45,9 @@ router.post("/login", async (req: Request, res: Response) => {
   try {
     const { rows } = await pool.query<AuthUserRow>(
       `
-      SELECT "id", "loginName", "name", "workingSiteId"
-      FROM "users"
-      WHERE "loginName" = $1
-        AND "passwordHash" = crypt($2, "passwordHash")
+      ${authUserSelect}
+      WHERE u."loginName" = $1
+        AND u."passwordHash" = crypt($2, u."passwordHash")
       LIMIT 1
       `,
       [loginName, password],
@@ -55,9 +74,8 @@ router.get("/me", async (req: Request, res: Response) => {
   try {
     const { rows } = await pool.query<AuthUserRow>(
       `
-      SELECT "id", "loginName", "name", "workingSiteId"
-      FROM "users"
-      WHERE "id" = $1::uuid
+      ${authUserSelect}
+      WHERE u."id" = $1::uuid
       LIMIT 1
       `,
       [userId],
@@ -70,6 +88,7 @@ router.get("/me", async (req: Request, res: Response) => {
     }
     let appParameterBooleans: Record<string, boolean> = {};
     let appParameterAssetTypes: Awaited<ReturnType<typeof getAssetTypeDisplayConfig>> = null;
+    let appParameterDefaultWorkgroupId: string | null = null;
     try {
       appParameterBooleans = await fetchAppParameterBooleans(pool);
     } catch (paramErr) {
@@ -80,7 +99,12 @@ router.get("/me", async (req: Request, res: Response) => {
     } catch (atypErr) {
       console.warn("[athene-backend] GN-ATYP load skipped:", atypErr);
     }
-    res.json({ user, appParameterBooleans, appParameterAssetTypes });
+    try {
+      appParameterDefaultWorkgroupId = await getDefaultWorkOrderWorkgroupId(pool);
+    } catch (dwgErr) {
+      console.warn("[athene-backend] WO-DWG load skipped:", dwgErr);
+    }
+    res.json({ user, appParameterBooleans, appParameterAssetTypes, appParameterDefaultWorkgroupId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });

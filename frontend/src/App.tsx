@@ -6,9 +6,13 @@ import { AppParametersPage } from "./pages/AppParametersPage";
 import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
+import { EmployeesPage } from "./pages/EmployeesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { WorkOrdersPage } from "./pages/WorkOrdersPage";
+import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { SitesPage } from "./pages/SitesPage";
+import { TableViewerPage } from "./pages/TableViewerPage";
 import { UsersPage } from "./pages/UsersPage";
 
 export default function App() {
@@ -19,14 +23,19 @@ export default function App() {
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="assets" element={<AssetsPage />} />
+          <Route path="workorders" element={<WorkOrdersPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="employees" element={<EmployeesPage />} />
           <Route path="cost-centers" element={<CostCentersPage />} />
+          <Route path="workgroups" element={<WorkgroupsPage />} />
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
+          <Route path="table-viewer" element={<TableViewerPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
+

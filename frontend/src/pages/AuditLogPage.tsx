@@ -49,7 +49,7 @@ function operationBadgeClass(operation: string): string {
 
 export function AuditLogPage() {
   const { t, i18n } = useTranslation();
-  const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
+  const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [rows, setRows] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -75,6 +75,13 @@ export function AuditLogPage() {
     ],
     [t],
   );
+
+  useEffect(() => {
+    setHeaderRowCount(total);
+    return () => {
+      setHeaderRowCount(null);
+    };
+  }, [setHeaderRowCount, total]);
 
   const filteredRows = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

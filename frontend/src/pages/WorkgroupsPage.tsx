@@ -11,6 +11,7 @@ import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
+import { MultiSelect } from "primereact/multiselect";
 import { Toast } from "primereact/toast";
 
 import { useAuth } from "../auth/AuthContext";
@@ -28,9 +29,16 @@ type SiteOption = {
   colorHex: string;
 };
 
+type EmployeeOption = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+};
+
 type SiteDropdownOption = { label: string; value: string };
 
-type CostCenter = {
+type Workgroup = {
   id: string;
   key: string;
   name: string;
@@ -39,6 +47,7 @@ type CostCenter = {
   siteName: string;
   siteColorHex: string;
   isActive: boolean;
+  employeeIds: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -50,6 +59,7 @@ type FormState = {
   name: string;
   siteId: string;
   isActive: boolean;
+  employeeIds: string[];
 };
 
 const emptyForm = (): FormState => ({
@@ -57,6 +67,7 @@ const emptyForm = (): FormState => ({
   name: "",
   siteId: "",
   isActive: true,
+  employeeIds: [],
 });
 
 const actionNavItem =
@@ -69,21 +80,33 @@ const createActionIcon = "text-green-500/70";
 const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 const deleteActionIcon = "text-red-500";
 
-export function CostCentersPage() {
+function hasEmployeeSiteAccess(employee: EmployeeOption, siteId: string): boolean {
+  return employee.siteId === siteId;
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return [...new Set(ids)];
+}
+
+export function WorkgroupsPage() {
   const { t, i18n } = useTranslation();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
-  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCostCenter, setSelectedCostCenter] = useState<CostCenter | null>(null);
+  const [selectedWorkgroup, setSelectedWorkgroup] = useState<Workgroup | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const siteLookup = useMemo(() => new Map(sites.map((site) => [site.id, site])), [sites]);
+  const employeeLookup = useMemo(() => new Map(employees.map((entry) => [entry.id, entry])), [employees]);
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
@@ -92,7 +115,7 @@ export function CostCentersPage() {
 
   const renderSiteDropdownOption = useCallback(
     (option: SiteDropdownOption) => {
-      const site = sites.find((s) => s.id === option.value);
+      const site = siteLookup.get(option.value);
       const hex = site?.colorHex || DEFAULT_SITE_COLOR_HEX;
       return (
         <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${option.label} (${hex})`}>
@@ -100,7 +123,7 @@ export function CostCentersPage() {
         </span>
       );
     },
-    [sites],
+    [siteLookup],
   );
 
   const renderSiteDropdownValue = useCallback(
@@ -111,9 +134,9 @@ export function CostCentersPage() {
           : incoming && typeof incoming === "object" && incoming !== null && "value" in incoming
             ? String((incoming as { value: unknown }).value ?? "")
             : "";
-      const site = sites.find((s) => s.id === id);
+      const site = siteLookup.get(id);
       if (!site) {
-        return <span className="text-on-surface-variant">{t("costCenters.sitePlaceholder")}</span>;
+        return <span className="text-on-surface-variant">{t("workgroups.sitePlaceholder")}</span>;
       }
       const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
       const label = `${site.key} - ${site.name}`;
@@ -123,55 +146,59 @@ export function CostCentersPage() {
         </span>
       );
     },
-    [sites, t],
+    [siteLookup, t],
   );
 
-  const siteColumnBody = useCallback((row: CostCenter) => {
-    const hex = row.siteColorHex || DEFAULT_SITE_COLOR_HEX;
-    const label = `${row.siteKey} - ${row.siteName}`;
-    return (
-      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
-        {row.siteName}
-      </span>
-    );
-  }, []);
+  const eligibleEmployees = useMemo(() => {
+    if (!form.siteId) return [];
+    return employees.filter((entry) => hasEmployeeSiteAccess(entry, form.siteId));
+  }, [employees, form.siteId]);
 
-  const filteredCostCenters = useMemo(() => {
+  const filteredWorkgroups = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return costCenters;
-    return costCenters.filter((row) =>
-      [row.key, row.name, row.siteKey, row.siteName, row.siteColorHex, row.createdBy, row.updatedBy]
+    if (!q) return workgroups;
+    return workgroups.filter((row) => {
+      const memberText = row.employeeIds
+        .map((id) => {
+          const member = employeeLookup.get(id);
+          return member ? `${member.key} ${member.name}` : "";
+        })
+        .join(" ");
+      return [row.key, row.name, row.siteKey, row.siteName, row.createdBy, row.updatedBy, memberText]
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [costCenters, searchTerm]);
+        .includes(q);
+    });
+  }, [employeeLookup, searchTerm, workgroups]);
 
   useEffect(() => {
-    setHeaderRowCount(filteredCostCenters.length);
+    setHeaderRowCount(filteredWorkgroups.length);
     return () => {
       setHeaderRowCount(null);
     };
-  }, [filteredCostCenters.length, setHeaderRowCount]);
+  }, [filteredWorkgroups.length, setHeaderRowCount]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [costCentersRes, sitesRes] = await Promise.all([
-        apiFetch("/api/cost-centers"),
+      const [workgroupsRes, sitesRes, employeesRes] = await Promise.all([
+        apiFetch("/api/workgroups"),
         apiFetch("/api/sites"),
+        apiFetch("/api/employees"),
       ]);
-      if (!costCentersRes.ok || !sitesRes.ok) throw new Error("load");
-      const [costCentersData, sitesData] = (await Promise.all([
-        costCentersRes.json(),
+      if (!workgroupsRes.ok || !sitesRes.ok || !employeesRes.ok) throw new Error("load");
+      const [workgroupsData, sitesData, employeesData] = (await Promise.all([
+        workgroupsRes.json(),
         sitesRes.json(),
-      ])) as [CostCenter[], SiteOption[]];
-      setCostCenters(costCentersData);
+        employeesRes.json(),
+      ])) as [Workgroup[], SiteOption[], EmployeeOption[]];
+      setWorkgroups(workgroupsData);
       setSites(sitesData);
+      setEmployees(employeesData);
     } catch {
       toastRef.current?.show({
         severity: "error",
-        summary: t("costCenters.loadError"),
+        summary: t("workgroups.loadError"),
         life: 6000,
       });
     } finally {
@@ -192,13 +219,14 @@ export function CostCentersPage() {
     setDialogVisible(true);
   }, [siteFieldLocked, user.workingSiteId]);
 
-  const openEdit = useCallback((row: CostCenter) => {
+  const openEdit = useCallback((row: Workgroup) => {
     setEditingId(row.id);
     setForm({
       key: row.key,
       name: row.name,
       siteId: row.siteId,
       isActive: row.isActive,
+      employeeIds: uniqueIds(row.employeeIds),
     });
     setDialogVisible(true);
   }, []);
@@ -211,9 +239,10 @@ export function CostCentersPage() {
     } catch {
       /* ignore */
     }
-    let detail = t("costCenters.saveError");
-    if (code === "duplicate_key") detail = t("costCenters.duplicateKey");
-    if (code === "foreign_key_violation") detail = t("costCenters.foreignKey");
+    let detail = t("workgroups.saveError");
+    if (code === "duplicate_key") detail = t("workgroups.duplicateKey");
+    if (code === "foreign_key_violation") detail = t("workgroups.foreignKey");
+    if (code === "member_site_mismatch") detail = t("workgroups.memberSiteMismatch");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -224,7 +253,7 @@ export function CostCentersPage() {
     if (!key || !name || !siteId) {
       toastRef.current?.show({
         severity: "warn",
-        summary: t("costCenters.validationRequired"),
+        summary: t("workgroups.validationRequired"),
         life: 4000,
       });
       return;
@@ -236,8 +265,9 @@ export function CostCentersPage() {
         name,
         siteId,
         isActive: form.isActive,
+        employeeIds: uniqueIds(form.employeeIds),
       };
-      const url = editingId ? `/api/cost-centers/${editingId}` : "/api/cost-centers";
+      const url = editingId ? `/api/workgroups/${editingId}` : "/api/workgroups";
       const res = await apiFetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -251,13 +281,13 @@ export function CostCentersPage() {
       await loadData();
       toastRef.current?.show({
         severity: "success",
-        summary: editingId ? t("costCenters.saved") : t("costCenters.created"),
+        summary: editingId ? t("workgroups.saved") : t("workgroups.created"),
         life: 3000,
       });
     } catch {
       toastRef.current?.show({
         severity: "error",
-        summary: t("costCenters.saveError"),
+        summary: t("workgroups.saveError"),
         life: 6000,
       });
     } finally {
@@ -268,13 +298,13 @@ export function CostCentersPage() {
   const deleteRow = useCallback(
     async (id: string) => {
       try {
-        const res = await apiFetch(`/api/cost-centers/${id}`, { method: "DELETE" });
+        const res = await apiFetch(`/api/workgroups/${id}`, { method: "DELETE" });
         if (res.status === 204) {
-          setSelectedCostCenter((cur) => (cur?.id === id ? null : cur));
+          setSelectedWorkgroup((cur) => (cur?.id === id ? null : cur));
           await loadData();
           toastRef.current?.show({
             severity: "success",
-            summary: t("costCenters.deleted"),
+            summary: t("workgroups.deleted"),
             life: 3000,
           });
           return;
@@ -287,14 +317,12 @@ export function CostCentersPage() {
           /* ignore */
         }
         const detail =
-          code === "foreign_key_violation"
-            ? t("costCenters.foreignKey")
-            : t("costCenters.deleteError");
+          code === "foreign_key_violation" ? t("workgroups.foreignKey") : t("workgroups.deleteError");
         toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
       } catch {
         toastRef.current?.show({
           severity: "error",
-          summary: t("costCenters.deleteError"),
+          summary: t("workgroups.deleteError"),
           life: 6000,
         });
       }
@@ -303,32 +331,32 @@ export function CostCentersPage() {
   );
 
   const confirmDelete = useCallback(
-    (row: CostCenter) => {
+    (row: Workgroup) => {
       confirmDialog({
-        message: t("costCenters.confirmDelete", { name: row.name }),
-        header: t("costCenters.confirmDeleteTitle"),
+        message: t("workgroups.confirmDelete", { name: row.name }),
+        header: t("workgroups.confirmDeleteTitle"),
         icon: "pi pi-exclamation-triangle",
         acceptClassName: "p-button-danger",
-        acceptLabel: t("costCenters.yes"),
-        rejectLabel: t("costCenters.no"),
+        acceptLabel: t("workgroups.yes"),
+        rejectLabel: t("workgroups.no"),
         accept: () => void deleteRow(row.id),
       });
     },
     [deleteRow, t],
   );
 
-  const tableCtx = useTableContextMenu<CostCenter>({
-    labels: { new: t("costCenters.new"), edit: t("costCenters.edit"), delete: t("costCenters.delete") },
+  const tableCtx = useTableContextMenu<Workgroup>({
+    labels: { new: t("workgroups.new"), edit: t("workgroups.edit"), delete: t("workgroups.delete") },
     handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
-    selection: selectedCostCenter,
-    setSelection: setSelectedCostCenter,
+    selection: selectedWorkgroup,
+    setSelection: setSelectedWorkgroup,
   });
 
   useEffect(() => {
-    if (selectedCostCenter && !costCenters.some((cc) => cc.id === selectedCostCenter.id)) {
-      setSelectedCostCenter(null);
+    if (selectedWorkgroup && !workgroups.some((entry) => entry.id === selectedWorkgroup.id)) {
+      setSelectedWorkgroup(null);
     }
-  }, [costCenters, selectedCostCenter]);
+  }, [selectedWorkgroup, workgroups]);
 
   useEffect(() => {
     setHeaderActions(
@@ -336,33 +364,33 @@ export function CostCentersPage() {
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
             <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
-            <span>{t("costCenters.new")}</span>
+            <span>{t("workgroups.new")}</span>
           </button>
         </li>
         <li>
           <button
             type="button"
             className={primaryActionNavItem}
-            disabled={!selectedCostCenter}
+            disabled={!selectedWorkgroup}
             onClick={() => {
-              if (selectedCostCenter) openEdit(selectedCostCenter);
+              if (selectedWorkgroup) openEdit(selectedWorkgroup);
             }}
           >
             <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
-            <span>{t("costCenters.edit")}</span>
+            <span>{t("workgroups.edit")}</span>
           </button>
         </li>
         <li>
           <button
             type="button"
             className={deleteActionNavItem}
-            disabled={!selectedCostCenter}
+            disabled={!selectedWorkgroup}
             onClick={() => {
-              if (selectedCostCenter) confirmDelete(selectedCostCenter);
+              if (selectedWorkgroup) confirmDelete(selectedWorkgroup);
             }}
           >
             <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
-            <span>{t("costCenters.delete")}</span>
+            <span>{t("workgroups.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
@@ -371,7 +399,7 @@ export function CostCentersPage() {
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t("costCenters.searchPlaceholder")}
+              placeholder={t("workgroups.searchPlaceholder")}
               className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
             />
           </IconField>
@@ -381,14 +409,66 @@ export function CostCentersPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedCostCenter, setHeaderActions, t]);
+  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedWorkgroup, setHeaderActions, t]);
 
-  const activeBody = (row: CostCenter) =>
+  useEffect(() => {
+    if (!form.siteId) return;
+    setForm((cur) => {
+      const filtered = cur.employeeIds.filter((id) => {
+        const entry = employeeLookup.get(id);
+        return entry ? hasEmployeeSiteAccess(entry, cur.siteId) : false;
+      });
+      if (filtered.length === cur.employeeIds.length) return cur;
+      return { ...cur, employeeIds: filtered };
+    });
+  }, [employeeLookup, form.siteId]);
+
+  const activeBody = (row: Workgroup) =>
     row.isActive ? (
-      <i className="pi pi-check text-on-surface" aria-label={t("costCenters.active")} />
+      <i className="pi pi-check text-on-surface" aria-label={t("workgroups.active")} />
     ) : (
-      <span className="text-on-surface-variant">{t("costCenters.inactive")}</span>
+      <span className="text-on-surface-variant">{t("workgroups.inactive")}</span>
     );
+
+  const siteColumnBody = useCallback((row: Workgroup) => {
+    const hex = row.siteColorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${row.siteKey} - ${row.siteName}`;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {row.siteName}
+      </span>
+    );
+  }, []);
+
+  const membersBody = useCallback(
+    (row: Workgroup) => {
+      const names = row.employeeIds
+        .map((id) => {
+          const entry = employeeLookup.get(id);
+          return entry ? `${entry.key} - ${entry.name}` : id;
+        })
+        .join(", ");
+      return <span title={names || undefined}>{row.employeeIds.length}</span>;
+    },
+    [employeeLookup],
+  );
+
+  const formatEmployeeOption = (entry: EmployeeOption): string => `${entry.key} - ${entry.name}`;
+
+  const employeeOptionTemplate = (entry: EmployeeOption) => (
+    <span className="truncate">{formatEmployeeOption(entry)}</span>
+  );
+
+  const selectedEmployeeTemplate = (value: string | EmployeeOption | undefined) => {
+    const id =
+      typeof value === "string"
+        ? value
+        : value && typeof value === "object" && typeof value.id === "string"
+          ? value.id
+          : "";
+    const entry = employeeLookup.get(id);
+    return <span className="mr-1 truncate text-sm">{entry ? formatEmployeeOption(entry) : id}</span>;
+  };
 
   const formatShortDt = (iso: string) => {
     try {
@@ -405,7 +485,7 @@ export function CostCentersPage() {
     <div className="flex justify-end gap-2">
       <Button
         type="button"
-        label={t("costCenters.cancel")}
+        label={t("workgroups.cancel")}
         severity="secondary"
         outlined
         disabled={saving}
@@ -413,7 +493,7 @@ export function CostCentersPage() {
       />
       <Button
         type="button"
-        label={t("costCenters.save")}
+        label={t("workgroups.save")}
         icon="pi pi-check"
         loading={saving}
         onClick={() => void save()}
@@ -430,12 +510,12 @@ export function CostCentersPage() {
       <div className="flex min-h-0 flex-1 flex-col" {...tableCtx.wrapperProps}>
         <DataTable
           className="app-data-table w-full"
-          value={filteredCostCenters}
+          value={filteredWorkgroups}
           loading={loading}
           dataKey="id"
-          selection={selectedCostCenter}
-          onSelectionChange={(e) => setSelectedCostCenter(e.value as CostCenter | null)}
-          onRowDoubleClick={(e) => openEdit(e.data as CostCenter)}
+          selection={selectedWorkgroup}
+          onSelectionChange={(e) => setSelectedWorkgroup(e.value as Workgroup | null)}
+          onRowDoubleClick={(e) => openEdit(e.data as Workgroup)}
           {...tableCtx.tableProps}
           selectionMode="single"
           metaKeySelection={false}
@@ -445,38 +525,39 @@ export function CostCentersPage() {
           resizableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
-          tableStyle={{ minWidth: "68rem" }}
+          tableStyle={{ minWidth: "74rem" }}
           stateStorage="local"
-          stateKey="athene-cost-centers-table"
-          emptyMessage={t("costCenters.empty")}
+          stateKey="athene-workgroups-table"
+          emptyMessage={t("workgroups.empty")}
         >
-          <Column field="key" header={t("costCenters.key")} sortable />
-          <Column field="name" header={t("costCenters.name")} sortable />
-          <Column field="siteName" header={t("costCenters.site")} sortable body={siteColumnBody} />
-          <Column header={t("costCenters.active")} body={activeBody} className="w-28 text-center" />
+          <Column field="key" header={t("workgroups.key")} sortable />
+          <Column field="name" header={t("workgroups.name")} sortable />
+          <Column field="siteName" header={t("workgroups.site")} sortable body={siteColumnBody} />
+          <Column header={t("workgroups.members")} body={membersBody} className="w-32 text-center" />
+          <Column header={t("workgroups.active")} body={activeBody} className="w-28 text-center" />
           <Column
             field="createdAt"
-            header={t("costCenters.createdAt")}
-            body={(row: CostCenter) => formatShortDt(row.createdAt)}
+            header={t("workgroups.createdAt")}
+            body={(row: Workgroup) => formatShortDt(row.createdAt)}
             sortable
             className="whitespace-nowrap text-on-surface-variant"
           />
           <Column
             field="createdBy"
-            header={t("costCenters.createdBy")}
+            header={t("workgroups.createdBy")}
             sortable
             className="text-on-surface-variant"
           />
           <Column
             field="updatedAt"
-            header={t("costCenters.updatedAt")}
-            body={(row: CostCenter) => formatShortDt(row.updatedAt)}
+            header={t("workgroups.updatedAt")}
+            body={(row: Workgroup) => formatShortDt(row.updatedAt)}
             sortable
             className="whitespace-nowrap text-on-surface-variant"
           />
           <Column
             field="updatedBy"
-            header={t("costCenters.updatedBy")}
+            header={t("workgroups.updatedBy")}
             sortable
             className="text-on-surface-variant"
           />
@@ -484,9 +565,9 @@ export function CostCentersPage() {
       </div>
 
       <Dialog
-        header={editingId ? t("costCenters.editTitle") : t("costCenters.createTitle")}
+        header={editingId ? t("workgroups.editTitle") : t("workgroups.createTitle")}
         visible={dialogVisible}
-        style={{ width: "min(32rem, 95vw)" }}
+        style={{ width: "min(36rem, 95vw)" }}
         onHide={() => setDialogVisible(false)}
         footer={dialogFooter}
         modal
@@ -497,56 +578,56 @@ export function CostCentersPage() {
         <div className="flex flex-col gap-4 pt-1">
           <div className="space-y-2">
             <label
-              htmlFor="cost-center-key"
+              htmlFor="workgroup-key"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("costCenters.key")}
+              {t("workgroups.key")}
               <span className="app-required-marker" aria-hidden>
                 *
               </span>
             </label>
             <InputText
-              id="cost-center-key"
+              id="workgroup-key"
               value={form.key}
-              onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
+              onChange={(e) => setForm((cur) => ({ ...cur, key: e.target.value }))}
               className="w-full"
               autoComplete="off"
             />
           </div>
           <div className="space-y-2">
             <label
-              htmlFor="cost-center-name"
+              htmlFor="workgroup-name"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("costCenters.name")}
+              {t("workgroups.name")}
               <span className="app-required-marker" aria-hidden>
                 *
               </span>
             </label>
             <InputText
-              id="cost-center-name"
+              id="workgroup-name"
               value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              onChange={(e) => setForm((cur) => ({ ...cur, name: e.target.value }))}
               className="w-full"
               autoComplete="off"
             />
           </div>
           <div className="space-y-2">
             <label
-              htmlFor="cost-center-site"
+              htmlFor="workgroup-site"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("costCenters.site")}
+              {t("workgroups.site")}
               <span className="app-required-marker" aria-hidden>
                 *
               </span>
             </label>
             <Dropdown
-              inputId="cost-center-site"
+              inputId="workgroup-site"
               value={form.siteId}
               options={siteDropdownOptions}
-              onChange={(e) => setForm((f) => ({ ...f, siteId: String(e.value ?? "") }))}
-              placeholder={t("costCenters.sitePlaceholder")}
+              onChange={(e) => setForm((cur) => ({ ...cur, siteId: String(e.value ?? "") }))}
+              placeholder={t("workgroups.sitePlaceholder")}
               className="w-full app-inline-icon-dropdown"
               itemTemplate={renderSiteDropdownOption}
               valueTemplate={renderSiteDropdownValue}
@@ -555,15 +636,44 @@ export function CostCentersPage() {
               appendTo={overlayAppendTo}
             />
           </div>
-          <label className="flex items-center gap-3 cursor-pointer group">
+          <div className="space-y-2">
+            <label
+              htmlFor="workgroup-members"
+              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+            >
+              {t("workgroups.members")}
+            </label>
+            <MultiSelect
+              inputId="workgroup-members"
+              value={form.employeeIds}
+              options={eligibleEmployees}
+              optionLabel="name"
+              optionValue="id"
+              itemTemplate={employeeOptionTemplate}
+              selectedItemTemplate={selectedEmployeeTemplate}
+              onChange={(e) =>
+                setForm((cur) => ({
+                  ...cur,
+                  employeeIds: uniqueIds((Array.isArray(e.value) ? e.value : []).map((entry) => String(entry))),
+                }))
+              }
+              placeholder={t("workgroups.membersPlaceholder")}
+              className="w-full"
+              filter
+              display="comma"
+              appendTo={overlayAppendTo}
+              disabled={!form.siteId}
+            />
+          </div>
+          <label className="flex cursor-pointer items-center gap-3 group">
             <Checkbox
-              inputId="cost-center-isActive"
+              inputId="workgroup-is-active"
               checked={form.isActive}
-              onChange={(e) => setForm((f) => ({ ...f, isActive: Boolean(e.checked) }))}
+              onChange={(e) => setForm((cur) => ({ ...cur, isActive: Boolean(e.checked) }))}
               className="rounded-none"
             />
-            <span className="text-[11px] text-on-surface-variant uppercase tracking-wide">
-              {t("costCenters.active")}
+            <span className="text-[11px] uppercase tracking-wide text-on-surface-variant">
+              {t("workgroups.active")}
             </span>
           </label>
         </div>

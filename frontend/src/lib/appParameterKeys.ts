@@ -5,3 +5,6 @@ export const APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS = "GN-CATR" as const;
 
 /** Must match backend `APP_PARAM_KEY_ASSET_TYPES`. */
 export const APP_PARAM_KEY_ASSET_TYPES = "GN-ATYP" as const;
+
+/** Must match backend `APP_PARAM_KEY_DEFAULT_WORKGROUP` (WO-DWG). */
+export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG" as const;

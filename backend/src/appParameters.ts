@@ -9,6 +9,9 @@ export const APP_PARAM_KEY_ALLOW_SITE_CHANGE = "GN-ASC";
 /** Allgemein: Anzeigenamen und Farben der Asset-Typen (JSON). */
 export const APP_PARAM_KEY_ASSET_TYPES = "GN-ATYP";
 
+/** Aufträge: Standard-Fachgruppe für Neuanlagen (nullable UUID). */
+export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG";
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
 export type AssetTypeSlug = (typeof ASSET_TYPE_KEYS)[number];
 
@@ -32,10 +35,18 @@ export type AppParameterRow = {
   valueType: string;
   boolValue: boolean;
   jsonValue: unknown | null;
+  uuidValue: string | null;
   updatedAt: string;
 };
 
 type DbQueryable = Pick<Pool, "query">;
+
+const uuidRe =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && uuidRe.test(value);
+}
 
 /** Accepts #RGB / #RRGGBB or without #; returns normalized #rrggbb or null if invalid. */
 function parseColorHexStrict(raw: unknown): string | null {
@@ -119,6 +130,23 @@ export async function getAssetTypeDisplayConfig(client: DbQueryable): Promise<As
   }
 }
 
+export async function getDefaultWorkOrderWorkgroupId(client: DbQueryable): Promise<string | null> {
+  try {
+    const { rows } = await client.query<{ uuidValue: string | null }>(
+      `
+      SELECT "uuidValue"::text AS "uuidValue"
+      FROM "appParameter"
+      WHERE "key" = $1 AND "valueType" = 'uuid'
+      LIMIT 1
+      `,
+      [APP_PARAM_KEY_DEFAULT_WORKGROUP],
+    );
+    return rows[0]?.uuidValue ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const selectRowSql = `
   SELECT
     "id",
@@ -132,7 +160,24 @@ const selectRowSql = `
     "valueType",
     "boolValue",
     "jsonValue",
+    "uuidValue"::text AS "uuidValue",
     "updatedAt"::text AS "updatedAt"
+`;
+
+const returningRowColumns = `
+  "id",
+  "key",
+  "category",
+  "codeSuffix",
+  "nameDe",
+  "nameEn",
+  "descriptionDe",
+  "descriptionEn",
+  "valueType",
+  "boolValue",
+  "jsonValue",
+  "uuidValue"::text AS "uuidValue",
+  "updatedAt"::text AS "updatedAt"
 `;
 
 const router = Router();
@@ -197,19 +242,7 @@ router.patch("/:key", async (req: Request, res: Response) => {
         UPDATE "appParameter"
         SET "boolValue" = $1, "updatedAt" = now()
         WHERE "key" = $2 AND "valueType" = 'boolean'
-        RETURNING
-          "id",
-          "key",
-          "category",
-          "codeSuffix",
-          "nameDe",
-          "nameEn",
-          "descriptionDe",
-          "descriptionEn",
-          "valueType",
-          "boolValue",
-          "jsonValue",
-          "updatedAt"::text AS "updatedAt"
+        RETURNING ${returningRowColumns}
         `,
         [boolValue, key],
       );
@@ -237,21 +270,63 @@ router.patch("/:key", async (req: Request, res: Response) => {
         UPDATE "appParameter"
         SET "jsonValue" = $1::jsonb, "updatedAt" = now()
         WHERE "key" = $2 AND "valueType" = 'json'
-        RETURNING
-          "id",
-          "key",
-          "category",
-          "codeSuffix",
-          "nameDe",
-          "nameEn",
-          "descriptionDe",
-          "descriptionEn",
-          "valueType",
-          "boolValue",
-          "jsonValue",
-          "updatedAt"::text AS "updatedAt"
+        RETURNING ${returningRowColumns}
         `,
         [JSON.stringify(parsed), key],
+      );
+      const row = rows[0];
+      if (!row) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json(row);
+      return;
+    }
+
+    if (vt === "uuid") {
+      if (key !== APP_PARAM_KEY_DEFAULT_WORKGROUP) {
+        res.status(400).json({ error: "unsupported_uuid_parameter" });
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(body, "uuidValue")) {
+        res.status(400).json({ error: "invalid_body" });
+        return;
+      }
+      const raw = body.uuidValue;
+      let nextUuid: string | null;
+      if (raw === null) {
+        nextUuid = null;
+      } else if (isUuid(raw)) {
+        nextUuid = raw;
+      } else {
+        res.status(400).json({ error: "invalid_uuid_value" });
+        return;
+      }
+      if (nextUuid !== null) {
+        const { rows: okRows } = await pool.query<{ ok: boolean }>(
+          `
+          SELECT true AS "ok"
+          FROM "workgroup" w
+          JOIN "users" u ON u."id" = $2::uuid
+          WHERE w."id" = $1::uuid
+            AND w."siteId" = u."workingSiteId"
+          LIMIT 1
+          `,
+          [nextUuid, userId],
+        );
+        if (!okRows[0]?.ok) {
+          res.status(400).json({ error: "workgroup_site_mismatch" });
+          return;
+        }
+      }
+      const { rows } = await pool.query<AppParameterRow>(
+        `
+        UPDATE "appParameter"
+        SET "uuidValue" = $1::uuid, "updatedAt" = now()
+        WHERE "key" = $2 AND "valueType" = 'uuid'
+        RETURNING ${returningRowColumns}
+        `,
+        [nextUuid, key],
       );
       const row = rows[0];
       if (!row) {

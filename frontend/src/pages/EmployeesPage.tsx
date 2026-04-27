@@ -3,28 +3,42 @@ import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
-import { ColorPicker } from "primereact/colorpicker";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
+import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
+import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
-import { readableSiteColor } from "../lib/siteColor";
+import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 
-type Site = {
+type SiteOption = {
   id: string;
   key: string;
   name: string;
-  isPlant: boolean;
   colorHex: string;
+};
+
+type SiteDropdownOption = { label: string; value: string };
+
+type Employee = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  siteColorHex: string;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -34,32 +48,15 @@ type Site = {
 type FormState = {
   key: string;
   name: string;
-  isPlant: boolean;
-  colorHex: string;
+  siteId: string;
+  isActive: boolean;
 };
-
-const defaultColorHex = "#64748b";
-
-function pickerValueFromStored(hex: string): string {
-  return hex.replace(/^#/, "").toLowerCase();
-}
-
-function storedFromPickerValue(raw: string): string {
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/i.exec(withHash);
-  if (!m) return defaultColorHex;
-  let h = m[1]!.toLowerCase();
-  if (h.length === 3) {
-    h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
-  }
-  return `#${h}`;
-}
 
 const emptyForm = (): FormState => ({
   key: "",
   name: "",
-  isPlant: false,
-  colorHex: defaultColorHex,
+  siteId: "",
+  isActive: true,
 });
 
 const actionNavItem =
@@ -72,45 +69,106 @@ const createActionIcon = "text-green-500/70";
 const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 const deleteActionIcon = "text-red-500";
 
-export function SitesPage() {
+export function EmployeesPage() {
   const { t, i18n } = useTranslation();
+  const { user, appParameterBooleans } = useAuth();
+  const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
-  const [sites, setSites] = useState<Site[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [sites, setSites] = useState<SiteOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredSites = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return sites;
-    return sites.filter((site) =>
-      [site.key, site.name, site.colorHex, site.createdBy, site.updatedBy].join(" ").toLowerCase().includes(q),
+  const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
+    () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
+    [sites],
+  );
+
+  const renderSiteDropdownOption = useCallback(
+    (option: SiteDropdownOption) => {
+      const site = sites.find((s) => s.id === option.value);
+      const hex = site?.colorHex || DEFAULT_SITE_COLOR_HEX;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${option.label} (${hex})`}>
+          {option.label}
+        </span>
+      );
+    },
+    [sites],
+  );
+
+  const renderSiteDropdownValue = useCallback(
+    (incoming: unknown) => {
+      const id =
+        typeof incoming === "string"
+          ? incoming
+          : incoming && typeof incoming === "object" && incoming !== null && "value" in incoming
+            ? String((incoming as { value: unknown }).value ?? "")
+            : "";
+      const site = sites.find((s) => s.id === id);
+      if (!site) {
+        return <span className="text-on-surface-variant">{t("employees.sitePlaceholder")}</span>;
+      }
+      const hex = site.colorHex || DEFAULT_SITE_COLOR_HEX;
+      const label = `${site.key} - ${site.name}`;
+      return (
+        <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+          {label}
+        </span>
+      );
+    },
+    [sites, t],
+  );
+
+  const siteColumnBody = useCallback((row: Employee) => {
+    const hex = row.siteColorHex || DEFAULT_SITE_COLOR_HEX;
+    const label = `${row.siteKey} - ${row.siteName}`;
+    return (
+      <span className="truncate" style={{ color: readableSiteColor(hex) }} title={`${label} (${hex})`}>
+        {row.siteName}
+      </span>
     );
-  }, [sites, searchTerm]);
+  }, []);
+
+  const filteredEmployees = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter((row) =>
+      [row.key, row.name, row.siteKey, row.siteName, row.siteColorHex, row.createdBy, row.updatedBy]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [employees, searchTerm]);
 
   useEffect(() => {
-    setHeaderRowCount(filteredSites.length);
+    setHeaderRowCount(filteredEmployees.length);
     return () => {
       setHeaderRowCount(null);
     };
-  }, [filteredSites.length, setHeaderRowCount]);
+  }, [filteredEmployees.length, setHeaderRowCount]);
 
-  const loadSites = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/api/sites");
-      if (!res.ok) throw new Error("load");
-      const data = (await res.json()) as Site[];
-      setSites(data);
+      const [employeesRes, sitesRes] = await Promise.all([apiFetch("/api/employees"), apiFetch("/api/sites")]);
+      if (!employeesRes.ok || !sitesRes.ok) throw new Error("load");
+      const [employeesData, sitesData] = (await Promise.all([
+        employeesRes.json(),
+        sitesRes.json(),
+      ])) as [Employee[], SiteOption[]];
+      setEmployees(employeesData);
+      setSites(sitesData);
     } catch {
       toastRef.current?.show({
         severity: "error",
-        summary: t("sites.loadError"),
+        summary: t("employees.loadError"),
         life: 6000,
       });
     } finally {
@@ -119,22 +177,25 @@ export function SitesPage() {
   }, [t]);
 
   useEffect(() => {
-    void loadSites();
-  }, [loadSites]);
+    void loadData();
+  }, [loadData]);
 
   const openCreate = useCallback(() => {
     setEditingId(null);
-    setForm(emptyForm());
+    setForm({
+      ...emptyForm(),
+      ...(siteFieldLocked ? { siteId: user.workingSiteId } : {}),
+    });
     setDialogVisible(true);
-  }, []);
+  }, [siteFieldLocked, user.workingSiteId]);
 
-  const openEdit = useCallback((row: Site) => {
+  const openEdit = useCallback((row: Employee) => {
     setEditingId(row.id);
     setForm({
       key: row.key,
       name: row.name,
-      isPlant: row.isPlant,
-      colorHex: storedFromPickerValue(pickerValueFromStored(row.colorHex || defaultColorHex)),
+      siteId: row.siteId,
+      isActive: row.isActive,
     });
     setDialogVisible(true);
   }, []);
@@ -147,18 +208,20 @@ export function SitesPage() {
     } catch {
       /* ignore */
     }
-    let detail = t("sites.saveError");
-    if (code === "duplicate_key") detail = t("sites.duplicateKey");
+    let detail = t("employees.saveError");
+    if (code === "duplicate_key") detail = t("employees.duplicateKey");
+    if (code === "foreign_key_violation") detail = t("employees.foreignKey");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
   const save = async () => {
     const key = form.key.trim();
     const name = form.name.trim();
-    if (!key || !name) {
+    const siteId = form.siteId.trim();
+    if (!key || !name || !siteId) {
       toastRef.current?.show({
         severity: "warn",
-        summary: t("sites.validationRequired"),
+        summary: t("employees.validationRequired"),
         life: 4000,
       });
       return;
@@ -168,10 +231,10 @@ export function SitesPage() {
       const payload = {
         key,
         name,
-        isPlant: form.isPlant,
-        colorHex: form.colorHex,
+        siteId,
+        isActive: form.isActive,
       };
-      const url = editingId ? `/api/sites/${editingId}` : "/api/sites";
+      const url = editingId ? `/api/employees/${editingId}` : "/api/employees";
       const res = await apiFetch(url, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,16 +245,16 @@ export function SitesPage() {
         return;
       }
       setDialogVisible(false);
-      await loadSites();
+      await loadData();
       toastRef.current?.show({
         severity: "success",
-        summary: editingId ? t("sites.saved") : t("sites.created"),
+        summary: editingId ? t("employees.saved") : t("employees.created"),
         life: 3000,
       });
     } catch {
       toastRef.current?.show({
         severity: "error",
-        summary: t("sites.saveError"),
+        summary: t("employees.saveError"),
         life: 6000,
       });
     } finally {
@@ -202,13 +265,13 @@ export function SitesPage() {
   const deleteRow = useCallback(
     async (id: string) => {
       try {
-        const res = await apiFetch(`/api/sites/${id}`, { method: "DELETE" });
+        const res = await apiFetch(`/api/employees/${id}`, { method: "DELETE" });
         if (res.status === 204) {
-          setSelectedSite((cur) => (cur?.id === id ? null : cur));
-          await loadSites();
+          setSelectedEmployee((cur) => (cur?.id === id ? null : cur));
+          await loadData();
           toastRef.current?.show({
             severity: "success",
-            summary: t("sites.deleted"),
+            summary: t("employees.deleted"),
             life: 3000,
           });
           return;
@@ -221,46 +284,46 @@ export function SitesPage() {
           /* ignore */
         }
         const detail =
-          code === "foreign_key_violation" ? t("sites.foreignKey") : t("sites.deleteError");
+          code === "foreign_key_violation" ? t("employees.foreignKey") : t("employees.deleteError");
         toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
       } catch {
         toastRef.current?.show({
           severity: "error",
-          summary: t("sites.deleteError"),
+          summary: t("employees.deleteError"),
           life: 6000,
         });
       }
     },
-    [loadSites, t],
+    [loadData, t],
   );
 
   const confirmDelete = useCallback(
-    (row: Site) => {
+    (row: Employee) => {
       confirmDialog({
-        message: t("sites.confirmDelete", { name: row.name }),
-        header: t("sites.confirmDeleteTitle"),
+        message: t("employees.confirmDelete", { name: row.name }),
+        header: t("employees.confirmDeleteTitle"),
         icon: "pi pi-exclamation-triangle",
         acceptClassName: "p-button-danger",
-        acceptLabel: t("sites.yes"),
-        rejectLabel: t("sites.no"),
+        acceptLabel: t("employees.yes"),
+        rejectLabel: t("employees.no"),
         accept: () => void deleteRow(row.id),
       });
     },
     [deleteRow, t],
   );
 
-  const tableCtx = useTableContextMenu<Site>({
-    labels: { new: t("sites.new"), edit: t("sites.edit"), delete: t("sites.delete") },
+  const tableCtx = useTableContextMenu<Employee>({
+    labels: { new: t("employees.new"), edit: t("employees.edit"), delete: t("employees.delete") },
     handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
-    selection: selectedSite,
-    setSelection: setSelectedSite,
+    selection: selectedEmployee,
+    setSelection: setSelectedEmployee,
   });
 
   useEffect(() => {
-    if (selectedSite && !sites.some((s) => s.id === selectedSite.id)) {
-      setSelectedSite(null);
+    if (selectedEmployee && !employees.some((e) => e.id === selectedEmployee.id)) {
+      setSelectedEmployee(null);
     }
-  }, [sites, selectedSite]);
+  }, [employees, selectedEmployee]);
 
   useEffect(() => {
     setHeaderActions(
@@ -268,33 +331,33 @@ export function SitesPage() {
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
             <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
-            <span>{t("sites.new")}</span>
+            <span>{t("employees.new")}</span>
           </button>
         </li>
         <li>
           <button
             type="button"
             className={primaryActionNavItem}
-            disabled={!selectedSite}
+            disabled={!selectedEmployee}
             onClick={() => {
-              if (selectedSite) openEdit(selectedSite);
+              if (selectedEmployee) openEdit(selectedEmployee);
             }}
           >
             <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
-            <span>{t("sites.edit")}</span>
+            <span>{t("employees.edit")}</span>
           </button>
         </li>
         <li>
           <button
             type="button"
             className={deleteActionNavItem}
-            disabled={!selectedSite}
+            disabled={!selectedEmployee}
             onClick={() => {
-              if (selectedSite) confirmDelete(selectedSite);
+              if (selectedEmployee) confirmDelete(selectedEmployee);
             }}
           >
             <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
-            <span>{t("sites.delete")}</span>
+            <span>{t("employees.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
@@ -303,7 +366,7 @@ export function SitesPage() {
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t("sites.searchPlaceholder")}
+              placeholder={t("employees.searchPlaceholder")}
               className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
             />
           </IconField>
@@ -313,13 +376,13 @@ export function SitesPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedSite, setHeaderActions, t]);
+  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedEmployee, setHeaderActions, t]);
 
-  const plantBody = (row: Site) =>
-    row.isPlant ? (
-      <i className="pi pi-check text-on-surface" aria-label={t("sites.werk")} />
+  const activeBody = (row: Employee) =>
+    row.isActive ? (
+      <i className="pi pi-check text-on-surface" aria-label={t("employees.active")} />
     ) : (
-      <span className="text-on-surface-variant">—</span>
+      <span className="text-on-surface-variant">{t("employees.inactive")}</span>
     );
 
   const formatShortDt = (iso: string) => {
@@ -333,20 +396,11 @@ export function SitesPage() {
     }
   };
 
-  const colorBody = (row: Site) => {
-    const hex = row.colorHex ?? defaultColorHex;
-    return (
-      <span style={{ color: readableSiteColor(hex) }} title={hex}>
-        {hex}
-      </span>
-    );
-  };
-
   const dialogFooter = (
     <div className="flex justify-end gap-2">
       <Button
         type="button"
-        label={t("sites.cancel")}
+        label={t("employees.cancel")}
         severity="secondary"
         outlined
         disabled={saving}
@@ -354,7 +408,7 @@ export function SitesPage() {
       />
       <Button
         type="button"
-        label={t("sites.save")}
+        label={t("employees.save")}
         icon="pi pi-check"
         loading={saving}
         onClick={() => void save()}
@@ -371,12 +425,12 @@ export function SitesPage() {
       <div className="flex min-h-0 flex-1 flex-col" {...tableCtx.wrapperProps}>
         <DataTable
           className="app-data-table w-full"
-          value={filteredSites}
+          value={filteredEmployees}
           loading={loading}
           dataKey="id"
-          selection={selectedSite}
-          onSelectionChange={(e) => setSelectedSite(e.value as Site | null)}
-          onRowDoubleClick={(e) => openEdit(e.data as Site)}
+          selection={selectedEmployee}
+          onSelectionChange={(e) => setSelectedEmployee(e.value as Employee | null)}
+          onRowDoubleClick={(e) => openEdit(e.data as Employee)}
           {...tableCtx.tableProps}
           selectionMode="single"
           metaKeySelection={false}
@@ -386,38 +440,38 @@ export function SitesPage() {
           resizableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
-          tableStyle={{ minWidth: "66rem" }}
+          tableStyle={{ minWidth: "68rem" }}
           stateStorage="local"
-          stateKey="athene-sites-table"
-          emptyMessage={t("sites.empty")}
+          stateKey="athene-employees-table"
+          emptyMessage={t("employees.empty")}
         >
-          <Column field="key" header={t("sites.key")} sortable />
-          <Column field="name" header={t("sites.name")} sortable />
-          <Column header={t("sites.color")} body={colorBody} className="w-40" />
-          <Column header={t("sites.werk")} body={plantBody} className="w-24 text-center" />
+          <Column field="key" header={t("employees.key")} sortable />
+          <Column field="name" header={t("employees.name")} sortable />
+          <Column field="siteName" header={t("employees.site")} sortable body={siteColumnBody} />
+          <Column header={t("employees.active")} body={activeBody} className="w-28 text-center" />
           <Column
             field="createdAt"
-            header={t("sites.createdAt")}
-            body={(row: Site) => formatShortDt(row.createdAt)}
+            header={t("employees.createdAt")}
+            body={(row: Employee) => formatShortDt(row.createdAt)}
             sortable
             className="whitespace-nowrap text-on-surface-variant"
           />
           <Column
             field="createdBy"
-            header={t("sites.createdBy")}
+            header={t("employees.createdBy")}
             sortable
             className="text-on-surface-variant"
           />
           <Column
             field="updatedAt"
-            header={t("sites.updatedAt")}
-            body={(row: Site) => formatShortDt(row.updatedAt)}
+            header={t("employees.updatedAt")}
+            body={(row: Employee) => formatShortDt(row.updatedAt)}
             sortable
             className="whitespace-nowrap text-on-surface-variant"
           />
           <Column
             field="updatedBy"
-            header={t("sites.updatedBy")}
+            header={t("employees.updatedBy")}
             sortable
             className="text-on-surface-variant"
           />
@@ -425,7 +479,7 @@ export function SitesPage() {
       </div>
 
       <Dialog
-        header={editingId ? t("sites.editTitle") : t("sites.createTitle")}
+        header={editingId ? t("employees.editTitle") : t("employees.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
         onHide={() => setDialogVisible(false)}
@@ -438,16 +492,16 @@ export function SitesPage() {
         <div className="flex flex-col gap-4 pt-1">
           <div className="space-y-2">
             <label
-              htmlFor="site-key"
+              htmlFor="employee-key"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("sites.key")}
+              {t("employees.key")}
               <span className="app-required-marker" aria-hidden>
                 *
               </span>
             </label>
             <InputText
-              id="site-key"
+              id="employee-key"
               value={form.key}
               onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
               className="w-full"
@@ -456,16 +510,16 @@ export function SitesPage() {
           </div>
           <div className="space-y-2">
             <label
-              htmlFor="site-name"
+              htmlFor="employee-name"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("sites.name")}
+              {t("employees.name")}
               <span className="app-required-marker" aria-hidden>
                 *
               </span>
             </label>
             <InputText
-              id="site-name"
+              id="employee-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               className="w-full"
@@ -474,35 +528,37 @@ export function SitesPage() {
           </div>
           <div className="space-y-2">
             <label
-              htmlFor="site-colorHex"
+              htmlFor="employee-site"
               className="block text-[11px] text-outline uppercase tracking-[0.1em]"
             >
-              {t("sites.color")}
+              {t("employees.site")}
+              <span className="app-required-marker" aria-hidden>
+                *
+              </span>
             </label>
-            <div className="flex flex-wrap items-center gap-3">
-              <ColorPicker
-                inputId="site-colorHex"
-                format="hex"
-                value={pickerValueFromStored(form.colorHex)}
-                onChange={(e) => {
-                  const v = e.value;
-                  const raw = typeof v === "string" ? v : "";
-                  setForm((f) => ({ ...f, colorHex: storedFromPickerValue(raw) }));
-                }}
-                appendTo={overlayAppendTo}
-              />
-              <span className="text-sm text-on-surface-variant">{form.colorHex}</span>
-            </div>
+            <Dropdown
+              inputId="employee-site"
+              value={form.siteId}
+              options={siteDropdownOptions}
+              onChange={(e) => setForm((f) => ({ ...f, siteId: String(e.value ?? "") }))}
+              placeholder={t("employees.sitePlaceholder")}
+              className="w-full app-inline-icon-dropdown"
+              itemTemplate={renderSiteDropdownOption}
+              valueTemplate={renderSiteDropdownValue}
+              filter
+              disabled={siteFieldLocked}
+              appendTo={overlayAppendTo}
+            />
           </div>
           <label className="flex items-center gap-3 cursor-pointer group">
             <Checkbox
-              inputId="site-isPlant"
-              checked={form.isPlant}
-              onChange={(e) => setForm((f) => ({ ...f, isPlant: Boolean(e.checked) }))}
+              inputId="employee-isActive"
+              checked={form.isActive}
+              onChange={(e) => setForm((f) => ({ ...f, isActive: Boolean(e.checked) }))}
               className="rounded-none"
             />
             <span className="text-[11px] text-on-surface-variant uppercase tracking-wide">
-              {t("sites.werk")}
+              {t("employees.active")}
             </span>
           </label>
         </div>

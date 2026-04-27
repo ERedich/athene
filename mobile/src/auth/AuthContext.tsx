@@ -5,6 +5,7 @@ import type { AuthUser } from "../types/api";
 export type AuthSession = {
   user: AuthUser | null;
   appParameterBooleans: Record<string, boolean>;
+  appParameterDefaultWorkgroupId: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
   signIn: (loginName: string, password: string, remember: boolean) => Promise<{ ok: boolean; status: number }>;

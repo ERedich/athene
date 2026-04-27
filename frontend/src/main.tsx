@@ -8,9 +8,11 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./i18n";
 import "./index.css";
+import { applyDensity, readInitialDensity } from "./tableDensity";
 import { initializeTheme } from "./theme";
 
 initializeTheme();
+applyDensity(readInitialDensity());
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

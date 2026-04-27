@@ -14,6 +14,7 @@ import { Card } from "primereact/card";
 import { Checkbox } from "primereact/checkbox";
 import { ColorPicker } from "primereact/colorpicker";
 import { Dialog } from "primereact/dialog";
+import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
@@ -22,7 +23,7 @@ import { Toast } from "primereact/toast";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { APP_PARAM_KEY_ASSET_TYPES } from "../lib/appParameterKeys";
+import { APP_PARAM_KEY_ASSET_TYPES, APP_PARAM_KEY_DEFAULT_WORKGROUP } from "../lib/appParameterKeys";
 import {
   ASSET_TYPE_SLUGS,
   DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
@@ -45,7 +46,16 @@ type AppParameterRow = {
   valueType: string;
   boolValue: boolean;
   jsonValue: unknown | null;
+  uuidValue: string | null;
   updatedAt: string;
+};
+
+type WorkgroupListRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  isActive: boolean;
 };
 
 const CATEGORIES = ["GN", "WO", "SH", "MT", "PO", "SV"] as const;
@@ -77,8 +87,8 @@ function storedFromPickerValue(raw: string): string {
 
 export function AppParametersPage() {
   const { t, i18n } = useTranslation();
-  const { setHeaderActions } = useOutletContext<AppShellOutletContext>();
-  const { refresh } = useAuth();
+  const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
+  const { refresh, user } = useAuth();
   const toastRef = useRef<Toast>(null);
   const tabHostRef = useRef<HTMLDivElement | null>(null);
   const [rows, setRows] = useState<AppParameterRow[]>([]);
@@ -91,8 +101,18 @@ export function AppParametersPage() {
     ...DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
   }));
   const [assetTypesSaving, setAssetTypesSaving] = useState(false);
+  const [workgroupsForSite, setWorkgroupsForSite] = useState<WorkgroupListRow[]>([]);
 
   const langDe = i18n.language?.toLowerCase().startsWith("de");
+
+  const defaultWorkgroupDropdownOptions = useMemo(() => {
+    const none = { label: t("appParameters.defaultWorkgroupNone"), value: null as string | null };
+    const opts = workgroupsForSite.map((wg) => ({
+      label: `${wg.key} — ${wg.name}${wg.isActive ? "" : ` (${t("workOrders.workgroupInactive")})`}`,
+      value: wg.id,
+    }));
+    return [none, ...opts];
+  }, [t, workgroupsForSite]);
 
   const updateTabInk = useCallback(() => {
     const host = tabHostRef.current;
@@ -120,7 +140,7 @@ export function AppParametersPage() {
       const res = await apiFetch("/api/app-parameters");
       if (!res.ok) throw new Error("load");
       const data = (await res.json()) as AppParameterRow[];
-      setRows(data);
+      setRows(data.map((r) => ({ ...r, uuidValue: r.uuidValue ?? null })));
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -136,12 +156,42 @@ export function AppParametersPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/workgroups");
+        if (!res.ok || cancelled) return;
+        const raw = (await res.json()) as unknown;
+        if (!Array.isArray(raw) || cancelled) return;
+        const list: WorkgroupListRow[] = raw
+          .map((r) => {
+            const o = r as Record<string, unknown>;
+            const id = typeof o.id === "string" ? o.id : "";
+            const key = typeof o.key === "string" ? o.key : "";
+            const name = typeof o.name === "string" ? o.name : "";
+            const siteId = typeof o.siteId === "string" ? o.siteId : "";
+            const isActive = o.isActive !== false;
+            return { id, key, name, siteId, isActive };
+          })
+          .filter((w) => w.id && w.siteId === user.workingSiteId);
+        setWorkgroupsForSite(list);
+      } catch {
+        if (!cancelled) setWorkgroupsForSite([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.workingSiteId]);
+
   const filteredRows = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
       const jsonBlob =
         r.jsonValue === null || r.jsonValue === undefined ? "" : JSON.stringify(r.jsonValue);
+      const uuidBlob = r.uuidValue ?? "";
       const blob = [
         r.key,
         r.codeSuffix,
@@ -152,6 +202,7 @@ export function AppParametersPage() {
         r.descriptionEn ?? "",
         r.valueType,
         jsonBlob,
+        uuidBlob,
       ]
         .join("\n")
         .toLowerCase();
@@ -189,6 +240,19 @@ export function AppParametersPage() {
     [filteredRows],
   );
 
+  const activeTabRowCount = useMemo(() => {
+    const cat = CATEGORIES[activeTab];
+    if (!cat) return 0;
+    return filteredRows.filter((r) => r.category === cat).length;
+  }, [activeTab, filteredRows]);
+
+  useEffect(() => {
+    setHeaderRowCount(activeTabRowCount);
+    return () => {
+      setHeaderRowCount(null);
+    };
+  }, [activeTabRowCount, setHeaderRowCount]);
+
   const patchBool = useCallback(
     async (key: string, boolValue: boolean) => {
       setPatchingKey(key);
@@ -199,6 +263,40 @@ export function AppParametersPage() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ boolValue }),
+        });
+        if (!res.ok) throw new Error("patch");
+        const updated = (await res.json()) as AppParameterRow;
+        setRows((cur) => cur.map((r) => (r.key === key ? updated : r)));
+        await refresh();
+        toastRef.current?.show({
+          severity: "success",
+          summary: t("appParameters.saved"),
+          life: 3000,
+        });
+      } catch {
+        setRows(prev);
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("appParameters.saveError"),
+          life: 6000,
+        });
+      } finally {
+        setPatchingKey(null);
+      }
+    },
+    [rows, refresh, t],
+  );
+
+  const patchUuidValue = useCallback(
+    async (key: string, uuidValue: string | null) => {
+      setPatchingKey(key);
+      const prev = rows;
+      setRows((cur) => cur.map((r) => (r.key === key ? { ...r, uuidValue } : r)));
+      try {
+        const res = await apiFetch(`/api/app-parameters/${encodeURIComponent(key)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uuidValue }),
         });
         if (!res.ok) throw new Error("patch");
         const updated = (await res.json()) as AppParameterRow;
@@ -349,6 +447,26 @@ export function AppParametersPage() {
                     onClick={() => openAssetTypesDialog(row)}
                   />
                 </div>
+              ) : row.key === APP_PARAM_KEY_DEFAULT_WORKGROUP && row.valueType === "uuid" ? (
+                <div className="max-w-md" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                  <Dropdown
+                    inputId={`app-param-${row.key}`}
+                    value={row.uuidValue}
+                    options={defaultWorkgroupDropdownOptions}
+                    optionLabel="label"
+                    optionValue="value"
+                    showClear={row.uuidValue != null}
+                    className="w-full"
+                    disabled={patchingKey === row.key}
+                    placeholder={t("appParameters.defaultWorkgroupPlaceholder")}
+                    onChange={(e) => {
+                      const v = e.value as string | null | undefined;
+                      const next = v === undefined || v === null || v === "" ? null : String(v);
+                      void patchUuidValue(row.key, next);
+                    }}
+                    appendTo={overlayAppendTo}
+                  />
+                </div>
               ) : (
                 <span className="text-sm text-on-surface-variant">—</span>
               )}
@@ -357,7 +475,15 @@ export function AppParametersPage() {
         </Card>
       );
     },
-    [langDe, openAssetTypesDialog, patchBool, patchingKey, t],
+    [
+      defaultWorkgroupDropdownOptions,
+      langDe,
+      openAssetTypesDialog,
+      patchBool,
+      patchUuidValue,
+      patchingKey,
+      t,
+    ],
   );
 
   const panels = useMemo(

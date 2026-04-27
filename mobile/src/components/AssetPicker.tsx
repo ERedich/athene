@@ -1,47 +1,30 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { CostCenterRow } from "../types/api";
+import type { AssetRow } from "../types/api";
 import { useAppTheme } from "../theme/AppThemeContext";
 
 import { SelectModal, type SelectItem } from "./SelectModal";
 
 type Props = {
-  costCenters: CostCenterRow[];
-  siteId: string;
-  value: string | null;
-  onChange: (costCenterId: string | null) => void;
+  assets: AssetRow[];
+  value: string;
+  onChange: (assetId: string) => void;
   label: string;
-  noneLabel: string;
-  markInactiveLabel?: (costCenter: CostCenterRow) => string;
+  placeholder: string;
 };
 
-export function CostCenterPicker({
-  costCenters,
-  siteId,
-  value,
-  onChange,
-  label,
-  noneLabel,
-  markInactiveLabel,
-}: Props) {
+export function AssetPicker({ assets, value, onChange, label, placeholder }: Props) {
   const { colors } = useAppTheme();
   const [open, setOpen] = useState(false);
-  const filtered = useMemo(
-    () => costCenters.filter((c) => c.siteId === siteId),
-    [costCenters, siteId],
-  );
-  const items: SelectItem[] = useMemo(() => {
-    const rows: SelectItem[] = [{ id: "__none__", label: noneLabel }];
-    for (const c of filtered) {
-      const suffix = !c.isActive && markInactiveLabel ? ` ${markInactiveLabel(c)}` : "";
-      rows.push({ id: c.id, label: `${c.key} — ${c.name}${suffix}` });
-    }
-    return rows;
-  }, [filtered, markInactiveLabel, noneLabel]);
 
-  const selected = value ? filtered.find((c) => c.id === value) : null;
-  const summary = selected ? `${selected.key} — ${selected.name}` : noneLabel;
+  const items: SelectItem[] = useMemo(
+    () => assets.map((a) => ({ id: a.id, label: `${a.key} — ${a.name}` })),
+    [assets],
+  );
+
+  const selected = useMemo(() => assets.find((a) => a.id === value) ?? null, [assets, value]);
+  const summary = selected ? `${selected.key} — ${selected.name}` : placeholder;
 
   const styles = useMemo(
     () =>
@@ -72,7 +55,7 @@ export function CostCenterPicker({
         visible={open}
         title={label}
         items={items}
-        onSelect={(id) => onChange(id === "__none__" ? null : id)}
+        onSelect={onChange}
         onClose={() => setOpen(false)}
       />
     </View>
