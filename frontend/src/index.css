@@ -1526,6 +1526,14 @@ html.theme-crossfade-fallback #root {
 
 .app-assets-treetable.p-treetable
   .p-treetable-tbody
+  > tr.app-assets-tree-row-entering
+  > td {
+  animation: app-assets-tree-row-enter 240ms cubic-bezier(0.22, 0.95, 0.32, 1)
+    both;
+}
+
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
   > tr.app-assets-tree-row-collapsing
   > td {
   animation: app-assets-tree-row-collapse 240ms cubic-bezier(0.25, 0.9, 0.35, 1)
@@ -1533,6 +1541,17 @@ html.theme-crossfade-fallback #root {
 }
 
 @keyframes app-assets-tree-row-expand {
+  from {
+    opacity: 0;
+    filter: brightness(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@keyframes app-assets-tree-row-enter {
   from {
     opacity: 0;
     filter: brightness(0.96);
@@ -1562,6 +1581,11 @@ html.theme-crossfade-fallback #root {
   > *:not(.p-column-resizer),
 .app-assets-treetable.p-treetable
   .p-treetable-tbody
+  > tr.app-assets-tree-row-entering
+  > td
+  > *:not(.p-column-resizer),
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
   > tr.app-assets-tree-row-collapsing
   > td
   > *:not(.p-column-resizer) {
@@ -1579,6 +1603,15 @@ html.theme-crossfade-fallback #root {
 
 .app-assets-treetable.p-treetable
   .p-treetable-tbody
+  > tr.app-assets-tree-row-entering
+  > td
+  > *:not(.p-column-resizer) {
+  animation: app-assets-tree-content-enter 240ms
+    cubic-bezier(0.22, 0.95, 0.32, 1) both;
+}
+
+.app-assets-treetable.p-treetable
+  .p-treetable-tbody
   > tr.app-assets-tree-row-collapsing
   > td
   > *:not(.p-column-resizer) {
@@ -1590,6 +1623,17 @@ html.theme-crossfade-fallback #root {
   from {
     opacity: 0;
     transform: translateY(-2px) scaleY(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes app-assets-tree-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scaleY(0.96);
   }
   to {
     opacity: 1;
@@ -1624,6 +1668,11 @@ html.theme-crossfade-fallback #root {
   .app-assets-treetable.p-treetable
     .p-treetable-tbody
     > tr.app-assets-tree-row-expanding
+    > td
+    > *:not(.p-column-resizer),
+  .app-assets-treetable.p-treetable
+    .p-treetable-tbody
+    > tr.app-assets-tree-row-entering
     > td
     > *:not(.p-column-resizer),
   .app-assets-treetable.p-treetable
