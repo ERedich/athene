@@ -154,6 +154,10 @@
       "maintenanceObject": "Maintenance object"
     }
   },
+  "baumstruktur": {
+    "appName": "Tree structure",
+    "navBaumstruktur": "Tree structure"
+  },
   "workOrders": {
     "appName": "Orders",
     "navOrders": "Orders",
@@ -572,4 +576,3 @@
     "no": "No"
   }
 }
-

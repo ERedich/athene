@@ -26,6 +26,7 @@ const chromeBackground = {
 
 function headerTitleKey(pathname: string): string {
   if (pathname.startsWith("/assets")) return "assets.appName";
+  if (pathname.startsWith("/baumstruktur")) return "baumstruktur.appName";
   if (pathname.startsWith("/workorders")) return "workOrders.appName";
   if (pathname.startsWith("/sites")) return "sites.appName";
   if (pathname.startsWith("/users")) return "users.appName";
@@ -53,17 +54,51 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { to: "/dashboard", end: true, icon: "pi pi-th-large", labelKey: "dashboard.navDashboard" },
+  {
+    to: "/dashboard",
+    end: true,
+    icon: "pi pi-th-large",
+    labelKey: "dashboard.navDashboard",
+  },
   { to: "/assets", icon: "pi pi-box", labelKey: "assets.navAssets" },
-  { to: "/workorders", icon: "pi pi-briefcase", labelKey: "workOrders.navOrders" },
+  {
+    to: "/baumstruktur",
+    icon: "pi pi-sitemap",
+    labelKey: "baumstruktur.navBaumstruktur",
+  },
+  {
+    to: "/workorders",
+    icon: "pi pi-briefcase",
+    labelKey: "workOrders.navOrders",
+  },
   { to: "/sites", icon: "pi pi-map-marker", labelKey: "sites.navSites" },
   { to: "/users", icon: "pi pi-users", labelKey: "users.navUsers" },
-  { to: "/workgroups", icon: "pi pi-sitemap", labelKey: "workgroups.navWorkgroups" },
-  { to: "/employees", icon: "pi pi-id-card", labelKey: "employees.navEmployees" },
-  { to: "/cost-centers", icon: "pi pi-briefcase", labelKey: "costCenters.navCostCenters" },
-  { to: "/app-parameters", icon: "pi pi-sliders-h", labelKey: "appParameters.navAppParameters" },
+  {
+    to: "/workgroups",
+    icon: "pi pi-sitemap",
+    labelKey: "workgroups.navWorkgroups",
+  },
+  {
+    to: "/employees",
+    icon: "pi pi-id-card",
+    labelKey: "employees.navEmployees",
+  },
+  {
+    to: "/cost-centers",
+    icon: "pi pi-briefcase",
+    labelKey: "costCenters.navCostCenters",
+  },
+  {
+    to: "/app-parameters",
+    icon: "pi pi-sliders-h",
+    labelKey: "appParameters.navAppParameters",
+  },
   { to: "/audit-log", icon: "pi pi-history", labelKey: "auditLog.navAudit" },
-  { to: "/table-viewer", icon: "pi pi-table", labelKey: "tableViewer.navTableViewer" },
+  {
+    to: "/table-viewer",
+    icon: "pi pi-table",
+    labelKey: "tableViewer.navTableViewer",
+  },
 ];
 
 function readInitialCollapsed(): boolean {
@@ -83,7 +118,9 @@ export function AppShellLayout() {
   const [headerRowCount, setHeaderRowCount] = useState<number | null>(null);
   const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
   const { isCompact, toggleDensity } = useTableDensity();
-  const [collapsed, setCollapsed] = useState<boolean>(() => readInitialCollapsed());
+  const [collapsed, setCollapsed] = useState<boolean>(() =>
+    readInitialCollapsed(),
+  );
 
   useEffect(() => {
     setHeaderRowCount(null);
@@ -100,7 +137,10 @@ export function AppShellLayout() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        collapsed ? "1" : "0",
+      );
     } catch {
       /* ignore */
     }
@@ -130,7 +170,9 @@ export function AppShellLayout() {
       >
         <div
           className={`shrink-0 border-b border-white/5 ${
-            collapsed ? "flex flex-col items-center gap-2 px-2 py-3" : "flex items-start justify-between gap-2 p-4"
+            collapsed
+              ? "flex flex-col items-center gap-2 px-2 py-3"
+              : "flex items-start justify-between gap-2 p-4"
           }`}
         >
           {collapsed ? (
@@ -179,7 +221,9 @@ export function AppShellLayout() {
               }
             >
               <i className={item.icon} aria-hidden />
-              {collapsed ? null : <span className="truncate">{t(item.labelKey)}</span>}
+              {collapsed ? null : (
+                <span className="truncate">{t(item.labelKey)}</span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -197,11 +241,18 @@ export function AppShellLayout() {
             <button
               type="button"
               className={toggleBtn}
-              aria-label={dark ? t("login.themeToggleToLight") : t("login.themeToggleToDark")}
+              aria-label={
+                dark
+                  ? t("login.themeToggleToLight")
+                  : t("login.themeToggleToDark")
+              }
               title={dark ? t("login.themeLight") : t("login.themeDark")}
               onClick={toggleTheme}
             >
-              <i className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`} aria-hidden />
+              <i
+                className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`}
+                aria-hidden
+              />
             </button>
             <button
               type="button"
@@ -244,10 +295,14 @@ export function AppShellLayout() {
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <h1 className="app-shell-title font-mono w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
-              <span className="app-shell-title__name">{t(headerTitleKey(pathname))}</span>
+              <span className="app-shell-title__name">
+                {t(headerTitleKey(pathname))}
+              </span>
               {formattedHeaderRowCount !== null ? (
                 <span className="ml-2 font-bold text-on-surface">
-                  [<span className="font-normal">{formattedHeaderRowCount}</span>]
+                  [
+                  <span className="font-normal">{formattedHeaderRowCount}</span>
+                  ]
                 </span>
               ) : null}
             </h1>
@@ -268,11 +323,17 @@ export function AppShellLayout() {
           </div>
         </header>
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden bg-surface p-px">
-          <Outlet context={{ setHeaderActions, setHeaderRowCount } satisfies AppShellOutletContext} />
+          <Outlet
+            context={
+              {
+                setHeaderActions,
+                setHeaderRowCount,
+              } satisfies AppShellOutletContext
+            }
+          />
         </main>
       </div>
       <ThemeLoadingOverlay visible={isThemeLoading} />
     </div>
   );
 }
-

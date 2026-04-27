@@ -5,6 +5,7 @@ import { AppShellLayout } from "./layout/AppShellLayout";
 import { AppParametersPage } from "./pages/AppParametersPage";
 import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { BaumstrukturPage } from "./pages/BaumstrukturPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -22,7 +23,8 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="assets" element={<AssetsPage />} />
+          <Route path="assets" element={<AssetsPage mode="table" />} />
+          <Route path="baumstruktur" element={<BaumstrukturPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />
@@ -38,4 +40,3 @@ export default function App() {
     </Routes>
   );
 }
-
