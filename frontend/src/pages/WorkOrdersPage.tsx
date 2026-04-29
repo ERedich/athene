@@ -45,6 +45,9 @@ type WorkOrder = {
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   plannedStart: string;
   plannedEnd: string;
   plannedDurationMinutes: number | null;
@@ -117,6 +120,15 @@ type CostCenter = {
   isActive: boolean;
 };
 
+type ClassificationListRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  appliesToAsset: boolean;
+  appliesToWorkOrder: boolean;
+};
+
 type Employee = {
   id: string;
   key: string;
@@ -146,6 +158,7 @@ type FormState = {
   orderType: WorkOrderType;
   responsibleEmployeeId: string;
   workgroupId: string;
+  classificationId: string;
 };
 
 type SelectOption = { label: string; value: string };
@@ -213,6 +226,7 @@ function emptyForm(): FormState {
     orderType: "maintenance",
     responsibleEmployeeId: "",
     workgroupId: "",
+    classificationId: "",
   };
 }
 
@@ -240,6 +254,7 @@ export function WorkOrdersPage() {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [classifications, setClassifications] = useState<ClassificationListRow[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -313,6 +328,17 @@ export function WorkOrdersPage() {
     [costCenters, form.costCenterId, selectedAsset?.siteId, t],
   );
 
+  const classificationOptions = useMemo<SelectOption[]>(
+    () =>
+      classifications
+        .filter((cl) => selectedAsset?.siteId && cl.siteId === selectedAsset.siteId && cl.appliesToWorkOrder)
+        .map((cl) => ({
+          label: `${cl.key} - ${cl.name}`,
+          value: cl.id,
+        })),
+    [classifications, selectedAsset?.siteId],
+  );
+
   const selectedWorkgroup = useMemo(
     () => (form.workgroupId ? workgroups.find((w) => w.id === form.workgroupId) ?? null : null),
     [form.workgroupId, workgroups],
@@ -379,6 +405,8 @@ export function WorkOrdersPage() {
         row.assetName,
         row.costCenterKey,
         row.costCenterName,
+        row.classificationKey ?? "",
+        row.classificationName ?? "",
         row.siteKey,
         row.siteName,
         row.orderType,
@@ -439,6 +467,9 @@ export function WorkOrdersPage() {
             costCenterId: "",
             costCenterKey: "",
             costCenterName: "…",
+            classificationId: null,
+            classificationKey: null,
+            classificationName: null,
             plannedStart: new Date().toISOString(),
             plannedEnd: new Date().toISOString(),
             plannedDurationMinutes: null,
@@ -475,26 +506,29 @@ export function WorkOrdersPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, assetsRes, costCentersRes, employeesRes, workgroupsRes] = await Promise.all([
+      const [ordersRes, assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes] = await Promise.all([
         apiFetch("/api/work-orders"),
         apiFetch("/api/assets"),
         apiFetch("/api/cost-centers"),
+        apiFetch("/api/classifications"),
         apiFetch("/api/employees"),
         apiFetch("/api/workgroups"),
       ]);
-      if (!ordersRes.ok || !assetsRes.ok || !costCentersRes.ok || !employeesRes.ok || !workgroupsRes.ok) {
+      if (!ordersRes.ok || !assetsRes.ok || !costCentersRes.ok || !classificationsRes.ok || !employeesRes.ok || !workgroupsRes.ok) {
         throw new Error("load");
       }
-      const [ordersData, assetsData, costCentersData, employeesData, workgroupsRaw] = (await Promise.all([
+      const [ordersData, assetsData, costCentersData, classificationsData, employeesData, workgroupsRaw] = (await Promise.all([
         ordersRes.json(),
         assetsRes.json(),
         costCentersRes.json(),
+        classificationsRes.json(),
         employeesRes.json(),
         workgroupsRes.json(),
-      ])) as [WorkOrder[], Asset[], CostCenter[], Employee[], Workgroup[]];
+      ])) as [WorkOrder[], Asset[], CostCenter[], ClassificationListRow[], Employee[], Workgroup[]];
       setOrders(ordersData);
       setAssets(assetsData);
       setCostCenters(costCentersData);
+      setClassifications(classificationsData);
       setEmployees(employeesData);
       setWorkgroups(
         Array.isArray(workgroupsRaw)
@@ -543,6 +577,13 @@ export function WorkOrdersPage() {
     }
     setForm((cur) => ({ ...cur, costCenterId: "" }));
   }, [costCenterOptions, form.costCenterId, selectedAsset]);
+
+  useEffect(() => {
+    if (!form.classificationId) return;
+    const stillAllowed = classificationOptions.some((opt) => opt.value === form.classificationId);
+    if (stillAllowed) return;
+    setForm((cur) => ({ ...cur, classificationId: "" }));
+  }, [classificationOptions, form.classificationId]);
 
   useEffect(() => {
     if (!form.workgroupId) return;
@@ -772,6 +813,7 @@ export function WorkOrdersPage() {
         orderType: formRef.current.orderType,
         responsibleEmployeeId: formRef.current.responsibleEmployeeId || null,
         workgroupId: formRef.current.workgroupId.trim(),
+        classificationId: formRef.current.classificationId.trim() || null,
       };
       const isUpdate = editingIdRef.current && !forceCreate;
       const url = isUpdate ? `/api/work-orders/${editingIdRef.current}` : "/api/work-orders";
@@ -951,6 +993,7 @@ export function WorkOrdersPage() {
       orderType: row.orderType,
       responsibleEmployeeId: row.responsibleEmployeeId ?? "",
       workgroupId: row.workgroupId ?? "",
+      classificationId: row.classificationId ?? "",
     });
     setPendingFiles([]);
     setAssignmentEmployeeIds([]);
@@ -996,6 +1039,7 @@ export function WorkOrdersPage() {
     let detail = t("workOrders.saveError");
     if (code === "invalid_asset") detail = t("workOrders.invalidAsset");
     if (code === "invalid_cost_center") detail = t("workOrders.invalidCostCenter");
+    if (code === "invalid_classification") detail = t("workOrders.invalidClassification");
     if (code === "asset_cost_center_mismatch") detail = t("workOrders.assetCostCenterMismatch");
     if (code === "invalid_responsible_employee") detail = t("workOrders.responsiblePlaceholder");
     if (code === "responsible_employee_site_mismatch") detail = t("workOrders.assignmentEmployeeSiteMismatch");
@@ -1046,6 +1090,7 @@ export function WorkOrdersPage() {
         orderType: form.orderType,
         responsibleEmployeeId: form.responsibleEmployeeId || null,
         workgroupId: form.workgroupId.trim(),
+        classificationId: form.classificationId.trim() || null,
       };
       const url = editingId ? `/api/work-orders/${editingId}` : "/api/work-orders";
       const res = await apiFetch(url, {
@@ -1516,6 +1561,14 @@ export function WorkOrdersPage() {
             body={(row: WorkOrder) => `${row.costCenterKey} - ${row.costCenterName}`}
           />
           <Column
+            field="classificationName"
+            header={t("workOrders.classification")}
+            sortable={!isPreloadMode}
+            body={(row: WorkOrder) =>
+              row.classificationId ? `${row.classificationKey} - ${row.classificationName ?? ""}` : "—"
+            }
+          />
+          <Column
             field="workgroupKey"
             header={t("workOrders.workgroup")}
             sortable={!isPreloadMode}
@@ -1688,6 +1741,24 @@ export function WorkOrdersPage() {
               className="w-full app-inline-icon-dropdown"
               disabled={!form.assetId}
               filter
+              appendTo={overlayAppendTo}
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-6">
+            <label htmlFor="order-classification" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+              {t("workOrders.classification")}
+            </label>
+            <Dropdown
+              inputId="order-classification"
+              value={form.classificationId || null}
+              options={classificationOptions}
+              onChange={(e) => setForm((cur) => ({ ...cur, classificationId: String(e.value ?? "") }))}
+              placeholder={t("workOrders.classificationPlaceholder")}
+              className="w-full app-inline-icon-dropdown"
+              disabled={!form.assetId}
+              filter
+              showClear
               appendTo={overlayAppendTo}
             />
           </div>

@@ -138,6 +138,9 @@ type Asset = {
   costCenterId: string | null;
   costCenterKey: string | null;
   costCenterName: string | null;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -166,6 +169,15 @@ type CostCenterListRow = {
   name: string;
   siteId: string;
   isActive: boolean;
+};
+
+type ClassificationListRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  appliesToAsset: boolean;
+  appliesToWorkOrder: boolean;
 };
 
 type AssetDocument = {
@@ -200,6 +212,7 @@ type FormState = {
   type: AssetType;
   parentAssetId: string;
   costCenterId: string;
+  classificationId: string;
   serialNumber: string;
   buildDate: string;
   manufacturer: string;
@@ -435,6 +448,7 @@ const emptyForm = (): FormState => ({
   type: "site",
   parentAssetId: "",
   costCenterId: "",
+  classificationId: "",
   serialNumber: "",
   buildDate: "",
   manufacturer: "",
@@ -613,6 +627,7 @@ export function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenterListRow[]>([]);
+  const [classifications, setClassifications] = useState<ClassificationListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -1031,6 +1046,17 @@ export function AssetsPage() {
     [costCenters, form.costCenterId, form.siteId, t],
   );
 
+  const classificationDropdownOptions = useMemo(
+    () =>
+      classifications
+        .filter((cl) => cl.siteId === form.siteId && cl.appliesToAsset)
+        .map((cl) => ({
+          label: `${cl.key} - ${cl.name}`,
+          value: cl.id,
+        })),
+    [classifications, form.siteId],
+  );
+
   const assetSearchHaystacks = useMemo(
     () =>
       new Map(
@@ -1047,6 +1073,8 @@ export function AssetsPage() {
             row.parentAssetName ?? "",
             row.costCenterKey ?? "",
             row.costCenterName ?? "",
+            row.classificationKey ?? "",
+            row.classificationName ?? "",
             row.serialNumber ?? "",
             row.manufacturer ?? "",
             row.remark ?? "",
@@ -1087,21 +1115,24 @@ export function AssetsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetsRes, sitesRes, costCentersRes] = await Promise.all([
+      const [assetsRes, sitesRes, costCentersRes, classificationsRes] = await Promise.all([
         apiFetch("/api/assets"),
         apiFetch("/api/sites"),
         apiFetch("/api/cost-centers"),
+        apiFetch("/api/classifications"),
       ]);
-      if (!assetsRes.ok || !sitesRes.ok || !costCentersRes.ok)
+      if (!assetsRes.ok || !sitesRes.ok || !costCentersRes.ok || !classificationsRes.ok)
         throw new Error("load");
-      const [assetsData, sitesData, costCentersData] = (await Promise.all([
+      const [assetsData, sitesData, costCentersData, classificationsData] = (await Promise.all([
         assetsRes.json(),
         sitesRes.json(),
         costCentersRes.json(),
-      ])) as [Asset[], SiteOption[], CostCenterListRow[]];
+        classificationsRes.json(),
+      ])) as [Asset[], SiteOption[], CostCenterListRow[], ClassificationListRow[]];
       setAssets(assetsData);
       setSites(sitesData);
       setCostCenters(costCentersData);
+      setClassifications(classificationsData);
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -1143,6 +1174,7 @@ export function AssetsPage() {
         type: row.type,
         parentAssetId: row.parentAssetId ?? "",
         costCenterId: row.costCenterId ?? "",
+        classificationId: row.classificationId ?? "",
         serialNumber: row.serialNumber ?? "",
         buildDate: row.buildDate ?? "",
         manufacturer: row.manufacturer ?? "",
@@ -1204,6 +1236,7 @@ export function AssetsPage() {
     if (!form.siteId) {
       if (form.parentAssetId) setForm((cur) => ({ ...cur, parentAssetId: "" }));
       if (form.costCenterId) setForm((cur) => ({ ...cur, costCenterId: "" }));
+      if (form.classificationId) setForm((cur) => ({ ...cur, classificationId: "" }));
       return;
     }
     const allowed = new Set(parentOptions.map((opt) => String(opt.value)));
@@ -1216,8 +1249,16 @@ export function AssetsPage() {
     if (form.costCenterId && !allowedCc.has(form.costCenterId)) {
       setForm((cur) => ({ ...cur, costCenterId: "" }));
     }
+    const allowedClf = new Set(
+      classificationDropdownOptions.map((opt) => String(opt.value)),
+    );
+    if (form.classificationId && !allowedClf.has(form.classificationId)) {
+      setForm((cur) => ({ ...cur, classificationId: "" }));
+    }
   }, [
+    classificationDropdownOptions,
     costCenterDropdownOptions,
+    form.classificationId,
     form.costCenterId,
     form.parentAssetId,
     form.siteId,
@@ -1244,6 +1285,7 @@ export function AssetsPage() {
       detail = t("assets.invalidParentAsset");
     if (code === "foreign_key_violation") detail = t("assets.foreignKey");
     if (code === "invalid_cost_center") detail = t("assets.invalidCostCenter");
+    if (code === "invalid_classification") detail = t("assets.invalidClassification");
     if (code === "asset_key_auto_requires_plant_site")
       detail = t("assets.assetKeyPlantRequired");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
@@ -1324,6 +1366,7 @@ export function AssetsPage() {
       type: f.type,
       parentAssetId: f.parentAssetId.trim() || null,
       costCenterId: f.costCenterId.trim() || null,
+      classificationId: f.classificationId.trim() || null,
       serialNumber: f.serialNumber.trim() || null,
       buildDate: f.buildDate.trim() || null,
       manufacturer: f.manufacturer.trim() || null,
@@ -1491,6 +1534,7 @@ export function AssetsPage() {
         type: form.type,
         parentAssetId: form.parentAssetId.trim() || null,
         costCenterId: form.costCenterId.trim() || null,
+        classificationId: form.classificationId.trim() || null,
         serialNumber: form.serialNumber.trim() || null,
         buildDate: form.buildDate.trim() || null,
         manufacturer: form.manufacturer.trim() || null,
@@ -1691,6 +1735,17 @@ export function AssetsPage() {
     if (!row.costCenterId)
       return <span className="text-on-surface-variant">—</span>;
     const full = `${row.costCenterKey} - ${row.costCenterName}`;
+    return (
+      <span className="block min-w-0 truncate" title={full}>
+        {full}
+      </span>
+    );
+  };
+
+  const classificationBody = (row: Asset) => {
+    if (!row.classificationId)
+      return <span className="text-on-surface-variant">—</span>;
+    const full = `${row.classificationKey} - ${row.classificationName}`;
     return (
       <span className="block min-w-0 truncate" title={full}>
         {full}
@@ -2021,6 +2076,13 @@ export function AssetsPage() {
               className="min-w-48"
             />
             <Column
+              field="classificationName"
+              header={t("assets.classification")}
+              sortable
+              body={classificationBody}
+              className="min-w-48"
+            />
+            <Column
               field="parentAssetName"
               sortField="parentAssetName"
               header={t("assets.parentAsset")}
@@ -2209,6 +2271,31 @@ export function AssetsPage() {
                       }))
                     }
                     placeholder={t("assets.costCenterPlaceholder")}
+                    className="w-full app-inline-icon-dropdown"
+                    disabled={!form.siteId}
+                    filter
+                    showClear
+                    appendTo={overlayAppendTo}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="asset-classification"
+                    className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                  >
+                    {t("assets.classification")}
+                  </label>
+                  <Dropdown
+                    inputId="asset-classification"
+                    value={form.classificationId}
+                    options={classificationDropdownOptions}
+                    onChange={(e) =>
+                      setForm((cur) => ({
+                        ...cur,
+                        classificationId: String(e.value ?? ""),
+                      }))
+                    }
+                    placeholder={t("assets.classificationPlaceholder")}
                     className="w-full app-inline-icon-dropdown"
                     disabled={!form.siteId}
                     filter

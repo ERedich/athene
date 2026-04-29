@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../lib/api";
 import type {
   AssetRow,
+  ClassificationRow,
   CostCenterRow,
   SiteRow,
   WorkOrderDocumentCategory,
@@ -15,6 +16,7 @@ import type {
 export const queryKeys = {
   sites: ["sites"] as const,
   costCenters: ["costCenters"] as const,
+  classifications: ["classifications"] as const,
   assets: ["assets"] as const,
   workOrders: ["workOrders"] as const,
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
@@ -39,6 +41,17 @@ export function useCostCentersQuery() {
       const r = await apiFetch("/api/cost-centers");
       if (!r.ok) throw new Error("costCenters");
       return r.json() as Promise<CostCenterRow[]>;
+    },
+  });
+}
+
+export function useClassificationsQuery() {
+  return useQuery({
+    queryKey: queryKeys.classifications,
+    queryFn: async (): Promise<ClassificationRow[]> => {
+      const r = await apiFetch("/api/classifications");
+      if (!r.ok) throw new Error("classifications");
+      return r.json() as Promise<ClassificationRow[]>;
     },
   });
 }
@@ -176,6 +189,7 @@ export type AssetSaveBody = {
   manufacturer: string | null;
   remark: string | null;
   costCenterId: string | null;
+  classificationId: string | null;
 };
 
 export async function postAsset(body: AssetSaveBody): Promise<AssetRow> {
@@ -209,6 +223,7 @@ export type WorkOrderSaveBody = {
   description: string | null;
   assetId: string;
   costCenterId: string;
+  classificationId: string | null;
   plannedStart: string;
   plannedEnd: string | null;
   plannedDurationMinutes: number | null;

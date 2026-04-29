@@ -12,6 +12,7 @@ import {
 } from "./appParameters.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
+import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
@@ -43,6 +44,9 @@ export type AssetRow = {
   costCenterId: string | null;
   costCenterKey: string | null;
   costCenterName: string | null;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -77,6 +81,7 @@ type ParsedBody = {
   manufacturer: string | null;
   remark: string | null;
   costCenterId: string | null;
+  classificationId: string | null;
 };
 
 const router = Router();
@@ -163,10 +168,12 @@ function parseBody(body: unknown): ParsedBody | null {
   const manufacturer = readTrimmedOptionalString(o.manufacturer);
   const remark = readTrimmedOptionalString(o.remark);
   const costCenterIdRaw = readTrimmedOptionalString(o.costCenterId);
+  const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
 
   if (!name || !isUuid(siteId) || !isAssetType(type)) return null;
   if (parentAssetIdRaw !== null && !isUuid(parentAssetIdRaw)) return null;
   if (costCenterIdRaw !== null && !isUuid(costCenterIdRaw)) return null;
+  if (classificationIdRaw !== null && !isUuid(classificationIdRaw)) return null;
   if (buildDate !== null && !isValidDateOnly(buildDate)) return null;
   if (remark !== null && remark.length > 2000) return null;
 
@@ -181,6 +188,7 @@ function parseBody(body: unknown): ParsedBody | null {
     manufacturer,
     remark,
     costCenterId: costCenterIdRaw,
+    classificationId: classificationIdRaw,
   };
 }
 
@@ -238,6 +246,9 @@ const selectAssetsSqlBase = `
     a."costCenterId",
     cc."key" AS "costCenterKey",
     cc."name" AS "costCenterName",
+    a."classificationId",
+    clf."key" AS "classificationKey",
+    clf."name" AS "classificationName",
     a."createdAt",
     a."updatedAt",
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
@@ -247,6 +258,7 @@ const selectAssetsSqlBase = `
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
   LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
+  LEFT JOIN "classification" clf ON clf."id" = a."classificationId"
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
@@ -279,6 +291,9 @@ const selectAssetsSqlWithKeyPath = `
     a."costCenterId",
     cc."key" AS "costCenterKey",
     cc."name" AS "costCenterName",
+    a."classificationId",
+    clf."key" AS "classificationKey",
+    clf."name" AS "classificationName",
     a."createdAt",
     a."updatedAt",
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
@@ -305,6 +320,7 @@ const selectAssetsSqlWithKeyPath = `
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
   LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
+  LEFT JOIN "classification" clf ON clf."id" = a."classificationId"
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
@@ -759,6 +775,13 @@ router.post("/", async (req: Request, res: Response) => {
         parsed.parentAssetId,
       );
       await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
+      await assertClassificationForSiteAndScope(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        parsed.classificationId,
+        "asset",
+      );
       const mode = await getAssetKeyGenerationMode(client);
       const siteRow = await client.query<{ isPlant: boolean; key: string }>(
         `SELECT "isPlant", "key" FROM "site" WHERE "id" = $1::uuid LIMIT 1`,
@@ -781,9 +804,9 @@ router.post("/", async (req: Request, res: Response) => {
         `
         WITH inserted AS (
           INSERT INTO "asset"
-            ("key", "name", "siteId", "type", "parentAssetId", "costCenterId", "serialNumber", "buildDate", "manufacturer", "remark")
+            ("key", "name", "siteId", "type", "parentAssetId", "costCenterId", "serialNumber", "buildDate", "manufacturer", "remark", "classificationId")
           VALUES
-            ($1, $2, $3::uuid, $4, $5::uuid, $6::uuid, $7, $8::date, $9, $10)
+            ($1, $2, $3::uuid, $4, $5::uuid, $6::uuid, $7, $8::date, $9, $10, $11::uuid)
           RETURNING *
         )
         SELECT
@@ -802,6 +825,9 @@ router.post("/", async (req: Request, res: Response) => {
           i."costCenterId",
           cc."key" AS "costCenterKey",
           cc."name" AS "costCenterName",
+          i."classificationId",
+          clf."key" AS "classificationKey",
+          clf."name" AS "classificationName",
           i."serialNumber",
           i."buildDate"::text AS "buildDate",
           i."manufacturer",
@@ -815,6 +841,7 @@ router.post("/", async (req: Request, res: Response) => {
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
         LEFT JOIN "costCenter" cc ON cc."id" = i."costCenterId"
+        LEFT JOIN "classification" clf ON clf."id" = i."classificationId"
         LEFT JOIN "asset" parent ON parent."id" = i."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
@@ -835,6 +862,7 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.buildDate,
           parsed.manufacturer,
           parsed.remark,
+          parsed.classificationId,
         ],
       );
       return rows[0];
@@ -871,6 +899,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
     if ((err as Error).message === "asset_cost_center_invalid") {
       res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
+    if ((err as Error).message === "invalid_classification") {
+      res.status(400).json({ error: "invalid_classification" });
       return;
     }
     if ((err as Error).message === "asset_key_auto_requires_plant_site") {
@@ -929,6 +961,13 @@ router.put("/:id", async (req: Request, res: Response) => {
         id,
       );
       await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
+      await assertClassificationForSiteAndScope(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        parsed.classificationId,
+        "asset",
+      );
 
       const mode = await getAssetKeyGenerationMode(client);
       const sitePlant = await client.query<{ isPlant: boolean }>(
@@ -961,8 +1000,9 @@ router.put("/:id", async (req: Request, res: Response) => {
             "serialNumber" = $7,
             "buildDate" = $8::date,
             "manufacturer" = $9,
-            "remark" = $10
-          WHERE "id" = $11::uuid
+            "remark" = $10,
+            "classificationId" = $11::uuid
+          WHERE "id" = $12::uuid
           RETURNING *
         )
         SELECT
@@ -981,6 +1021,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."costCenterId",
           cc."key" AS "costCenterKey",
           cc."name" AS "costCenterName",
+          u."classificationId",
+          clf."key" AS "classificationKey",
+          clf."name" AS "classificationName",
           u."serialNumber",
           u."buildDate"::text AS "buildDate",
           u."manufacturer",
@@ -994,6 +1037,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
         LEFT JOIN "costCenter" cc ON cc."id" = u."costCenterId"
+        LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
         LEFT JOIN "asset" parent ON parent."id" = u."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
@@ -1014,6 +1058,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.buildDate,
           parsed.manufacturer,
           parsed.remark,
+          parsed.classificationId,
           id,
         ],
       );
@@ -1060,6 +1105,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "asset_cost_center_invalid") {
       res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
+    if (message === "invalid_classification") {
+      res.status(400).json({ error: "invalid_classification" });
       return;
     }
     if (message === "invalid_asset_key") {

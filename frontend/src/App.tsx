@@ -14,6 +14,7 @@ import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { SitesPage } from "./pages/SitesPage";
 import { TableViewerPage } from "./pages/TableViewerPage";
+import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="employees" element={<EmployeesPage />} />

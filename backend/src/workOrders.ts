@@ -5,6 +5,7 @@ import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
 
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
+import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
@@ -34,6 +35,9 @@ type WorkOrderRow = {
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   plannedStart: string;
   plannedEnd: string;
   plannedDurationMinutes: number | null;
@@ -93,6 +97,7 @@ type ParsedBody = {
   orderType: WorkOrderType;
   responsibleEmployeeId: string | null;
   workgroupId: string;
+  classificationId: string | null;
 };
 
 type AssetSiteRow = QueryResultRow & { id: string; siteId: string };
@@ -199,6 +204,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const workgroupIdTrimmed = o.workgroupId.trim();
   if (!isUuid(workgroupIdTrimmed)) return null;
 
+  const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
+  if (classificationIdRaw !== null && !isUuid(classificationIdRaw)) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -210,6 +218,7 @@ function parseBody(body: unknown): ParsedBody | null {
     orderType,
     responsibleEmployeeId,
     workgroupId: workgroupIdTrimmed,
+    classificationId: classificationIdRaw,
   };
 }
 
@@ -282,6 +291,9 @@ const selectWorkOrdersSql = `
     w."costCenterId",
     c."key" AS "costCenterKey",
     c."name" AS "costCenterName",
+    w."classificationId",
+    cl."key" AS "classificationKey",
+    cl."name" AS "classificationName",
     w."plannedStart",
     w."plannedEnd",
     w."plannedDurationMinutes",
@@ -304,6 +316,7 @@ const selectWorkOrdersSql = `
   JOIN "site" s ON s."id" = w."siteId"
   JOIN "asset" a ON a."id" = w."assetId"
   JOIN "costCenter" c ON c."id" = w."costCenterId"
+  LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
   LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
@@ -1085,14 +1098,21 @@ router.post("/", async (req: Request, res: Response) => {
         effectiveSiteId,
         parsed.workgroupId,
       );
+      await assertClassificationForSiteAndScope(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        parsed.classificationId,
+        "work_order",
+      );
 
       const { rows } = await client.query<WorkOrderRow>(
         `
         WITH inserted AS (
           INSERT INTO "workOrder"
-            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId")
+            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId")
           VALUES
-            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid)
+            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
           RETURNING *
         )
         SELECT
@@ -1110,6 +1130,9 @@ router.post("/", async (req: Request, res: Response) => {
           i."costCenterId",
           c."key" AS "costCenterKey",
           c."name" AS "costCenterName",
+          i."classificationId",
+          cl."key" AS "classificationKey",
+          cl."name" AS "classificationName",
           i."plannedStart",
           i."plannedEnd",
           i."plannedDurationMinutes",
@@ -1132,6 +1155,7 @@ router.post("/", async (req: Request, res: Response) => {
         JOIN "site" s ON s."id" = i."siteId"
         JOIN "asset" a ON a."id" = i."assetId"
         JOIN "costCenter" c ON c."id" = i."costCenterId"
+        LEFT JOIN "classification" cl ON cl."id" = i."classificationId"
         LEFT JOIN "employee" re ON re."id" = i."responsibleEmployeeId"
         LEFT JOIN "workgroup" wg ON wg."id" = i."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
@@ -1154,6 +1178,7 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.orderType,
           parsed.responsibleEmployeeId,
           parsed.workgroupId,
+          parsed.classificationId,
         ],
       );
       return rows[0] ?? null;
@@ -1179,6 +1204,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
     if (message === "invalid_cost_center") {
       res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
+    if (message === "invalid_classification") {
+      res.status(400).json({ error: "invalid_classification" });
       return;
     }
     if (message === "asset_cost_center_mismatch") {
@@ -1254,6 +1283,13 @@ router.put("/:id", async (req: Request, res: Response) => {
         effectiveSiteId,
         parsed.workgroupId,
       );
+      await assertClassificationForSiteAndScope(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        parsed.classificationId,
+        "work_order",
+      );
 
       const { rows } = await client.query<WorkOrderRow>(
         `
@@ -1270,8 +1306,9 @@ router.put("/:id", async (req: Request, res: Response) => {
             "plannedDurationMinutes" = $8::integer,
             "orderType" = $9,
             "responsibleEmployeeId" = $10::uuid,
-            "workgroupId" = $11::uuid
-          WHERE "id" = $12::uuid
+            "workgroupId" = $11::uuid,
+            "classificationId" = $12::uuid
+          WHERE "id" = $13::uuid
           RETURNING *
         )
         SELECT
@@ -1289,6 +1326,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."costCenterId",
           c."key" AS "costCenterKey",
           c."name" AS "costCenterName",
+          u."classificationId",
+          clf."key" AS "classificationKey",
+          clf."name" AS "classificationName",
           u."plannedStart",
           u."plannedEnd",
           u."plannedDurationMinutes",
@@ -1311,6 +1351,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         JOIN "site" s ON s."id" = u."siteId"
         JOIN "asset" a ON a."id" = u."assetId"
         JOIN "costCenter" c ON c."id" = u."costCenterId"
+        LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
         LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
         LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
@@ -1343,6 +1384,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.orderType,
           parsed.responsibleEmployeeId,
           parsed.workgroupId,
+          parsed.classificationId,
           id,
         ],
       );
@@ -1369,6 +1411,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "invalid_cost_center") {
       res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
+    if (message === "invalid_classification") {
+      res.status(400).json({ error: "invalid_classification" });
       return;
     }
     if (message === "asset_cost_center_mismatch") {

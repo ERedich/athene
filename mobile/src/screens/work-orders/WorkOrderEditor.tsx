@@ -20,6 +20,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../lib/appParameterKeys";
 import { API_BASE_URL } from "../../lib/api";
 import { AssetPicker } from "../../components/AssetPicker";
+import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
 import { DateTimeField } from "../../components/DateTimeField";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
@@ -34,6 +35,7 @@ import {
   queryKeys,
   uploadWorkOrderDocument,
   useAssetsQuery,
+  useClassificationsQuery,
   useCostCentersQuery,
   useDeleteWorkOrderMutation,
   useWorkOrderDocumentsQuery,
@@ -65,6 +67,7 @@ type FormState = {
   description: string;
   assetId: string;
   costCenterId: string;
+  classificationId: string;
   workgroupId: string;
   plannedStart: Date;
   plannedEnd: Date | null;
@@ -97,6 +100,7 @@ function emptyForm(): FormState {
     description: "",
     assetId: "",
     costCenterId: "",
+    classificationId: "",
     workgroupId: "",
     plannedStart: start,
     plannedEnd: new Date(start.getTime() + 24 * 60 * 60 * 1000),
@@ -124,6 +128,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const { data: orders = [], isLoading: ordersLoading } = useWorkOrdersQuery();
   const { data: assets = [], isLoading: assetsLoading } = useAssetsQuery();
   const { data: costCenters = [], isLoading: ccLoading } = useCostCentersQuery();
+  const { data: classifications = [], isLoading: clfLoading } = useClassificationsQuery();
   const { data: workgroups = [], isLoading: wgLoading } = useWorkgroupsQuery();
 
   const row = useMemo(() => (orderId ? orders.find((o) => o.id === orderId) : undefined), [orderId, orders]);
@@ -155,6 +160,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       description: row.description ?? "",
       assetId: row.assetId,
       costCenterId: row.costCenterId,
+      classificationId: row.classificationId ?? "",
       workgroupId: row.workgroupId ?? "",
       plannedStart: parseIso(row.plannedStart) ?? new Date(),
       plannedEnd: parseIso(row.plannedEnd),
@@ -185,6 +191,14 @@ export function WorkOrderEditor({ orderId }: Props) {
     [costCenters, form.costCenterId, selectedAsset?.siteId],
   );
 
+  const selectableClassifications = useMemo(
+    () =>
+      classifications.filter(
+        (c) => selectedAsset?.siteId && c.siteId === selectedAsset.siteId && c.appliesToWorkOrder,
+      ),
+    [classifications, selectedAsset?.siteId],
+  );
+
   useEffect(() => {
     if (!selectedAsset) return;
     if (selectableCostCenters.some((cc) => cc.id === form.costCenterId)) return;
@@ -197,6 +211,12 @@ export function WorkOrderEditor({ orderId }: Props) {
     }
     setForm((cur) => ({ ...cur, costCenterId: "" }));
   }, [form.costCenterId, selectableCostCenters, selectedAsset]);
+
+  useEffect(() => {
+    if (!form.classificationId) return;
+    if (selectableClassifications.some((c) => c.id === form.classificationId)) return;
+    setForm((cur) => ({ ...cur, classificationId: "" }));
+  }, [form.classificationId, selectableClassifications]);
 
   const selectableWorkgroups = useMemo(
     () =>
@@ -428,6 +448,7 @@ export function WorkOrderEditor({ orderId }: Props) {
         description: description || null,
         assetId: form.assetId,
         costCenterId: form.costCenterId,
+        classificationId: form.classificationId.trim() ? form.classificationId.trim() : null,
         plannedStart: form.plannedStart.toISOString(),
         plannedEnd: form.plannedEnd ? form.plannedEnd.toISOString() : null,
         plannedDurationMinutes: hours == null ? null : Math.round(hours * 60),
@@ -534,6 +555,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       description: description || null,
       assetId: form.assetId,
       costCenterId: form.costCenterId,
+      classificationId: form.classificationId.trim() ? form.classificationId.trim() : null,
       plannedStart: form.plannedStart.toISOString(),
       plannedEnd: form.plannedEnd ? form.plannedEnd.toISOString() : null,
       plannedDurationMinutes: hours == null ? null : Math.round(hours * 60),
@@ -632,7 +654,7 @@ export function WorkOrderEditor({ orderId }: Props) {
     });
   };
 
-  if (ordersLoading || assetsLoading || ccLoading || wgLoading) {
+  if (ordersLoading || assetsLoading || ccLoading || clfLoading || wgLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -707,6 +729,18 @@ export function WorkOrderEditor({ orderId }: Props) {
             label={t("workOrders.costCenter")}
             noneLabel={t("workOrders.costCenterPlaceholder")}
             markInactiveLabel={() => `(${t("costCenters.active").toLowerCase()} ✕)`}
+          />
+
+          <ClassificationPicker
+            classifications={selectableClassifications}
+            siteId={selectedAsset?.siteId ?? ""}
+            scope="work_order"
+            value={form.classificationId || null}
+            onChange={(classificationId) =>
+              setForm((cur) => ({ ...cur, classificationId: classificationId ?? "" }))
+            }
+            label={t("workOrders.classification")}
+            noneLabel={t("workOrders.classificationNone")}
           />
 
           <Text style={styles.label}>

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../auth/AuthContext";
+import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
 import { ParentAssetPicker } from "../../components/ParentAssetPicker";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
@@ -27,6 +28,7 @@ import {
   queryKeys,
   type AssetSaveBody,
   useAssetsQuery,
+  useClassificationsQuery,
   useCostCentersQuery,
   useDeleteAssetMutation,
   useSitesQuery,
@@ -56,6 +58,7 @@ export function AssetEditor({ assetId }: Props) {
 
   const { data: sites = [], isLoading: sitesLoading } = useSitesQuery();
   const { data: costCenters = [], isLoading: ccLoading } = useCostCentersQuery();
+  const { data: classifications = [], isLoading: clfLoading } = useClassificationsQuery();
   const { data: assets = [], isLoading: assetsLoading } = useAssetsQuery();
   const deleteMutation = useDeleteAssetMutation();
 
@@ -81,6 +84,7 @@ export function AssetEditor({ assetId }: Props) {
   const [manufacturer, setManufacturer] = useState("");
   const [remark, setRemark] = useState("");
   const [costCenterId, setCostCenterId] = useState<string | null>(null);
+  const [classificationId, setClassificationId] = useState<string | null>(null);
   const [typeModal, setTypeModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -102,6 +106,7 @@ export function AssetEditor({ assetId }: Props) {
     setManufacturer(row.manufacturer ?? "");
     setRemark(row.remark ?? "");
     setCostCenterId(row.costCenterId);
+    setClassificationId(row.classificationId);
     setHydrated(true);
   }, [isNew, row, hydrated]);
 
@@ -111,6 +116,17 @@ export function AssetEditor({ assetId }: Props) {
       if (!cc || cc.siteId !== siteId) setCostCenterId(null);
     }
   }, [siteId, costCenterId, costCenters]);
+
+  useEffect(() => {
+    if (!classificationId) return;
+    const ok = classifications.some(
+      (c) =>
+        c.id === classificationId &&
+        c.siteId === siteId &&
+        c.appliesToAsset,
+    );
+    if (!ok) setClassificationId(null);
+  }, [siteId, classificationId, classifications]);
 
   const typeItems: SelectItem[] = useMemo(
     () =>
@@ -229,6 +245,7 @@ export function AssetEditor({ assetId }: Props) {
       manufacturer: trimOrNull(manufacturer),
       remark: trimOrNull(remark),
       costCenterId,
+      classificationId,
     };
 
     setSaving(true);
@@ -270,7 +287,7 @@ export function AssetEditor({ assetId }: Props) {
     ]);
   }
 
-  if (sitesLoading || ccLoading || assetsLoading) {
+  if (sitesLoading || ccLoading || clfLoading || assetsLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -367,6 +384,16 @@ export function AssetEditor({ assetId }: Props) {
         onChange={setCostCenterId}
         label={t("assets.costCenter")}
         noneLabel={t("assets.costCenterNone")}
+      />
+
+      <ClassificationPicker
+        classifications={classifications}
+        siteId={siteId || defaultSiteId}
+        scope="asset"
+        value={classificationId}
+        onChange={setClassificationId}
+        label={t("assets.classification")}
+        noneLabel={t("assets.classificationNone")}
       />
 
       <Text style={styles.label}>{t("assets.remark")}</Text>

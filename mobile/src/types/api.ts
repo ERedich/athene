@@ -35,6 +35,23 @@ export type CostCenterRow = {
   updatedBy: string;
 };
 
+export type ClassificationRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  siteColorHex: string;
+  appliesToMaterial: boolean;
+  appliesToAsset: boolean;
+  appliesToWorkOrder: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+};
+
 export type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
 export type AssetRow = {
@@ -57,6 +74,9 @@ export type AssetRow = {
   costCenterId: string | null;
   costCenterKey: string | null;
   costCenterName: string | null;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -90,6 +110,9 @@ export type WorkOrderRow = {
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
   plannedStart: string;
   plannedEnd: string;
   plannedDurationMinutes: number | null;
