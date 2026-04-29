@@ -208,6 +208,7 @@ export function TableViewerPage() {
             showGridlines
             scrollable
             resizableColumns
+            reorderableColumns
             columnResizeMode="expand"
             scrollHeight="flex"
             tableStyle={{ minWidth: "20rem" }}
@@ -232,6 +233,7 @@ export function TableViewerPage() {
               showGridlines
               scrollable
               resizableColumns
+              reorderableColumns
               columnResizeMode="expand"
               scrollHeight="flex"
               tableStyle={{ minWidth: "36rem" }}
@@ -266,6 +268,7 @@ export function TableViewerPage() {
               showGridlines
               scrollable
               resizableColumns
+              reorderableColumns
               columnResizeMode="expand"
               scrollHeight="flex"
               tableStyle={{ minWidth: "36rem" }}

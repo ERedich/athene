@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 
+import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 
 export type AuthUser = {
@@ -18,6 +19,11 @@ export type AuthSession = {
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   /** WO-DWG: default work group UUID for new work orders, or null if unset. */
   appParameterDefaultWorkgroupId: string | null;
+  /** GN-AAKG */
+  appParameterAssetKeyMode: AppParameterAssetKeyMode;
+  /** GN-SAKP */
+  appParameterShowAssetKeyPath: boolean;
+  appParameterAssetKeyPathSeparator: string;
   refresh: () => Promise<void>;
 };
 

@@ -12,7 +12,21 @@ export const APP_PARAM_KEY_ASSET_TYPES = "GN-ATYP";
 /** Aufträge: Standard-Fachgruppe für Neuanlagen (nullable UUID). */
 export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG";
 
+/** Allgemein: Asset-Schlüssel manuell oder automatisch (Werk). */
+export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG";
+
+/** Allgemein: Asset-Schlüssel-Pfad in Listen anzeigen (JSON). */
+export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP";
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
+
+export type AssetKeyGenerationMode = "manual" | "auto_incremental";
+
+export type ShowAssetKeyPathConfig = {
+  show: boolean;
+  /** Single character when show is true; default "." */
+  separator: string;
+};
 export type AssetTypeSlug = (typeof ASSET_TYPE_KEYS)[number];
 
 export type AssetTypeDisplayEntry = {
@@ -81,6 +95,27 @@ function parseGnAtypJsonValue(raw: unknown): AssetTypeDisplayConfig | null {
   return out as AssetTypeDisplayConfig;
 }
 
+export function parseGnAakgJsonValue(raw: unknown): { mode: AssetKeyGenerationMode } | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const mode = o.mode;
+  if (mode === "manual" || mode === "auto_incremental") return { mode };
+  return null;
+}
+
+export function parseGnSakpJsonValue(raw: unknown): ShowAssetKeyPathConfig | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const showParsed = parseBoolBody(o.show);
+  if (showParsed === null) return null;
+  const sepRaw = typeof o.separator === "string" ? o.separator : ".";
+  if (!showParsed) {
+    return { show: false, separator: sepRaw.length === 1 ? sepRaw : "." };
+  }
+  if (sepRaw.length !== 1) return null;
+  return { show: true, separator: sepRaw };
+}
+
 /** Accept JSON booleans only (no Boolean() coercion — e.g. Boolean("false") === true). */
 function parseBoolBody(raw: unknown): boolean | null {
   if (typeof raw === "boolean") return raw;
@@ -127,6 +162,30 @@ export async function getAssetTypeDisplayConfig(client: DbQueryable): Promise<As
     return parseGnAtypJsonValue(rows[0]?.jsonValue ?? null);
   } catch {
     return null;
+  }
+}
+
+export async function getAssetKeyGenerationMode(client: DbQueryable): Promise<AssetKeyGenerationMode> {
+  try {
+    const { rows } = await client.query<{ jsonValue: unknown }>(
+      `SELECT "jsonValue" FROM "appParameter" WHERE "key" = $1 AND "valueType" = 'json' LIMIT 1`,
+      [APP_PARAM_KEY_ASSET_KEY_GEN],
+    );
+    return parseGnAakgJsonValue(rows[0]?.jsonValue ?? null)?.mode ?? "manual";
+  } catch {
+    return "manual";
+  }
+}
+
+export async function getShowAssetKeyPath(client: DbQueryable): Promise<ShowAssetKeyPathConfig> {
+  try {
+    const { rows } = await client.query<{ jsonValue: unknown }>(
+      `SELECT "jsonValue" FROM "appParameter" WHERE "key" = $1 AND "valueType" = 'json' LIMIT 1`,
+      [APP_PARAM_KEY_SHOW_ASSET_KEY_PATH],
+    );
+    return parseGnSakpJsonValue(rows[0]?.jsonValue ?? null) ?? { show: false, separator: "." };
+  } catch {
+    return { show: false, separator: "." };
   }
 }
 
@@ -256,13 +315,30 @@ router.patch("/:key", async (req: Request, res: Response) => {
     }
 
     if (vt === "json") {
-      if (key !== APP_PARAM_KEY_ASSET_TYPES) {
+      let payload: unknown = null;
+      if (key === APP_PARAM_KEY_ASSET_TYPES) {
+        const parsed = parseGnAtypJsonValue(body.jsonValue);
+        if (!parsed) {
+          res.status(400).json({ error: "invalid_json_value" });
+          return;
+        }
+        payload = parsed;
+      } else if (key === APP_PARAM_KEY_ASSET_KEY_GEN) {
+        const parsed = parseGnAakgJsonValue(body.jsonValue);
+        if (!parsed) {
+          res.status(400).json({ error: "invalid_json_value" });
+          return;
+        }
+        payload = parsed;
+      } else if (key === APP_PARAM_KEY_SHOW_ASSET_KEY_PATH) {
+        const parsed = parseGnSakpJsonValue(body.jsonValue);
+        if (!parsed) {
+          res.status(400).json({ error: "invalid_json_value" });
+          return;
+        }
+        payload = parsed;
+      } else {
         res.status(400).json({ error: "unsupported_json_parameter" });
-        return;
-      }
-      const parsed = parseGnAtypJsonValue(body.jsonValue);
-      if (!parsed) {
-        res.status(400).json({ error: "invalid_json_value" });
         return;
       }
       const { rows } = await pool.query<AppParameterRow>(
@@ -272,7 +348,7 @@ router.patch("/:key", async (req: Request, res: Response) => {
         WHERE "key" = $2 AND "valueType" = 'json'
         RETURNING ${returningRowColumns}
         `,
-        [JSON.stringify(parsed), key],
+        [JSON.stringify(payload), key],
       );
       const row = rows[0];
       if (!row) {

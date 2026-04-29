@@ -619,6 +619,7 @@ export function UsersPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "88rem" }}
@@ -650,7 +651,12 @@ export function UsersPage() {
             className="min-w-28"
           />
           <Column field="workingSiteName" header={t("users.primarySite")} body={primarySiteBody} sortable />
-          <Column header={t("users.accessSites")} body={accessSitesBody} className="min-w-72" />
+          <Column
+            columnKey="accessSites"
+            header={t("users.accessSites")}
+            body={accessSitesBody}
+            className="min-w-72"
+          />
           <Column
             field="createdAt"
             header={t("users.createdAt")}

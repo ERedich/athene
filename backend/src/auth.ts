@@ -2,8 +2,10 @@ import { Router, type Request, type Response } from "express";
 
 import {
   fetchAppParameterBooleans,
+  getAssetKeyGenerationMode,
   getAssetTypeDisplayConfig,
   getDefaultWorkOrderWorkgroupId,
+  getShowAssetKeyPath,
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
@@ -89,6 +91,9 @@ router.get("/me", async (req: Request, res: Response) => {
     let appParameterBooleans: Record<string, boolean> = {};
     let appParameterAssetTypes: Awaited<ReturnType<typeof getAssetTypeDisplayConfig>> = null;
     let appParameterDefaultWorkgroupId: string | null = null;
+    let appParameterAssetKeyMode: Awaited<ReturnType<typeof getAssetKeyGenerationMode>> = "manual";
+    let appParameterShowAssetKeyPath = false;
+    let appParameterAssetKeyPathSeparator = ".";
     try {
       appParameterBooleans = await fetchAppParameterBooleans(pool);
     } catch (paramErr) {
@@ -104,7 +109,27 @@ router.get("/me", async (req: Request, res: Response) => {
     } catch (dwgErr) {
       console.warn("[athene-backend] WO-DWG load skipped:", dwgErr);
     }
-    res.json({ user, appParameterBooleans, appParameterAssetTypes, appParameterDefaultWorkgroupId });
+    try {
+      appParameterAssetKeyMode = await getAssetKeyGenerationMode(pool);
+    } catch (aakgErr) {
+      console.warn("[athene-backend] GN-AAKG load skipped:", aakgErr);
+    }
+    try {
+      const sakp = await getShowAssetKeyPath(pool);
+      appParameterShowAssetKeyPath = sakp.show;
+      appParameterAssetKeyPathSeparator = sakp.separator;
+    } catch (sakpErr) {
+      console.warn("[athene-backend] GN-SAKP load skipped:", sakpErr);
+    }
+    res.json({
+      user,
+      appParameterBooleans,
+      appParameterAssetTypes,
+      appParameterDefaultWorkgroupId,
+      appParameterAssetKeyMode,
+      appParameterShowAssetKeyPath,
+      appParameterAssetKeyPathSeparator,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });

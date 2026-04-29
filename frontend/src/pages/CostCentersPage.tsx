@@ -443,6 +443,7 @@ export function CostCentersPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "68rem" }}
@@ -453,7 +454,12 @@ export function CostCentersPage() {
           <Column field="key" header={t("costCenters.key")} sortable />
           <Column field="name" header={t("costCenters.name")} sortable />
           <Column field="siteName" header={t("costCenters.site")} sortable body={siteColumnBody} />
-          <Column header={t("costCenters.active")} body={activeBody} className="w-28 text-center" />
+          <Column
+            columnKey="active"
+            header={t("costCenters.active")}
+            body={activeBody}
+            className="w-28 text-center"
+          />
           <Column
             field="createdAt"
             header={t("costCenters.createdAt")}

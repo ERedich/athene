@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { apiFetch } from "../lib/api";
+import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AuthUser } from "../types/api";
 
 import { AuthContext } from "./AuthContext";
@@ -9,12 +10,18 @@ type MeResponse = {
   user: AuthUser;
   appParameterBooleans?: Record<string, boolean>;
   appParameterDefaultWorkgroupId?: string | null;
+  appParameterAssetKeyMode?: AppParameterAssetKeyMode;
+  appParameterShowAssetKeyPath?: boolean;
+  appParameterAssetKeyPathSeparator?: string;
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
   const [appParameterDefaultWorkgroupId, setAppParameterDefaultWorkgroupId] = useState<string | null>(null);
+  const [appParameterAssetKeyMode, setAppParameterAssetKeyMode] = useState<AppParameterAssetKeyMode>("manual");
+  const [appParameterShowAssetKeyPath, setAppParameterShowAssetKeyPath] = useState(false);
+  const [appParameterAssetKeyPathSeparator, setAppParameterAssetKeyPathSeparator] = useState(".");
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -24,16 +31,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setAppParameterBooleans({});
         setAppParameterDefaultWorkgroupId(null);
+        setAppParameterAssetKeyMode("manual");
+        setAppParameterShowAssetKeyPath(false);
+        setAppParameterAssetKeyPathSeparator(".");
         return;
       }
       const data = (await res.json()) as MeResponse;
       setUser(data.user);
       setAppParameterBooleans(data.appParameterBooleans ?? {});
       setAppParameterDefaultWorkgroupId(data.appParameterDefaultWorkgroupId ?? null);
+      setAppParameterAssetKeyMode(data.appParameterAssetKeyMode ?? "manual");
+      setAppParameterShowAssetKeyPath(data.appParameterShowAssetKeyPath ?? false);
+      setAppParameterAssetKeyPathSeparator(data.appParameterAssetKeyPathSeparator ?? ".");
     } catch {
       setUser(null);
       setAppParameterBooleans({});
       setAppParameterDefaultWorkgroupId(null);
+      setAppParameterAssetKeyMode("manual");
+      setAppParameterShowAssetKeyPath(false);
+      setAppParameterAssetKeyPathSeparator(".");
     }
   }, []);
 
@@ -71,6 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setAppParameterBooleans({});
     setAppParameterDefaultWorkgroupId(null);
+    setAppParameterAssetKeyMode("manual");
+    setAppParameterShowAssetKeyPath(false);
+    setAppParameterAssetKeyPathSeparator(".");
   }, []);
 
   const value = useMemo(
@@ -78,12 +97,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       appParameterBooleans,
       appParameterDefaultWorkgroupId,
+      appParameterAssetKeyMode,
+      appParameterShowAssetKeyPath,
+      appParameterAssetKeyPathSeparator,
       loading,
       refresh,
       signIn,
       signOut,
     }),
-    [user, appParameterBooleans, appParameterDefaultWorkgroupId, loading, refresh, signIn, signOut],
+    [
+      user,
+      appParameterBooleans,
+      appParameterDefaultWorkgroupId,
+      appParameterAssetKeyMode,
+      appParameterShowAssetKeyPath,
+      appParameterAssetKeyPathSeparator,
+      loading,
+      refresh,
+      signIn,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

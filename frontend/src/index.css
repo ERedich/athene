@@ -429,20 +429,82 @@ html.theme-crossfade-fallback #root {
   border-color: rgb(148 163 184) !important;
 }
 
-/* Employee assignment references with zero entries: icon only, transparent button. */
+/*
+ * Reference buttons with zero entries: outline only (no fill), border + icon in the type color.
+ * Documents: hellblau (sky-300); employees: slate (matches filled ref tone).
+ */
+.app-ref-button--employees-empty.p-button:not(:disabled),
+.app-ref-button--employees-empty.p-button:not(.p-disabled) {
+  opacity: 1 !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: 1px solid rgb(203 213 225) !important; /* slate-300 */
+  box-shadow: none !important;
+  color: transparent !important;
+}
+.app-ref-button--employees-empty.p-button:not(:disabled) .p-button-icon,
+.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon {
+  color: rgb(148 163 184) !important; /* slate-400 — gleiche Familie wie gefüllter MA-Button */
+}
+.app-ref-button--employees-empty.p-button:not(:disabled) .p-button-icon .pi,
+.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon .pi {
+  color: inherit !important;
+}
+.app-ref-button--employees-empty.p-button:not(:disabled):hover,
+.app-ref-button--employees-empty.p-button:not(.p-disabled):hover {
+  background: transparent !important;
+  border-color: rgb(148 163 184) !important;
+  box-shadow: none !important;
+}
+.app-ref-button--employees-empty.p-button:not(:disabled):hover .p-button-icon,
+.app-ref-button--employees-empty.p-button:not(.p-disabled):hover .p-button-icon {
+  color: rgb(100 116 139) !important; /* slate-500 */
+}
+
+[data-theme="dark"] .app-ref-button--employees-empty.p-button:not(:disabled),
+[data-theme="dark"] .app-ref-button--employees-empty.p-button:not(.p-disabled) {
+  background: transparent !important;
+  border-color: rgb(148 163 184) !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(:disabled)
+  .p-button-icon,
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(.p-disabled)
+  .p-button-icon {
+  color: rgb(203 213 225) !important;
+}
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(:disabled):hover,
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(.p-disabled):hover {
+  border-color: rgb(203 213 225) !important;
+}
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(:disabled):hover
+  .p-button-icon,
+[data-theme="dark"]
+  .app-ref-button--employees-empty.p-button:not(.p-disabled):hover
+  .p-button-icon {
+  color: rgb(226 232 240) !important;
+}
+
+/* Employee assignment references with zero entries (disabled state — reserved). */
 .app-ref-button--employees-inactive.p-button.p-disabled,
 .app-ref-button--employees-inactive.p-button:disabled {
   opacity: 1 !important;
   cursor: not-allowed !important;
   background: transparent !important;
-  border-color: transparent !important;
+  border: 1px solid rgb(203 213 225) !important;
   box-shadow: none !important;
   color: transparent !important;
 }
 
 .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon,
 .app-ref-button--employees-inactive.p-button:disabled .p-button-icon {
-  color: rgb(148 163 184) !important; /* slate-400 */
+  color: rgb(148 163 184) !important;
 }
 
 .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon .pi,
@@ -453,7 +515,7 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled,
 [data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled {
   background: transparent !important;
-  border-color: transparent !important;
+  border-color: rgb(148 163 184) !important;
   box-shadow: none !important;
   color: transparent !important;
 }
@@ -464,7 +526,7 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"]
   .app-ref-button--employees-inactive.p-button:disabled
   .p-button-icon {
-  color: rgb(148 163 184) !important;
+  color: rgb(203 213 225) !important;
 }
 
 [data-theme="dark"]
@@ -478,25 +540,65 @@ html.theme-crossfade-fallback #root {
   color: inherit !important;
 }
 
-/* Document references with zero files: no fill; icon only, soft blue (overrides Prime disabled → primary) */
+/* Document references with zero files: outline hellblau, kein Fill */
 .app-ref-button--documents-inactive.p-button.p-disabled,
 .app-ref-button--documents-inactive.p-button:disabled {
   opacity: 1 !important;
   cursor: not-allowed !important;
   background: transparent !important;
-  border-color: transparent !important;
+  border: 1px solid rgb(125 211 252) !important; /* sky-300 */
   box-shadow: none !important;
   color: transparent !important;
 }
 
 .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon,
 .app-ref-button--documents-inactive.p-button:disabled .p-button-icon {
-  color: rgb(125 211 252) !important; /* sky-300 — leicht bläulich */
+  color: rgb(125 211 252) !important;
 }
 
 .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
 .app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
   color: inherit !important;
+}
+
+/* Zero documents but clickable — open Documents tab */
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) {
+  opacity: 1 !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: 1px solid rgb(125 211 252) !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) .p-button-icon {
+  color: rgb(125 211 252) !important;
+}
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover {
+  border-color: rgb(14 165 233) !important; /* sky-500 */
+}
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover .p-button-icon {
+  color: rgb(14 165 233) !important;
+}
+
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) {
+  background: transparent !important;
+  border-color: rgb(56 189 248) !important;
+  box-shadow: none !important;
+  color: transparent !important;
+}
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled)
+  .p-button-icon {
+  color: rgb(56 189 248) !important;
+}
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover {
+  border-color: rgb(125 211 252) !important;
+}
+[data-theme="dark"]
+  .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover
+  .p-button-icon {
+  color: rgb(125 211 252) !important;
 }
 
 /* Keep "no documents" icon alignment like rows with a visible badge chip. */
@@ -510,7 +612,7 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled {
   background: transparent !important;
-  border-color: transparent !important;
+  border-color: rgb(56 189 248) !important;
   box-shadow: none !important;
   color: transparent !important;
 }
@@ -521,7 +623,7 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"]
   .app-ref-button--documents-inactive.p-button:disabled
   .p-button-icon {
-  color: rgb(125 211 252) !important;
+  color: rgb(56 189 248) !important;
 }
 
 [data-theme="dark"]
@@ -607,6 +709,34 @@ html.theme-crossfade-fallback #root {
 .app-wo-status-modal.app-wo-status-ended,
 .app-wo-status-modal.app-wo-status-done {
   color: rgb(22 163 74);
+}
+
+/* Work order dialog: read-only status field — same text hues as modal header / table emphasis */
+.app-wo-status-input.p-inputtext:disabled {
+  opacity: 1;
+  cursor: default;
+  font-weight: 600;
+}
+.app-wo-status-input.p-inputtext.app-wo-status-open:disabled {
+  color: rgb(100 116 139) !important;
+  -webkit-text-fill-color: rgb(100 116 139);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-assigned:disabled {
+  color: rgb(2 132 199) !important;
+  -webkit-text-fill-color: rgb(2 132 199);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-started:disabled {
+  color: rgb(37 99 235) !important;
+  -webkit-text-fill-color: rgb(37 99 235);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-paused:disabled {
+  color: rgb(234 88 12) !important;
+  -webkit-text-fill-color: rgb(234 88 12);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-ended:disabled,
+.app-wo-status-input.p-inputtext.app-wo-status-done:disabled {
+  color: rgb(22 163 74) !important;
+  -webkit-text-fill-color: rgb(22 163 74);
 }
 
 /* Work-order start: text button; play icon = Tailwind green-500 */
@@ -973,6 +1103,10 @@ html.theme-crossfade-fallback #root {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 0.75rem 1rem 1rem;
 }
 
 .app-parameter-card.p-card {
@@ -1175,15 +1309,13 @@ html.theme-crossfade-fallback #root {
 
 /* Headers: single line (no wrap), sort/filter icons stay with title; table may extend past viewport (wrapper scrolls). */
 .app-data-table.p-datatable thead > tr > th,
-.app-data-table.p-datatable .p-datatable-thead > tr > th,
-.app-data-table.p-treetable thead > tr > th,
-.app-data-table.p-treetable .p-treetable-thead > tr > th {
+.app-data-table.p-datatable .p-datatable-thead > tr > th {
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
 }
 
-/* Title + sort/filter on one row (Prime @layer can lose to later CSS; TreeTable has no component flex rule). */
+/* Title + sort/filter on one row (Prime @layer can lose to later CSS). */
 .app-data-table.p-datatable
   .p-datatable-thead
   > tr
@@ -1201,13 +1333,7 @@ html.theme-crossfade-fallback #root {
   thead
   > tr
   > th
-  .p-column-header-content,
-.app-data-table.p-treetable
-  .p-treetable-thead
-  > tr
-  > th
-  .p-column-header-content,
-.app-data-table.p-treetable thead > tr > th .p-column-header-content {
+  .p-column-header-content {
   display: inline-flex !important;
   flex-direction: row !important;
   flex-wrap: nowrap !important;
@@ -1245,94 +1371,7 @@ html.theme-crossfade-fallback #root {
   ) !important;
 }
 
-/* TreeTable: match DataTable chrome when using shared app-data-table class */
-.app-data-table.p-treetable {
-  min-width: 0;
-}
-
-/* Same border model as DataTable — Firefox omits or clips cell borders on nested tree rows
-   when the table uses the default collapsed model plus row animations. */
-.app-data-table.p-treetable .p-treetable-table {
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-/* Scrollable TreeTable: header + body are split (Prime). Do not make the outer wrapper a vertical
-   scroller or the whole block (including the header) scrolls — use the inner scrollable body only,
-   like DataTable’s behavior. */
-.app-data-table.p-treetable
-  .p-treetable-wrapper.p-treetable-scrollable-wrapper {
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-/* Keep header fixed while body is the vertical scroller. */
-.app-data-table.p-treetable .p-treetable-scrollable-body {
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-}
-
-.app-data-table.p-treetable
-  .p-treetable-wrapper:not(.p-treetable-scrollable-wrapper) {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-width: 100%;
-}
-
-.app-data-table.p-treetable .p-treetable-thead > tr > th,
-.app-data-table.p-treetable .p-treetable-tbody > tr > td {
-  font-size: 0.875rem;
-  border-width: 0 1px 1px 0;
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
-}
-
-.app-data-table.p-treetable .p-treetable-thead > tr > th {
-  border-width: 0 1px 1px 0 !important;
-  border-style: solid !important;
-  border-color: color-mix(
-    in srgb,
-    var(--color-on-surface) 12%,
-    transparent
-  ) !important;
-}
-
-.app-data-table.p-treetable .p-treetable-thead > tr > th:last-child,
-.app-data-table.p-treetable .p-treetable-tbody > tr > td:last-child {
-  border-right-width: 0;
-}
-
-.app-data-table.p-treetable .p-treetable-thead > tr > th:last-child {
-  border-right-width: 0 !important;
-}
-
-.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight {
-  background: color-mix(
-    in srgb,
-    var(--color-primary) 18%,
-    transparent
-  ) !important;
-  color: var(--color-on-surface) !important;
-}
-
-.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight > td {
-  background: transparent;
-  color: inherit;
-}
-
-.app-data-table.p-treetable .p-treetable-tbody > tr.p-highlight:hover {
-  background: color-mix(
-    in srgb,
-    var(--color-primary) 24%,
-    transparent
-  ) !important;
-}
-
-/* Global table density: compact mode (all DataTable / TreeTable with app-data-table). */
+/* Global table density: compact mode (all DataTable with app-data-table). */
 :root[data-table-density="compact"]
   .app-data-table.p-datatable
   .p-datatable-thead
@@ -1342,16 +1381,6 @@ html.theme-crossfade-fallback #root {
   .app-data-table.p-datatable
   .p-datatable-tbody
   > tr
-  > td,
-:root[data-table-density="compact"]
-  .app-data-table.p-treetable
-  .p-treetable-thead
-  > tr
-  > th,
-:root[data-table-density="compact"]
-  .app-data-table.p-treetable
-  .p-treetable-tbody
-  > tr
   > td {
   padding: 0.25rem 0.375rem;
   line-height: 1.2;
@@ -1359,221 +1388,6 @@ html.theme-crossfade-fallback #root {
   vertical-align: middle;
 }
 
-/* Assets tree: auto column widths + horizontal scroll; headers full label (no ellipsis), body cells may ellipsize */
-.app-assets-treetable.p-treetable .p-treetable-table {
-  table-layout: auto;
-  width: max-content;
-  max-width: none;
-}
-
-/* Asset tree view: no vertical separators between columns. */
-.app-assets-treetable.p-treetable .p-treetable-thead > tr > th,
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
-  border-right-width: 0 !important;
-}
-
-/* Asset tree view: zebra striping based on currently visible rows (after expand/collapse). */
-.app-assets-treetable.p-treetable
-  .p-treetable-tbody
-  > tr:not(.p-highlight):nth-child(even)
-  > td {
-  background: color-mix(in srgb, var(--color-on-surface) 4%, transparent);
-}
-
-.app-assets-treetable.p-treetable
-  .p-treetable-tbody
-  > tr:not(.p-highlight):nth-child(odd)
-  > td {
-  background: transparent;
-}
-
-.app-assets-treetable.p-treetable
-  .p-treetable-tbody
-  > tr:not(.p-highlight):hover
-  > td {
-  background: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
-}
-
-/* Optional type colorization for assets tree rows (controlled via GN-CATR boolean). */
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-site:not(.p-highlight)
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-site) 20%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-structure:not(.p-highlight)
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-structure) 20%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-line:not(.p-highlight)
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-line) 20%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-maintenanceObject:not(.p-highlight)
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-maintenance-object) 20%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-site:not(.p-highlight):hover
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-site) 26%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-structure:not(.p-highlight):hover
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-structure) 26%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-line:not(.p-highlight):hover
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-line) 26%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable--type-colored.p-treetable
-  .p-treetable-tbody
-  > tr.app-asset-row-type-maintenanceObject:not(.p-highlight):hover
-  > td {
-  background: color-mix(
-    in srgb,
-    var(--app-asset-type-row-maintenance-object) 26%,
-    transparent
-  ) !important;
-}
-
-.app-assets-treetable.p-treetable .p-treetable-thead > tr > th {
-  white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
-}
-
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td .flex.min-w-0 {
-  max-width: 100%;
-}
-
-.app-assets-treetable-ref-cell {
-  overflow: visible !important;
-  text-overflow: clip;
-}
-
-/* Assets tree animation:
-   - animate only cell backgrounds/contents (not table geometry) to preserve borders/gridlines
-   - explicit collapsing class keeps visual continuity when children are removed from DOM
-   - transitions are scoped to the tree table to avoid side effects in other tables */
-.app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
-  transition:
-    background-color 1000ms cubic-bezier(0.25, 0.9, 0.35, 1),
-    color 180ms ease;
-}
-
-.app-assets-treetable.p-treetable
-  .p-treetable-tbody
-  > tr.app-assets-tree-row-entering
-  > td {
-  animation: app-assets-tree-row-enter 1000ms cubic-bezier(0.22, 0.95, 0.32, 1);
-  transform-origin: top center;
-  will-change: transform, opacity;
-}
-
-.app-assets-treetable.p-treetable
-  .p-treetable-tbody
-  > tr.app-assets-tree-row-collapsing
-  > td {
-  animation: app-assets-tree-row-collapse 1000ms
-    cubic-bezier(0.25, 0.9, 0.35, 1);
-  transform-origin: top center;
-  will-change: transform, opacity;
-}
-
-@keyframes app-assets-tree-row-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-14px) scaleY(0.92);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scaleY(1);
-  }
-}
-
-@keyframes app-assets-tree-row-collapse {
-  from {
-    opacity: 1;
-    transform: translateY(0) scaleY(1);
-  }
-  to {
-    opacity: 0.08;
-    transform: translateY(-14px) scaleY(0.92);
-  }
-}
-
-/* Row toggler: small snap when switching chevron (Prime swaps icons; keep interaction snappy). */
-.app-assets-treetable.p-treetable .p-treetable-toggler {
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease,
-    opacity 0.18s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
-    animation: none !important;
-    transition: none !important;
-  }
-  .app-assets-treetable.p-treetable .p-treetable-tbody > tr > td {
-    opacity: 1 !important;
-    transform: none !important;
-    filter: none !important;
-  }
-}
 .app-data-table .p-column-title {
   flex: 0 1 auto;
   font-size: inherit;
@@ -1704,7 +1518,7 @@ html.theme-crossfade-fallback #root {
   color: var(--color-primary);
 }
 
-/* DataTable / TreeTable context menu — compact panel (theme default text/icon colors). */
+/* DataTable context menu — compact panel (theme default text/icon colors). */
 .app-table-context-menu.p-contextmenu {
   min-width: 6.75rem;
 }

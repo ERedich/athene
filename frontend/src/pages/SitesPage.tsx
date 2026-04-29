@@ -384,6 +384,7 @@ export function SitesPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "66rem" }}
@@ -393,8 +394,13 @@ export function SitesPage() {
         >
           <Column field="key" header={t("sites.key")} sortable />
           <Column field="name" header={t("sites.name")} sortable />
-          <Column header={t("sites.color")} body={colorBody} className="w-40" />
-          <Column header={t("sites.werk")} body={plantBody} className="w-24 text-center" />
+          <Column columnKey="color" header={t("sites.color")} body={colorBody} className="w-40" />
+          <Column
+            columnKey="plant"
+            header={t("sites.werk")}
+            body={plantBody}
+            className="w-24 text-center"
+          />
           <Column
             field="createdAt"
             header={t("sites.createdAt")}

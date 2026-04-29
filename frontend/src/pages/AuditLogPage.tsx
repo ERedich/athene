@@ -295,6 +295,7 @@ export function AuditLogPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "72rem" }}
@@ -313,7 +314,7 @@ export function AuditLogPage() {
           />
           <Column field="tableName" header={t("auditLog.colTable")} sortable />
           <Column field="recordId" header={t("auditLog.colRecord")} body={(r) => <span>{r.recordId}</span>} />
-          <Column header={t("auditLog.colOp")} body={opBody} className="w-28" />
+          <Column columnKey="op" header={t("auditLog.colOp")} body={opBody} className="w-28" />
           <Column field="changedByLogin" header={t("auditLog.colUser")} />
           <Column
             field="requestId"

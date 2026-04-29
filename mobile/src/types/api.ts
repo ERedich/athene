@@ -62,6 +62,7 @@ export type AssetRow = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  keyPath?: string | null;
 };
 
 export type WorkOrderType = "maintenance" | "repair" | "breakdown";

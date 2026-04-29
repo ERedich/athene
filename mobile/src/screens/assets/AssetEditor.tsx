@@ -50,7 +50,7 @@ export function AssetEditor({ assetId }: Props) {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
-  const { user, appParameterBooleans } = useAuth();
+  const { user, appParameterBooleans, appParameterAssetKeyMode } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { colors, isDark } = useAppTheme();
 
@@ -120,6 +120,13 @@ export function AssetEditor({ assetId }: Props) {
       })),
     [t],
   );
+
+  const selectedSiteIsPlant = useMemo(
+    () => sites.find((s) => s.id === siteId)?.isPlant === true,
+    [sites, siteId],
+  );
+  const assetKeyReadOnly =
+    appParameterAssetKeyMode === "auto_incremental" && selectedSiteIsPlant;
 
   const styles = useMemo(
     () =>
@@ -192,7 +199,13 @@ export function AssetEditor({ assetId }: Props) {
     const k = key.trim();
     const n = name.trim();
     const bd = buildDate.trim();
-    if (!k || !n || !siteId || !isUuid(siteId)) {
+    const createAutoPlant =
+      isNew && appParameterAssetKeyMode === "auto_incremental" && selectedSiteIsPlant;
+    if (!n || !siteId || !isUuid(siteId)) {
+      Alert.alert("", t("assets.saveError"));
+      return;
+    }
+    if (!createAutoPlant && !k) {
       Alert.alert("", t("assets.saveError"));
       return;
     }
@@ -206,7 +219,7 @@ export function AssetEditor({ assetId }: Props) {
     }
 
     const body: AssetSaveBody = {
-      key: k,
+      key: createAutoPlant ? "" : k,
       name: n,
       siteId,
       type,
@@ -287,7 +300,15 @@ export function AssetEditor({ assetId }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <Text style={styles.label}>{t("assets.key")}</Text>
-      <TextInput value={key} onChangeText={setKey} style={styles.input} autoCapitalize="none" />
+      <TextInput
+        value={key}
+        onChangeText={setKey}
+        style={styles.input}
+        autoCapitalize="none"
+        editable={!assetKeyReadOnly}
+        placeholder={assetKeyReadOnly && isNew ? t("assets.keyAutoHint") : undefined}
+      />
+      {assetKeyReadOnly && isNew ? <Text style={styles.hint}>{t("assets.keyAutoHint")}</Text> : null}
 
       <Text style={styles.label}>{t("assets.name")}</Text>
       <TextInput value={name} onChangeText={setName} style={styles.input} />

@@ -4,7 +4,12 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
 
-import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
+import {
+  getAllowSiteChange,
+  getAssetKeyGenerationMode,
+  getShowAssetKeyPath,
+  getWorkingSiteId,
+} from "./appParameters.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
@@ -43,6 +48,8 @@ export type AssetRow = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  /** Present when GN-SAKP enabled; computed server-side. */
+  keyPath: string | null;
 };
 
 type AssetDocumentRow = {
@@ -157,7 +164,7 @@ function parseBody(body: unknown): ParsedBody | null {
   const remark = readTrimmedOptionalString(o.remark);
   const costCenterIdRaw = readTrimmedOptionalString(o.costCenterId);
 
-  if (!key || !name || !isUuid(siteId) || !isAssetType(type)) return null;
+  if (!name || !isUuid(siteId) || !isAssetType(type)) return null;
   if (parentAssetIdRaw !== null && !isUuid(parentAssetIdRaw)) return null;
   if (costCenterIdRaw !== null && !isUuid(costCenterIdRaw)) return null;
   if (buildDate !== null && !isValidDateOnly(buildDate)) return null;
@@ -210,7 +217,7 @@ function auditMeta(req: Request) {
   };
 }
 
-const selectAssetsSql = `
+const selectAssetsSqlBase = `
   SELECT
     a."id",
     a."key",
@@ -235,7 +242,66 @@ const selectAssetsSql = `
     a."updatedAt",
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
     COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
-    COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
+    COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+    NULL::text AS "keyPath"
+  FROM "asset" a
+  JOIN "site" s ON s."id" = a."siteId"
+  LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
+  LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
+  LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
+  LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
+  LEFT JOIN (
+    SELECT "assetId", COUNT(*)::int AS "documentCount"
+    FROM "assetDocument"
+    GROUP BY "assetId"
+  ) doc_counts ON doc_counts."assetId" = a."id"
+`;
+
+/** Same as selectAssetsSql but computes keyPath when $2 is the separator character. $1 = site-access user id. */
+const selectAssetsSqlWithKeyPath = `
+  SELECT
+    a."id",
+    a."key",
+    a."name",
+    a."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
+    a."type",
+    a."parentAssetId",
+    parent."key" AS "parentAssetKey",
+    parent."name" AS "parentAssetName",
+    parent."type" AS "parentAssetType",
+    a."serialNumber",
+    a."buildDate"::text AS "buildDate",
+    a."manufacturer",
+    a."remark",
+    a."costCenterId",
+    cc."key" AS "costCenterKey",
+    cc."name" AS "costCenterName",
+    a."createdAt",
+    a."updatedAt",
+    COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
+    COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
+    COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+    (
+      s."key" || $2::text || COALESCE(
+        (
+          WITH RECURSIVE up AS (
+            SELECT a2."id", a2."parentAssetId", a2."key", 0 AS lvl
+            FROM "asset" a2
+            WHERE a2."id" = a."id"
+            UNION ALL
+            SELECT p."id", p."parentAssetId", p."key", up.lvl + 1
+            FROM "asset" p
+            INNER JOIN up ON p."id" = up."parentAssetId"
+          )
+          SELECT string_agg(up."key", $2::text ORDER BY up.lvl DESC)
+          FROM up
+        ),
+        ''
+      )
+    ) AS "keyPath"
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
   LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
@@ -335,6 +401,43 @@ async function assertCostCenterForAssetSite(
   }
 }
 
+async function allocateNextPlantAssetKey(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  siteId: string,
+  siteKey: string,
+): Promise<string> {
+  await client.query(
+    `
+    INSERT INTO "assetPlantKeySeq" ("siteId", "nextNum")
+    VALUES ($1::uuid, 100001)
+    ON CONFLICT ("siteId") DO NOTHING
+    `,
+    [siteId],
+  );
+  const locked = await client.query<{ nextNum: number }>(
+    `
+    SELECT "nextNum" FROM "assetPlantKeySeq"
+    WHERE "siteId" = $1::uuid
+    FOR UPDATE
+    `,
+    [siteId],
+  );
+  const nextNum = locked.rows[0]?.nextNum;
+  if (nextNum === undefined) {
+    throw new Error("asset_seq_missing");
+  }
+  await client.query(
+    `
+    UPDATE "assetPlantKeySeq"
+    SET "nextNum" = "nextNum" + 1
+    WHERE "siteId" = $1::uuid
+    `,
+    [siteId],
+  );
+  const padded = String(nextNum).padStart(6, "0");
+  return `${siteKey}-${padded}`;
+}
+
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -342,13 +445,16 @@ router.get("/", async (req: Request, res: Response) => {
     return;
   }
   try {
+    const sakp = await getShowAssetKeyPath(pool);
+    const listSql = sakp.show ? selectAssetsSqlWithKeyPath : selectAssetsSqlBase;
+    const listParams: unknown[] = sakp.show ? [userId, sakp.separator] : [userId];
     const { rows } = await pool.query<AssetRow>(
       `
-      ${selectAssetsSql}
+      ${listSql}
       WHERE ${siteAccessSql('a."siteId"', "$1")}
       ORDER BY a."key" ASC
       `,
-      [userId],
+      listParams,
     );
     res.json(rows);
   } catch (err) {
@@ -653,6 +759,24 @@ router.post("/", async (req: Request, res: Response) => {
         parsed.parentAssetId,
       );
       await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
+      const mode = await getAssetKeyGenerationMode(client);
+      const siteRow = await client.query<{ isPlant: boolean; key: string }>(
+        `SELECT "isPlant", "key" FROM "site" WHERE "id" = $1::uuid LIMIT 1`,
+        [effectiveSiteId],
+      );
+      const siteMeta = siteRow.rows[0];
+      if (!siteMeta) {
+        throw new Error("site_not_found");
+      }
+      let resolvedKey = parsed.key.trim();
+      if (mode === "auto_incremental") {
+        if (!siteMeta.isPlant) {
+          throw new Error("asset_key_auto_requires_plant_site");
+        }
+        resolvedKey = await allocateNextPlantAssetKey(client, effectiveSiteId, siteMeta.key);
+      } else if (!resolvedKey) {
+        throw new Error("invalid_asset_key");
+      }
       const { rows } = await client.query<AssetRow>(
         `
         WITH inserted AS (
@@ -686,7 +810,8 @@ router.post("/", async (req: Request, res: Response) => {
           i."updatedAt",
           COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
           COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
-          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
+          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+          NULL::text AS "keyPath"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
         LEFT JOIN "costCenter" cc ON cc."id" = i."costCenterId"
@@ -700,7 +825,7 @@ router.post("/", async (req: Request, res: Response) => {
         ) doc_counts ON doc_counts."assetId" = i."id"
         `,
         [
-          parsed.key,
+          resolvedKey,
           parsed.name,
           effectiveSiteId,
           parsed.type,
@@ -748,6 +873,18 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid_cost_center" });
       return;
     }
+    if ((err as Error).message === "asset_key_auto_requires_plant_site") {
+      res.status(400).json({ error: "asset_key_auto_requires_plant_site" });
+      return;
+    }
+    if ((err as Error).message === "invalid_asset_key") {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    if ((err as Error).message === "site_not_found") {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -766,9 +903,9 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      const existing = await client.query<Pick<AssetRow, "id" | "siteId">>(
+      const existing = await client.query<Pick<AssetRow, "id" | "siteId" | "key">>(
         `
-        SELECT "id", "siteId"::text AS "siteId"
+        SELECT "id", "siteId"::text AS "siteId", "key"
         FROM "asset"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -779,6 +916,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         return null;
       }
       const storedSiteId = existing.rows[0]!.siteId;
+      const storedKey = existing.rows[0]!.key;
       const allowSiteChange = await getAllowSiteChange(client);
       const effectiveSiteId = allowSiteChange ? parsed.siteId : storedSiteId;
 
@@ -791,6 +929,23 @@ router.put("/:id", async (req: Request, res: Response) => {
         id,
       );
       await assertCostCenterForAssetSite(client, meta.userId, effectiveSiteId, parsed.costCenterId);
+
+      const mode = await getAssetKeyGenerationMode(client);
+      const sitePlant = await client.query<{ isPlant: boolean }>(
+        `SELECT "isPlant" FROM "site" WHERE "id" = $1::uuid LIMIT 1`,
+        [effectiveSiteId],
+      );
+      const isPlantSite = sitePlant.rows[0]?.isPlant === true;
+      let keyForUpdate: string;
+      if (mode === "auto_incremental" && isPlantSite) {
+        keyForUpdate = storedKey;
+      } else {
+        const trimmed = parsed.key.trim();
+        if (!trimmed) {
+          throw new Error("invalid_asset_key");
+        }
+        keyForUpdate = trimmed;
+      }
 
       const { rows } = await client.query<AssetRow>(
         `
@@ -834,7 +989,8 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."updatedAt",
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
           COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
-          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount"
+          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+          NULL::text AS "keyPath"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
         LEFT JOIN "costCenter" cc ON cc."id" = u."costCenterId"
@@ -848,7 +1004,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         ) doc_counts ON doc_counts."assetId" = u."id"
         `,
         [
-          parsed.key,
+          keyForUpdate,
           parsed.name,
           effectiveSiteId,
           parsed.type,
@@ -904,6 +1060,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "asset_cost_center_invalid") {
       res.status(400).json({ error: "invalid_cost_center" });
+      return;
+    }
+    if (message === "invalid_asset_key") {
+      res.status(400).json({ error: "invalid_body" });
       return;
     }
     sendPgError(res, err);

@@ -523,6 +523,7 @@ export function WorkgroupsPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "74rem" }}
@@ -533,8 +534,18 @@ export function WorkgroupsPage() {
           <Column field="key" header={t("workgroups.key")} sortable />
           <Column field="name" header={t("workgroups.name")} sortable />
           <Column field="siteName" header={t("workgroups.site")} sortable body={siteColumnBody} />
-          <Column header={t("workgroups.members")} body={membersBody} className="w-32 text-center" />
-          <Column header={t("workgroups.active")} body={activeBody} className="w-28 text-center" />
+          <Column
+            columnKey="members"
+            header={t("workgroups.members")}
+            body={membersBody}
+            className="w-32 text-center"
+          />
+          <Column
+            columnKey="active"
+            header={t("workgroups.active")}
+            body={activeBody}
+            className="w-28 text-center"
+          />
           <Column
             field="createdAt"
             header={t("workgroups.createdAt")}

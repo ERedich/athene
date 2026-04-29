@@ -10,7 +10,8 @@ void i18n.use(initReactI18next).init({
     en: { translation: en },
   },
   lng: "de",
-  fallbackLng: "de",
+  /** Keys missing in the active bundle resolve from English (avoids raw key paths in DE). */
+  fallbackLng: "en",
   interpolation: { escapeValue: false },
 });
 

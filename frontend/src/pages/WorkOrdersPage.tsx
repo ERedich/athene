@@ -209,7 +209,7 @@ function emptyForm(): FormState {
     costCenterId: "",
     plannedStart: start,
     plannedEnd: addHours(start, 24),
-    plannedDurationHours: "",
+    plannedDurationHours: "24",
     orderType: "maintenance",
     responsibleEmployeeId: "",
     workgroupId: "",
@@ -265,8 +265,10 @@ export function WorkOrdersPage() {
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
+  const [assignmentAdding, setAssignmentAdding] = useState(false);
   const [assignmentsCascadeSeed, setAssignmentsCascadeSeed] = useState(0);
   const prevDialogTabRef = useRef<OrderDialogTab | null>(null);
+  const assignmentAddingRef = useRef(false);
 
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
@@ -628,6 +630,75 @@ export function WorkOrdersPage() {
     [t],
   );
 
+  const editingOrder = useMemo(
+    () => (editingId ? orders.find((row) => row.id === editingId) ?? null : null),
+    [editingId, orders],
+  );
+
+  const postAssignmentsForOrder = useCallback(
+    async (
+      orderId: string,
+      employeeIds: string[],
+      opts?: { checkFormSavedWorkgroup?: boolean },
+    ): Promise<boolean> => {
+      const checkSaved = opts?.checkFormSavedWorkgroup !== false;
+      if (checkSaved && editingOrder) {
+        const savedWg = (editingOrder.workgroupId ?? "").trim();
+        const formWg = form.workgroupId.trim();
+        if (formWg !== savedWg) {
+          toastRef.current?.show({
+            severity: "warn",
+            summary: t("workOrders.assignmentsSaveWorkgroupFirst"),
+            life: 6500,
+          });
+          return false;
+        }
+      }
+      const ids = Array.from(new Set(employeeIds.filter(Boolean)));
+      if (ids.length === 0) return true;
+      for (const employeeId of ids) {
+        const res = await apiFetch(`/api/work-orders/${orderId}/assignments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employeeId }),
+        });
+        if (!res.ok) {
+          let code: string | undefined;
+          try {
+            code = ((await res.json()) as { error?: string }).error;
+          } catch {
+            /* ignore */
+          }
+          let msg = t("workOrders.assignmentLockedByStatus");
+          if (code === "employee_not_in_workgroup") msg = t("workOrders.employeeNotInWorkgroup");
+          if (code === "employee_site_mismatch") msg = t("workOrders.assignmentEmployeeSiteMismatch");
+          if (code === "invalid_employee") msg = t("workOrders.assignmentInvalidEmployee");
+          toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
+          return false;
+        }
+      }
+      return true;
+    },
+    [editingOrder, form.workgroupId, t],
+  );
+
+  const addAssignments = useCallback(async () => {
+    if (!editingId || assignmentEmployeeIds.length === 0) return;
+    if (assignmentAddingRef.current) return;
+    assignmentAddingRef.current = true;
+    setAssignmentAdding(true);
+    try {
+      const ok = await postAssignmentsForOrder(editingId, assignmentEmployeeIds, { checkFormSavedWorkgroup: true });
+      if (ok) {
+        setAssignmentEmployeeIds([]);
+        await Promise.all([loadAssignments(editingId), loadData()]);
+      }
+    } finally {
+      assignmentAddingRef.current = false;
+      setAssignmentAdding(false);
+    }
+  }, [assignmentEmployeeIds, editingId, loadAssignments, loadData, postAssignmentsForOrder]);
+
   useEffect(() => {
     if (!dialogVisible) return;
     if (!editingId) {
@@ -682,14 +753,14 @@ export function WorkOrdersPage() {
         return null;
       }
       const hoursRaw = formRef.current.plannedDurationHours.trim().replace(",", ".");
-      const hours =
+      const hoursParsed =
         hoursRaw === ""
           ? null
           : Number.isFinite(Number(hoursRaw)) && Number(hoursRaw) >= 0
             ? Number(hoursRaw)
             : NaN;
-      if (Number.isNaN(hours)) return null;
-      const plannedDurationMinutes = hours == null ? null : Math.round(hours * 60);
+      if (Number.isNaN(hoursParsed)) return null;
+      const plannedDurationMinutes = hoursParsed == null ? null : Math.round(hoursParsed * 60);
       const payload = {
         name,
         description: description || null,
@@ -908,7 +979,7 @@ export function WorkOrdersPage() {
         hours == null ? cur.plannedEnd : new Date(plannedStart.getTime() + hours * 60 * 60 * 1000);
       return {
         ...cur,
-        plannedDurationHours: hours == null ? "" : String(hours),
+        plannedDurationHours: hours == null ? "" : formatHoursForInput(hours),
         plannedEnd,
       };
     });
@@ -987,6 +1058,17 @@ export function WorkOrdersPage() {
         return;
       }
       const saved = (await res.json()) as WorkOrder;
+      const pendingAssignIds = Array.from(new Set(assignmentEmployeeIds.filter(Boolean)));
+      if (pendingAssignIds.length > 0) {
+        const assignOk = await postAssignmentsForOrder(saved.id, pendingAssignIds, {
+          checkFormSavedWorkgroup: false,
+        });
+        if (!assignOk) {
+          return;
+        }
+        setAssignmentEmployeeIds([]);
+        await loadAssignments(saved.id);
+      }
       if (pendingFiles.length > 0) {
         setUploading(true);
         try {
@@ -1203,6 +1285,9 @@ export function WorkOrdersPage() {
     const assignmentsTitle = hasAssignments
       ? t("workOrders.assignmentsReferenceTitle", { count: assignedCount })
       : t("workOrders.assignmentsReference");
+    const documentsTitle = hasDocuments
+      ? t("workOrders.references")
+      : t("workOrders.referencesOpenDocumentsTab");
     return (
       <div className="flex items-center gap-1">
         <Button
@@ -1217,17 +1302,18 @@ export function WorkOrdersPage() {
                 : "app-ref-button--documents"
               : "app-ref-button--documents-inactive"
           }`}
-          disabled={!hasDocuments}
           onClick={() => openDocumentsTab(row)}
-          aria-label={t("workOrders.references")}
-          title={t("workOrders.references")}
+          aria-label={documentsTitle}
+          title={documentsTitle}
         />
         <Button
           type="button"
           icon="pi pi-user-plus"
           badge={assignmentsBadge}
           badgeClassName={assignmentsBadgeClassName}
-          className="app-ref-button--employees h-7 w-7 !rounded-[0.5rem] !p-0"
+          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
+            hasAssignments ? "app-ref-button--employees" : "app-ref-button--employees-empty"
+          }`}
           onClick={() => openPlanningTab(row)}
           aria-label={assignmentsTitle}
           title={assignmentsTitle}
@@ -1235,11 +1321,6 @@ export function WorkOrdersPage() {
       </div>
     );
   };
-
-  const editingOrder = useMemo(
-    () => (editingId ? orders.find((row) => row.id === editingId) ?? null : null),
-    [editingId, orders],
-  );
 
   const statusLabel = useCallback((status: WorkOrderStatus) => t(`workOrders.statusValues.${status}`), [t]);
 
@@ -1258,44 +1339,6 @@ export function WorkOrdersPage() {
     },
     [loadData, t],
   );
-
-  const addAssignments = useCallback(async () => {
-    if (!editingId || assignmentEmployeeIds.length === 0) return;
-    const savedWg = (editingOrder?.workgroupId ?? "").trim();
-    const formWg = form.workgroupId.trim();
-    if (editingOrder && formWg !== savedWg) {
-      toastRef.current?.show({
-        severity: "warn",
-        summary: t("workOrders.assignmentsSaveWorkgroupFirst"),
-        life: 6500,
-      });
-      return;
-    }
-    const ids = Array.from(new Set(assignmentEmployeeIds.filter(Boolean)));
-    for (const employeeId of ids) {
-      const res = await apiFetch(`/api/work-orders/${editingId}/assignments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId }),
-      });
-      if (!res.ok) {
-        let code: string | undefined;
-        try {
-          code = ((await res.json()) as { error?: string }).error;
-        } catch {
-          /* ignore */
-        }
-        let msg = t("workOrders.assignmentLockedByStatus");
-        if (code === "employee_not_in_workgroup") msg = t("workOrders.employeeNotInWorkgroup");
-        if (code === "employee_site_mismatch") msg = t("workOrders.assignmentEmployeeSiteMismatch");
-        if (code === "invalid_employee") msg = t("workOrders.assignmentInvalidEmployee");
-        toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
-        return;
-      }
-    }
-    setAssignmentEmployeeIds([]);
-    await Promise.all([loadAssignments(editingId), loadData()]);
-  }, [assignmentEmployeeIds, editingId, editingOrder?.workgroupId, form.workgroupId, loadAssignments, loadData, t]);
 
   const removeAssignment = useCallback(
     async (employeeId: string) => {
@@ -1337,6 +1380,54 @@ export function WorkOrdersPage() {
     },
     [startOrder, t],
   );
+
+  const dialogHeaderIcons = useMemo(() => {
+    if (!editingId || !editingOrder) return null;
+    const row = editingOrder;
+    if (["open", "assigned", "paused"].includes(row.status)) {
+      return (
+        <div className="mr-1 flex items-center gap-1">
+          <Button
+            type="button"
+            text
+            rounded
+            className="app-wo-start-action !h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon="pi pi-play"
+            title={t("workOrders.start")}
+            aria-label={t("workOrders.start")}
+            onClick={() => void startOrder(row)}
+          />
+        </div>
+      );
+    }
+    if (row.status === "started") {
+      return (
+        <div className="mr-1 flex items-center gap-1">
+          <Button
+            type="button"
+            text
+            rounded
+            disabled
+            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon="pi pi-stop"
+            title={t("workOrders.stop")}
+            aria-label={t("workOrders.stop")}
+          />
+          <Button
+            type="button"
+            text
+            rounded
+            disabled
+            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon="pi pi-pause"
+            title={t("workOrders.pause")}
+            aria-label={t("workOrders.pause")}
+          />
+        </div>
+      );
+    }
+    return null;
+  }, [editingId, editingOrder, startOrder, t]);
 
   const dialogFooter = (
     <div className="flex justify-end gap-2">
@@ -1389,6 +1480,7 @@ export function WorkOrdersPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "94rem" }}
@@ -1458,20 +1550,19 @@ export function WorkOrdersPage() {
             body={(row: WorkOrder) => formatShortDt(row.plannedEnd)}
             className="whitespace-nowrap"
           />
-          <Column header={t("workOrders.plannedDuration")} body={durationBody} />
-          <Column header={t("workOrders.startStop")} body={startStopBody} style={{ width: "6rem", minWidth: "6rem" }} />
+          <Column columnKey="plannedDuration" header={t("workOrders.plannedDuration")} body={durationBody} />
+          <Column
+            columnKey="startStop"
+            header={t("workOrders.startStop")}
+            body={startStopBody}
+            style={{ width: "6rem", minWidth: "6rem" }}
+          />
         </DataTable>
       </div>
 
       <Dialog
-        header={
-          <div className="flex w-full min-w-0 items-center justify-between gap-3 pr-10">
-            <span>{editingId ? t("workOrders.editTitle") : t("workOrders.createTitle")}</span>
-            <span className={`app-wo-status-modal app-wo-status-${editingOrder?.status ?? "open"}`}>
-              {statusLabel(editingOrder?.status ?? "open")}
-            </span>
-          </div>
-        }
+        header={editingId ? t("workOrders.editTitle") : t("workOrders.createTitle")}
+        icons={dialogHeaderIcons}
         visible={dialogVisible}
         className="app-big-modal-window app-tabbed-modal-window"
         onHide={() => setDialogVisible(false)}
@@ -1497,15 +1588,27 @@ export function WorkOrdersPage() {
             }}
           >
             <TabPanel header={t("workOrders.tabGeneral")}>
-        <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2" style={{ margin: 0, display: "grid" }}>
-          <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6" style={{ margin: 0, display: "grid" }}>
+          <div className="space-y-2 md:col-span-2">
             <label htmlFor="order-number" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.orderNumber")}
             </label>
             <InputText id="order-number" value={form.orderNumber ? String(form.orderNumber) : t("workOrders.autoNumberHint")} disabled className="w-full" />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-2">
+            <label htmlFor="order-status" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+              {t("workOrders.status")}
+            </label>
+            <InputText
+              id="order-status"
+              disabled
+              value={statusLabel(editingOrder?.status ?? "open")}
+              className={`w-full app-wo-status-input app-wo-status-${editingOrder?.status ?? "open"}`}
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
             <label htmlFor="order-type" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.orderType")}
               <span className="app-required-marker" aria-hidden>*</span>
@@ -1520,7 +1623,7 @@ export function WorkOrdersPage() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-6">
             <label htmlFor="order-name" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.name")}
               <span className="app-required-marker" aria-hidden>*</span>
@@ -1535,7 +1638,7 @@ export function WorkOrdersPage() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-6">
             <label htmlFor="order-description" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.description")}
             </label>
@@ -1551,7 +1654,7 @@ export function WorkOrdersPage() {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-3">
             <label htmlFor="order-asset" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.asset")}
               <span className="app-required-marker" aria-hidden>*</span>
@@ -1571,7 +1674,7 @@ export function WorkOrdersPage() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-3">
             <label htmlFor="order-cost-center" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.costCenter")}
               <span className="app-required-marker" aria-hidden>*</span>
@@ -1589,7 +1692,7 @@ export function WorkOrdersPage() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-6">
             <label htmlFor="order-workgroup" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.workgroup")}
               <span className="app-required-marker" aria-hidden>*</span>
@@ -1607,7 +1710,7 @@ export function WorkOrdersPage() {
             />
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-6">
             <label htmlFor="order-responsible" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
               {t("workOrders.responsible")}
             </label>
@@ -1718,72 +1821,82 @@ export function WorkOrdersPage() {
                   </div>
                 </div>
 
-                {editingId ? (
-                  <div className="space-y-2 md:col-span-2">
-                    <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsTitle")}</div>
-                    <div className="flex flex-wrap items-start gap-2">
-                      <MultiSelect
-                        inputId="order-assignments-multiselect"
-                        value={assignmentEmployeeIds}
-                        options={assignmentEmployeeOptions}
-                        optionLabel="label"
-                        optionValue="value"
-                        display="chip"
-                        onChange={(e) => setAssignmentEmployeeIds((e.value as string[] | null | undefined) ?? [])}
-                        placeholder={t("workOrders.assignmentsAddPlaceholder")}
-                        className="min-w-0 flex-1 app-inline-icon-multiselect"
-                        filter
-                        showClear
-                        maxSelectedLabels={4}
-                        disabled={editingOrder?.status === "ended" || editingOrder?.status === "done"}
-                        appendTo={overlayAppendTo}
-                      />
-                      <Button
-                        type="button"
-                        icon="pi pi-user-plus"
-                        label={t("workOrders.assignmentsAdd")}
-                        onClick={() => void addAssignments()}
-                        disabled={
-                          assignmentEmployeeIds.length === 0 ||
-                          editingOrder?.status === "ended" ||
-                          editingOrder?.status === "done"
-                        }
-                      />
-                    </div>
-                    {assignmentsLoading ? (
-                      <div className="text-sm text-on-surface-variant">{t("workOrders.documentsLoading")}</div>
-                    ) : assignments.length > 0 ? (
-                      <div key={assignmentsCascadeSeed} className="flex flex-wrap gap-2">
-                        {assignments.map((item, index) => (
-                          <span
-                            key={item.id}
-                            className="app-card-cascade inline-flex items-center gap-2 rounded-sm border border-outline-variant px-2 py-1 text-xs"
-                            style={{ ["--app-cascade-index" as string]: index }}
-                          >
-                            <span>
-                              {item.employeeKey} - {item.employeeName}
-                            </span>
-                            <Button
-                              type="button"
-                              text
-                              severity="danger"
-                              className="!h-5 !min-h-5 !w-5 !min-w-5 !p-0"
-                              icon="pi pi-times"
-                              onClick={() => void removeAssignment(item.employeeId)}
-                              disabled={editingOrder?.status === "ended" || editingOrder?.status === "done"}
-                            />
-                          </span>
-                        ))}
-                      </div>
-                    ) : assignmentEmployeeIds.length > 0 ? (
-                      <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsPendingHint")}</div>
-                    ) : (
-                      <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsEmpty")}</div>
-                    )}
+                <div className="space-y-2 md:col-span-2">
+                  <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsTitle")}</div>
+                  {!editingId ? (
+                    <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsApplyOnSaveHint")}</div>
+                  ) : null}
+                  <div className="flex flex-wrap items-start gap-2">
+                    <MultiSelect
+                      inputId="order-assignments-multiselect"
+                      value={assignmentEmployeeIds}
+                      options={assignmentEmployeeOptions}
+                      optionLabel="label"
+                      optionValue="value"
+                      display="chip"
+                      onChange={(e) => setAssignmentEmployeeIds((e.value as string[] | null | undefined) ?? [])}
+                      placeholder={t("workOrders.assignmentsAddPlaceholder")}
+                      className="min-w-0 flex-1 app-inline-icon-multiselect"
+                      filter
+                      showClear
+                      maxSelectedLabels={4}
+                      disabled={
+                        saving ||
+                        editingOrder?.status === "ended" ||
+                        editingOrder?.status === "done"
+                      }
+                      appendTo={overlayAppendTo}
+                    />
+                    <Button
+                      type="button"
+                      icon="pi pi-user-plus"
+                      label={t("workOrders.assignmentsAdd")}
+                      loading={assignmentAdding}
+                      onClick={() => void addAssignments()}
+                      disabled={
+                        saving ||
+                        assignmentEmployeeIds.length === 0 ||
+                        editingOrder?.status === "ended" ||
+                        editingOrder?.status === "done" ||
+                        !editingId
+                      }
+                    />
                   </div>
-                ) : (
-                  <div className="text-sm text-on-surface-variant md:col-span-2">{t("workOrders.assignmentsAfterSave")}</div>
-                )}
+                  {!editingId ? (
+                    assignmentEmployeeIds.length > 0 ? (
+                      <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsPendingHint")}</div>
+                    ) : null
+                  ) : assignmentsLoading ? (
+                    <div className="text-sm text-on-surface-variant">{t("workOrders.documentsLoading")}</div>
+                  ) : assignments.length > 0 ? (
+                    <div key={assignmentsCascadeSeed} className="flex flex-wrap gap-2">
+                      {assignments.map((item, index) => (
+                        <span
+                          key={item.id}
+                          className="app-card-cascade inline-flex items-center gap-2 rounded-sm border border-outline-variant px-2 py-1 text-xs"
+                          style={{ ["--app-cascade-index" as string]: index }}
+                        >
+                          <span>
+                            {item.employeeKey} - {item.employeeName}
+                          </span>
+                          <Button
+                            type="button"
+                            text
+                            severity="danger"
+                            className="!h-5 !min-h-5 !w-5 !min-w-5 !p-0"
+                            icon="pi pi-times"
+                            onClick={() => void removeAssignment(item.employeeId)}
+                            disabled={editingOrder?.status === "ended" || editingOrder?.status === "done"}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  ) : assignmentEmployeeIds.length > 0 ? (
+                    <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsPendingHint")}</div>
+                  ) : (
+                    <div className="text-sm text-on-surface-variant">{t("workOrders.assignmentsEmpty")}</div>
+                  )}
+                </div>
               </div>
             </TabPanel>
             <TabPanel header={t("workOrders.tabDocuments")}>

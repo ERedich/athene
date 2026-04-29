@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
 import { apiFetch } from "../lib/api";
 
+import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 
 import { AuthSessionContext, type AuthUser } from "./AuthContext";
@@ -13,6 +14,9 @@ type MeResponse = {
   appParameterBooleans?: Record<string, boolean>;
   appParameterAssetTypes?: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId?: string | null;
+  appParameterAssetKeyMode?: AppParameterAssetKeyMode;
+  appParameterShowAssetKeyPath?: boolean;
+  appParameterAssetKeyPathSeparator?: string;
 };
 
 type SessionBase = {
@@ -20,6 +24,9 @@ type SessionBase = {
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;
+  appParameterAssetKeyMode: AppParameterAssetKeyMode;
+  appParameterShowAssetKeyPath: boolean;
+  appParameterAssetKeyPathSeparator: string;
 };
 
 type ShellEnterPhase = "none" | "initial" | "animate";
@@ -39,6 +46,9 @@ export function RequireAuth() {
       appParameterBooleans: data.appParameterBooleans ?? {},
       appParameterAssetTypes: data.appParameterAssetTypes ?? null,
       appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
+      appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
+      appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
+      appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
     });
   }, []);
 
@@ -57,6 +67,9 @@ export function RequireAuth() {
           appParameterBooleans: data.appParameterBooleans ?? {},
           appParameterAssetTypes: data.appParameterAssetTypes ?? null,
           appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
+          appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
+          appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
+          appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
         });
         setPhase("ok");
       })
@@ -119,6 +132,9 @@ export function RequireAuth() {
     appParameterBooleans: sessionBase.appParameterBooleans,
     appParameterAssetTypes: sessionBase.appParameterAssetTypes,
     appParameterDefaultWorkgroupId: sessionBase.appParameterDefaultWorkgroupId,
+    appParameterAssetKeyMode: sessionBase.appParameterAssetKeyMode,
+    appParameterShowAssetKeyPath: sessionBase.appParameterShowAssetKeyPath,
+    appParameterAssetKeyPathSeparator: sessionBase.appParameterAssetKeyPathSeparator,
     refresh,
   };
 

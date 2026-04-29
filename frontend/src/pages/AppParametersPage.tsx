@@ -23,7 +23,13 @@ import { Toast } from "primereact/toast";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { APP_PARAM_KEY_ASSET_TYPES, APP_PARAM_KEY_DEFAULT_WORKGROUP } from "../lib/appParameterKeys";
+import {
+  APP_PARAM_KEY_ASSET_KEY_GEN,
+  APP_PARAM_KEY_ASSET_TYPES,
+  APP_PARAM_KEY_DEFAULT_WORKGROUP,
+  APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
+  type AppParameterAssetKeyMode,
+} from "../lib/appParameterKeys";
 import {
   ASSET_TYPE_SLUGS,
   DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
@@ -85,22 +91,30 @@ function storedFromPickerValue(raw: string): string {
   return `#${h}`;
 }
 
+function parameterRowDirty(a: AppParameterRow, b: AppParameterRow): boolean {
+  if (a.boolValue !== b.boolValue) return true;
+  if ((a.uuidValue ?? null) !== (b.uuidValue ?? null)) return true;
+  return JSON.stringify(a.jsonValue) !== JSON.stringify(b.jsonValue);
+}
+
 export function AppParametersPage() {
   const { t, i18n } = useTranslation();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const { refresh, user } = useAuth();
   const toastRef = useRef<Toast>(null);
   const tabHostRef = useRef<HTMLDivElement | null>(null);
-  const [rows, setRows] = useState<AppParameterRow[]>([]);
+  /** Last loaded / successfully persisted snapshot from API */
+  const [persistedRows, setPersistedRows] = useState<AppParameterRow[]>([]);
+  /** Editable copy; committed via footer Save */
+  const [draftRows, setDraftRows] = useState<AppParameterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
-  const [patchingKey, setPatchingKey] = useState<string | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [assetTypesDialogOpen, setAssetTypesDialogOpen] = useState(false);
   const [assetTypesDraft, setAssetTypesDraft] = useState<AssetTypeDisplayConfig>(() => ({
     ...DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
   }));
-  const [assetTypesSaving, setAssetTypesSaving] = useState(false);
   const [workgroupsForSite, setWorkgroupsForSite] = useState<WorkgroupListRow[]>([]);
 
   const langDe = i18n.language?.toLowerCase().startsWith("de");
@@ -127,7 +141,7 @@ export function AppParametersPage() {
   useLayoutEffect(() => {
     const raf = requestAnimationFrame(updateTabInk);
     return () => cancelAnimationFrame(raf);
-  }, [activeTab, loading, rows.length, updateTabInk]);
+  }, [activeTab, loading, draftRows.length, updateTabInk]);
 
   useEffect(() => {
     window.addEventListener("resize", updateTabInk);
@@ -140,7 +154,9 @@ export function AppParametersPage() {
       const res = await apiFetch("/api/app-parameters");
       if (!res.ok) throw new Error("load");
       const data = (await res.json()) as AppParameterRow[];
-      setRows(data.map((r) => ({ ...r, uuidValue: r.uuidValue ?? null })));
+      const normalized = data.map((r) => ({ ...r, uuidValue: r.uuidValue ?? null }));
+      setPersistedRows(normalized);
+      setDraftRows(normalized.map((r) => ({ ...r })));
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -187,8 +203,8 @@ export function AppParametersPage() {
 
   const filteredRows = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
+    if (!q) return draftRows;
+    return draftRows.filter((r) => {
       const jsonBlob =
         r.jsonValue === null || r.jsonValue === undefined ? "" : JSON.stringify(r.jsonValue);
       const uuidBlob = r.uuidValue ?? "";
@@ -208,7 +224,7 @@ export function AppParametersPage() {
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [rows, searchTerm]);
+  }, [draftRows, searchTerm]);
 
   useEffect(() => {
     setHeaderActions(
@@ -253,73 +269,80 @@ export function AppParametersPage() {
     };
   }, [activeTabRowCount, setHeaderRowCount]);
 
-  const patchBool = useCallback(
-    async (key: string, boolValue: boolean) => {
-      setPatchingKey(key);
-      const prev = rows;
-      setRows((cur) => cur.map((r) => (r.key === key ? { ...r, boolValue } : r)));
-      try {
-        const res = await apiFetch(`/api/app-parameters/${encodeURIComponent(key)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ boolValue }),
-        });
-        if (!res.ok) throw new Error("patch");
-        const updated = (await res.json()) as AppParameterRow;
-        setRows((cur) => cur.map((r) => (r.key === key ? updated : r)));
-        await refresh();
-        toastRef.current?.show({
-          severity: "success",
-          summary: t("appParameters.saved"),
-          life: 3000,
-        });
-      } catch {
-        setRows(prev);
-        toastRef.current?.show({
-          severity: "error",
-          summary: t("appParameters.saveError"),
-          life: 6000,
-        });
-      } finally {
-        setPatchingKey(null);
-      }
-    },
-    [rows, refresh, t],
-  );
+  const updateDraftBool = useCallback((key: string, boolValue: boolean) => {
+    setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, boolValue } : r)));
+  }, []);
 
-  const patchUuidValue = useCallback(
-    async (key: string, uuidValue: string | null) => {
-      setPatchingKey(key);
-      const prev = rows;
-      setRows((cur) => cur.map((r) => (r.key === key ? { ...r, uuidValue } : r)));
-      try {
-        const res = await apiFetch(`/api/app-parameters/${encodeURIComponent(key)}`, {
+  const updateDraftUuid = useCallback((key: string, uuidValue: string | null) => {
+    setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, uuidValue } : r)));
+  }, []);
+
+  const updateDraftJson = useCallback((key: string, jsonValue: unknown) => {
+    setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, jsonValue } : r)));
+  }, []);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const pmap = new Map(persistedRows.map((r) => [r.key, r]));
+    return draftRows.some((d) => {
+      const p = pmap.get(d.key);
+      return !p || parameterRowDirty(d, p);
+    });
+  }, [draftRows, persistedRows]);
+
+  const discardDraft = useCallback(() => {
+    setDraftRows(persistedRows.map((r) => ({ ...r })));
+  }, [persistedRows]);
+
+  const saveAll = useCallback(async () => {
+    const pmap = new Map(persistedRows.map((r) => [r.key, r]));
+    const dirty = draftRows.filter((d) => {
+      const p = pmap.get(d.key);
+      return p && parameterRowDirty(d, p);
+    });
+    if (dirty.length === 0) return;
+    setSavingAll(true);
+    try {
+      let nextPersisted = [...persistedRows];
+      for (const row of dirty) {
+        let body: Record<string, unknown>;
+        if (row.valueType === "boolean") {
+          body = { boolValue: row.boolValue };
+        } else if (row.valueType === "uuid") {
+          body = { uuidValue: row.uuidValue };
+        } else if (row.valueType === "json") {
+          body = { jsonValue: row.jsonValue };
+        } else {
+          continue;
+        }
+        const res = await apiFetch(`/api/app-parameters/${encodeURIComponent(row.key)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uuidValue }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("patch");
         const updated = (await res.json()) as AppParameterRow;
-        setRows((cur) => cur.map((r) => (r.key === key ? updated : r)));
-        await refresh();
-        toastRef.current?.show({
-          severity: "success",
-          summary: t("appParameters.saved"),
-          life: 3000,
-        });
-      } catch {
-        setRows(prev);
-        toastRef.current?.show({
-          severity: "error",
-          summary: t("appParameters.saveError"),
-          life: 6000,
-        });
-      } finally {
-        setPatchingKey(null);
+        nextPersisted = nextPersisted.map((r) =>
+          r.key === updated.key ? { ...updated, uuidValue: updated.uuidValue ?? null } : r,
+        );
       }
-    },
-    [rows, refresh, t],
-  );
+      setPersistedRows(nextPersisted);
+      setDraftRows(nextPersisted.map((r) => ({ ...r })));
+      await refresh();
+      toastRef.current?.show({
+        severity: "success",
+        summary: t("appParameters.saved"),
+        life: 3000,
+      });
+    } catch {
+      toastRef.current?.show({
+        severity: "error",
+        summary: t("appParameters.saveError"),
+        life: 6000,
+      });
+    } finally {
+      setSavingAll(false);
+    }
+  }, [draftRows, persistedRows, refresh, t]);
 
   const openAssetTypesDialog = useCallback((row: AppParameterRow) => {
     const parsed = parseAssetTypeDisplayConfig(row.jsonValue);
@@ -327,7 +350,7 @@ export function AppParametersPage() {
     setAssetTypesDialogOpen(true);
   }, []);
 
-  const saveAssetTypesDialog = useCallback(async () => {
+  const applyAssetTypesDialogToDraft = useCallback(() => {
     const validated = parseAssetTypeDisplayConfig(assetTypesDraft);
     if (!validated) {
       toastRef.current?.show({
@@ -337,38 +360,11 @@ export function AppParametersPage() {
       });
       return;
     }
-    setAssetTypesSaving(true);
-    const prev = rows;
-    setRows((cur) =>
+    setDraftRows((cur) =>
       cur.map((r) => (r.key === APP_PARAM_KEY_ASSET_TYPES ? { ...r, jsonValue: validated } : r)),
     );
-    try {
-      const res = await apiFetch(`/api/app-parameters/${encodeURIComponent(APP_PARAM_KEY_ASSET_TYPES)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonValue: validated }),
-      });
-      if (!res.ok) throw new Error("patch");
-      const updated = (await res.json()) as AppParameterRow;
-      setRows((cur) => cur.map((r) => (r.key === APP_PARAM_KEY_ASSET_TYPES ? updated : r)));
-      await refresh();
-      setAssetTypesDialogOpen(false);
-      toastRef.current?.show({
-        severity: "success",
-        summary: t("appParameters.saved"),
-        life: 3000,
-      });
-    } catch {
-      setRows(prev);
-      toastRef.current?.show({
-        severity: "error",
-        summary: t("appParameters.saveError"),
-        life: 6000,
-      });
-    } finally {
-      setAssetTypesSaving(false);
-    }
-  }, [assetTypesDraft, refresh, rows, t]);
+    setAssetTypesDialogOpen(false);
+  }, [assetTypesDraft, t]);
 
   const updateAssetTypeField = useCallback(
     (slug: AssetTypeSlug, field: "nameDe" | "nameEn", value: string) => {
@@ -382,11 +378,32 @@ export function AppParametersPage() {
     setAssetTypesDraft((d) => ({ ...d, [slug]: { ...d[slug], colorHex } }));
   }, []);
 
+  const assetKeyGenOptions = useMemo(
+    () => [
+      { label: t("appParameters.assetKeyGenManual"), value: "manual" as AppParameterAssetKeyMode },
+      { label: t("appParameters.assetKeyGenAutoIncremental"), value: "auto_incremental" as AppParameterAssetKeyMode },
+    ],
+    [t],
+  );
+
   const renderParameterCard = useCallback(
     (row: AppParameterRow) => {
       const displayName = langDe ? row.nameDe : row.nameEn;
       const desc = langDe ? row.descriptionDe : row.descriptionEn;
       const parsedTypes = parseAssetTypeDisplayConfig(row.jsonValue);
+      const aakg =
+        row.key === APP_PARAM_KEY_ASSET_KEY_GEN && row.jsonValue !== null && typeof row.jsonValue === "object"
+          ? (row.jsonValue as { mode?: string }).mode
+          : null;
+      const aakgValue: AppParameterAssetKeyMode =
+        aakg === "auto_incremental" ? "auto_incremental" : "manual";
+      const sakpRaw =
+        row.key === APP_PARAM_KEY_SHOW_ASSET_KEY_PATH && row.jsonValue !== null && typeof row.jsonValue === "object"
+          ? (row.jsonValue as { show?: unknown; separator?: unknown })
+          : null;
+      const sakpShow = sakpRaw ? Boolean(sakpRaw.show) : false;
+      const sakpSep =
+        typeof sakpRaw?.separator === "string" && sakpRaw.separator.length === 1 ? sakpRaw.separator : ".";
 
       return (
         <Card key={row.key} className="app-parameter-card">
@@ -413,13 +430,72 @@ export function AppParametersPage() {
                   <Checkbox
                     inputId={`app-param-${row.key}`}
                     checked={row.boolValue}
-                    disabled={patchingKey === row.key}
+                    disabled={savingAll}
                     className="rounded-none"
-                    onChange={(e) => void patchBool(row.key, Boolean(e.checked))}
+                    onChange={(e) => updateDraftBool(row.key, Boolean(e.checked))}
                   />
                   <label htmlFor={`app-param-${row.key}`} className="cursor-pointer text-sm text-on-surface-variant">
                     {t("appParameters.boolValueLabel")}
                   </label>
+                </div>
+              ) : row.key === APP_PARAM_KEY_ASSET_KEY_GEN && row.valueType === "json" ? (
+                <div className="max-w-md" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                  <Dropdown
+                    inputId={`app-param-${row.key}`}
+                    value={aakgValue}
+                    options={assetKeyGenOptions}
+                    optionLabel="label"
+                    optionValue="value"
+                    className="w-full"
+                    disabled={savingAll}
+                    appendTo={overlayAppendTo}
+                    onChange={(e) => {
+                      const v = e.value as AppParameterAssetKeyMode;
+                      updateDraftJson(row.key, { mode: v });
+                    }}
+                  />
+                </div>
+              ) : row.key === APP_PARAM_KEY_SHOW_ASSET_KEY_PATH && row.valueType === "json" ? (
+                <div
+                  className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4"
+                  onClick={(ev) => ev.stopPropagation()}
+                  onKeyDown={(ev) => ev.stopPropagation()}
+                >
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      inputId={`app-param-${row.key}-show`}
+                      checked={sakpShow}
+                      disabled={savingAll}
+                      className="rounded-none"
+                      onChange={(e) =>
+                        updateDraftJson(row.key, {
+                          show: Boolean(e.checked),
+                          separator: sakpSep,
+                        })
+                      }
+                    />
+                    <label htmlFor={`app-param-${row.key}-show`} className="cursor-pointer text-sm text-on-surface-variant">
+                      {t("appParameters.showAssetKeyPath")}
+                    </label>
+                  </div>
+                  {sakpShow ? (
+                    <div className="flex max-w-[8rem] flex-col gap-1">
+                      <label className="text-[11px] text-outline uppercase tracking-wide" htmlFor={`app-param-${row.key}-sep`}>
+                        {t("appParameters.assetKeyPathSeparator")}
+                      </label>
+                      <InputText
+                        id={`app-param-${row.key}-sep`}
+                        maxLength={1}
+                        value={sakpSep}
+                        disabled={savingAll}
+                        className="w-full font-mono"
+                        onChange={(e) => {
+                          const next = e.target.value.slice(-1) || ".";
+                          updateDraftJson(row.key, { show: true, separator: next });
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : row.key === APP_PARAM_KEY_ASSET_TYPES ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -443,7 +519,7 @@ export function AppParametersPage() {
                     label={t("appParameters.editAssetTypes")}
                     icon="pi pi-pencil"
                     className="p-button-sm w-fit"
-                    disabled={patchingKey !== null}
+                    disabled={savingAll}
                     onClick={() => openAssetTypesDialog(row)}
                   />
                 </div>
@@ -457,12 +533,12 @@ export function AppParametersPage() {
                     optionValue="value"
                     showClear={row.uuidValue != null}
                     className="w-full"
-                    disabled={patchingKey === row.key}
+                    disabled={savingAll}
                     placeholder={t("appParameters.defaultWorkgroupPlaceholder")}
                     onChange={(e) => {
                       const v = e.value as string | null | undefined;
                       const next = v === undefined || v === null || v === "" ? null : String(v);
-                      void patchUuidValue(row.key, next);
+                      updateDraftUuid(row.key, next);
                     }}
                     appendTo={overlayAppendTo}
                   />
@@ -476,12 +552,14 @@ export function AppParametersPage() {
       );
     },
     [
+      assetKeyGenOptions,
       defaultWorkgroupDropdownOptions,
       langDe,
       openAssetTypesDialog,
-      patchBool,
-      patchUuidValue,
-      patchingKey,
+      savingAll,
+      updateDraftBool,
+      updateDraftJson,
+      updateDraftUuid,
       t,
     ],
   );
@@ -493,7 +571,7 @@ export function AppParametersPage() {
         return (
           <TabPanel key={cat} header={t(tabKey[cat])}>
             <div className="app-parameters-tab-panel-inner">
-              {loading && rows.length === 0 ? (
+              {loading && draftRows.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center py-16 text-sm text-on-surface-variant">
                   {t("appParameters.loadingParameters")}
                 </div>
@@ -506,7 +584,7 @@ export function AppParametersPage() {
           </TabPanel>
         );
       }),
-    [byCategory, loading, renderParameterCard, rows.length, t],
+    [byCategory, loading, renderParameterCard, draftRows.length, t],
   );
 
   const assetTypesDialogFooter = (
@@ -515,31 +593,31 @@ export function AppParametersPage() {
         type="button"
         label={t("appParameters.cancel")}
         className="p-button-text"
-        disabled={assetTypesSaving}
+        disabled={savingAll}
         onClick={() => setAssetTypesDialogOpen(false)}
       />
       <Button
         type="button"
-        label={t("appParameters.save")}
+        label={t("appParameters.apply")}
         icon="pi pi-check"
-        loading={assetTypesSaving}
-        onClick={() => void saveAssetTypesDialog()}
+        disabled={savingAll}
+        onClick={() => applyAssetTypesDialogToDraft()}
       />
     </div>
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <Toast ref={toastRef} position="top-right" />
       <Dialog
         header={t("appParameters.assetTypesDialogTitle")}
         visible={assetTypesDialogOpen}
         style={{ width: "min(40rem, 95vw)" }}
         contentClassName="app-atyp-dialog"
-        onHide={() => !assetTypesSaving && setAssetTypesDialogOpen(false)}
+        onHide={() => !savingAll && setAssetTypesDialogOpen(false)}
         footer={assetTypesDialogFooter}
         modal
-        dismissableMask={!assetTypesSaving}
+        dismissableMask={!savingAll}
         draggable={false}
         resizable={false}
       >
@@ -604,12 +682,29 @@ export function AppParametersPage() {
           ))}
         </div>
       </Dialog>
-      <div className="app-tabbed-page-shell">
+      <div className="app-tabbed-page-shell min-h-0 flex flex-1 flex-col">
         <div ref={tabHostRef} className="app-tabview-with-ink">
           <TabView className="app-sticky-tabs" activeIndex={activeTab} onTabChange={handleTabChange}>
             {panels}
           </TabView>
         </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-outline-variant bg-surface px-4 py-3">
+        <Button
+          type="button"
+          label={t("appParameters.discard")}
+          className="p-button-text"
+          disabled={!hasUnsavedChanges || savingAll}
+          onClick={() => discardDraft()}
+        />
+        <Button
+          type="button"
+          label={t("appParameters.save")}
+          icon="pi pi-save"
+          loading={savingAll}
+          disabled={!hasUnsavedChanges || savingAll}
+          onClick={() => void saveAll()}
+        />
       </div>
     </div>
   );

@@ -24,19 +24,25 @@ const chromeBackground = {
   "--app-chrome-bg": `url(${loginBgImage})`,
 } as CSSProperties;
 
+/** First URL segment after optional leading slash (works with future basename). */
 function headerTitleKey(pathname: string): string {
-  if (pathname.startsWith("/assets")) return "assets.appName";
-  if (pathname.startsWith("/baumstruktur")) return "baumstruktur.appName";
-  if (pathname.startsWith("/workorders")) return "workOrders.appName";
-  if (pathname.startsWith("/sites")) return "sites.appName";
-  if (pathname.startsWith("/users")) return "users.appName";
-  if (pathname.startsWith("/workgroups")) return "workgroups.appName";
-  if (pathname.startsWith("/employees")) return "employees.appName";
-  if (pathname.startsWith("/cost-centers")) return "costCenters.appName";
-  if (pathname.startsWith("/app-parameters")) return "appParameters.appName";
-  if (pathname.startsWith("/audit-log")) return "auditLog.appName";
-  if (pathname.startsWith("/table-viewer")) return "tableViewer.appName";
-  return "dashboard.appName";
+  const seg = pathname.replace(/\/+$/, "").split("/").filter(Boolean)[0];
+  const map: Record<string, string> = {
+    dashboard: "dashboard.appName",
+    assets: "assets.appName",
+    workorders: "workOrders.appName",
+    sites: "sites.appName",
+    users: "users.appName",
+    workgroups: "workgroups.appName",
+    employees: "employees.appName",
+    "cost-centers": "costCenters.appName",
+    "classifications": "classifications.appName",
+    "app-parameters": "appParameters.appName",
+    "audit-log": "auditLog.appName",
+    "table-viewer": "tableViewer.appName",
+  };
+  if (!seg) return "dashboard.appName";
+  return map[seg.toLowerCase()] ?? "dashboard.appName";
 }
 
 /** Passed to child routes via `<Outlet context={…} />` for header actions (e.g. CRUD). */
@@ -62,11 +68,6 @@ const navItems: NavItem[] = [
   },
   { to: "/assets", icon: "pi pi-box", labelKey: "assets.navAssets" },
   {
-    to: "/baumstruktur",
-    icon: "pi pi-sitemap",
-    labelKey: "baumstruktur.navBaumstruktur",
-  },
-  {
     to: "/workorders",
     icon: "pi pi-briefcase",
     labelKey: "workOrders.navOrders",
@@ -87,6 +88,11 @@ const navItems: NavItem[] = [
     to: "/cost-centers",
     icon: "pi pi-briefcase",
     labelKey: "costCenters.navCostCenters",
+  },
+  {
+    to: "/classifications",
+    icon: "pi pi-tags",
+    labelKey: "classifications.navClassifications",
   },
   {
     to: "/app-parameters",
@@ -232,7 +238,7 @@ export function AppShellLayout() {
         >
           {collapsed ? null : (
             <div className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
-              Misc
+              {t("shell.miscSection")}
             </div>
           )}
           <div

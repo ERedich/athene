@@ -83,6 +83,12 @@ const DOC_CATEGORIES: WorkOrderDocumentCategory[] = [
   "certificates",
 ];
 
+function formatHoursForInput(hours: number): string {
+  if (!Number.isFinite(hours) || hours < 0) return "";
+  const rounded = Math.round(hours * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 function emptyForm(): FormState {
   const start = new Date();
   return {
@@ -94,7 +100,7 @@ function emptyForm(): FormState {
     workgroupId: "",
     plannedStart: start,
     plannedEnd: new Date(start.getTime() + 24 * 60 * 60 * 1000),
-    plannedDurationHours: "",
+    plannedDurationHours: "24",
     orderType: "maintenance" as WorkOrderType,
   };
 }
@@ -103,11 +109,6 @@ function parseIso(value: string | null | undefined): Date | null {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function formatHours(hours: number): string {
-  const rounded = Math.round(hours * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
 export function WorkOrderEditor({ orderId }: Props) {
@@ -158,7 +159,11 @@ export function WorkOrderEditor({ orderId }: Props) {
       plannedStart: parseIso(row.plannedStart) ?? new Date(),
       plannedEnd: parseIso(row.plannedEnd),
       plannedDurationHours:
-        row.plannedDurationMinutes == null ? "" : formatHours(row.plannedDurationMinutes / 60),
+        row.plannedDurationMinutes == null
+          ? ""
+          : Number.isInteger(row.plannedDurationMinutes / 60)
+            ? String(row.plannedDurationMinutes / 60)
+            : (row.plannedDurationMinutes / 60).toFixed(2),
       orderType: row.orderType,
     });
     setHydrated(true);
@@ -414,9 +419,10 @@ export function WorkOrderEditor({ orderId }: Props) {
           : Number.isFinite(Number(hoursRaw)) && Number(hoursRaw) >= 0
             ? Number(hoursRaw)
             : NaN;
-      if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim() || Number.isNaN(hours)) {
+      if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
         return null;
       }
+      if (Number.isNaN(hours)) return null;
       return {
         name,
         description: description || null,
@@ -603,22 +609,26 @@ export function WorkOrderEditor({ orderId }: Props) {
     setForm((cur) => {
       if (!nextEnd || !cur.plannedStart) return { ...cur, plannedEnd: nextEnd, plannedDurationHours: "" };
       const diffHours = Math.max(0, (nextEnd.getTime() - cur.plannedStart.getTime()) / (1000 * 60 * 60));
-      return { ...cur, plannedEnd: nextEnd, plannedDurationHours: formatHours(diffHours) };
+      return { ...cur, plannedEnd: nextEnd, plannedDurationHours: formatHoursForInput(diffHours) };
     });
   };
 
   const updateEndFromDuration = (raw: string) => {
-    const normalized = raw.replace(",", ".").replace(/[^\d.]/g, "");
+    const rawNorm = raw.replace(",", ".").replace(/[^\d.]/g, "");
+    const normalized =
+      rawNorm.split(".").length > 2 ? rawNorm.replace(/\.(?=.*\.)/g, "") : rawNorm;
     setForm((cur) => {
       if (!cur.plannedStart) return { ...cur, plannedDurationHours: normalized };
-      if (!normalized) return { ...cur, plannedDurationHours: "", plannedEnd: cur.plannedEnd };
-      const hours = Number(normalized);
-      if (!Number.isFinite(hours) || hours < 0) return { ...cur, plannedDurationHours: normalized };
-      return {
-        ...cur,
-        plannedDurationHours: normalized,
-        plannedEnd: new Date(cur.plannedStart.getTime() + hours * 60 * 60 * 1000),
-      };
+      let plannedEnd = cur.plannedEnd;
+      if (normalized === "") {
+        /* keep plannedEnd */
+      } else {
+        const parsed = Number(normalized);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          plannedEnd = new Date(cur.plannedStart.getTime() + parsed * 60 * 60 * 1000);
+        }
+      }
+      return { ...cur, plannedDurationHours: normalized, plannedEnd };
     });
   };
 
@@ -723,9 +733,13 @@ export function WorkOrderEditor({ orderId }: Props) {
             onChange={(next) => {
               if (!next) return;
               setForm((cur) => {
-                const end = cur.plannedDurationHours
-                  ? new Date(next.getTime() + Number(cur.plannedDurationHours || "0") * 60 * 60 * 1000)
-                  : cur.plannedEnd;
+                const parsedHours = Number(cur.plannedDurationHours.trim().replace(",", "."));
+                const end =
+                  cur.plannedDurationHours.trim() !== "" &&
+                  Number.isFinite(parsedHours) &&
+                  parsedHours >= 0
+                    ? new Date(next.getTime() + parsedHours * 60 * 60 * 1000)
+                    : cur.plannedEnd;
                 return { ...cur, plannedStart: next, plannedEnd: end };
               });
             }}

@@ -438,6 +438,7 @@ export function EmployeesPage() {
           showGridlines
           scrollable
           resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "68rem" }}
@@ -448,7 +449,12 @@ export function EmployeesPage() {
           <Column field="key" header={t("employees.key")} sortable />
           <Column field="name" header={t("employees.name")} sortable />
           <Column field="siteName" header={t("employees.site")} sortable body={siteColumnBody} />
-          <Column header={t("employees.active")} body={activeBody} className="w-28 text-center" />
+          <Column
+            columnKey="active"
+            header={t("employees.active")}
+            body={activeBody}
+            className="w-28 text-center"
+          />
           <Column
             field="createdAt"
             header={t("employees.createdAt")}

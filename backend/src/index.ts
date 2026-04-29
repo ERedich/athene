@@ -7,6 +7,7 @@ import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
 import { appParametersRouter } from "./appParameters.js";
 import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
+import { classificationsRouter } from "./classifications.js";
 import { costCentersRouter } from "./costCenters.js";
 import { employeesRouter } from "./employees.js";
 import { dbMetaRouter } from "./dbMeta.js";
@@ -54,6 +55,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/users", requireAuth, usersRouter);
 app.use("/api/cost-centers", requireAuth, costCentersRouter);
+app.use("/api/classifications", requireAuth, classificationsRouter);
 app.use("/api/workgroups", requireAuth, workgroupsRouter);
 app.use("/api/employees", requireAuth, employeesRouter);
 app.use("/api/assets", requireAuth, assetsRouter);

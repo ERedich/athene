@@ -7,7 +7,6 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
-  type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
@@ -23,37 +22,21 @@ import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
-import {
-  TreeTable,
-  type TreeTableEvent,
-  type TreeTableSelectionEvent,
-  type TreeTableToggleEvent,
-} from "primereact/treetable";
-import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import {
-  APP_PARAM_KEY_ALLOW_SITE_CHANGE,
-  APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS,
-} from "../lib/appParameterKeys";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   type AssetDocumentCategory,
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
-import {
-  DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
-  type AssetTypeDisplayConfig,
-} from "../lib/assetTypeDisplay";
+import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
-import {
-  useTableContextMenu,
-  useTreeTableContextMenu,
-} from "../lib/useTableContextMenu";
+import { useTableContextMenu } from "../lib/useTableContextMenu";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
@@ -130,6 +113,7 @@ type SiteOption = {
   key: string;
   name: string;
   colorHex: string;
+  isPlant: boolean;
 };
 
 type SiteDropdownOption = { label: string; value: string };
@@ -159,45 +143,10 @@ type Asset = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  keyPath?: string | null;
 };
 
-const ASSETS_TREE_TABLE_STATE_STORAGE_KEY = "athene-assets-tree-table";
 const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
-const ASSETS_TREE_ROW_ANIMATION_MS = 1000;
-
-/**
- * PrimeReact TreeTable._restoreState has a bug: when a persisted state contains
- * `expandedKeysState` and `onToggle` is set, it calls `props.onRowToggle(...)`,
- * which is not declared on the component (-> runtime TypeError, or DOM warning if
- * the prop is passed in). Tree expansion is owned by our own React state anyway,
- * so we plug into `stateStorage="custom"` and strip `expandedKeysState` from the
- * restored payload to avoid that codepath entirely.
- */
-function readAssetsTreeTableStoredState(): Record<string, unknown> | undefined {
-  try {
-    const raw = localStorage.getItem(ASSETS_TREE_TABLE_STATE_STORAGE_KEY);
-    if (!raw) return undefined;
-    const isoDate = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/;
-    const parsed = JSON.parse(raw, (_k, v) =>
-      typeof v === "string" && isoDate.test(v) ? new Date(v) : v,
-    ) as Record<string, unknown>;
-    delete parsed.expandedKeysState;
-    return parsed;
-  } catch {
-    return undefined;
-  }
-}
-
-function writeAssetsTreeTableState(state: object): void {
-  try {
-    localStorage.setItem(
-      ASSETS_TREE_TABLE_STATE_STORAGE_KEY,
-      JSON.stringify(state),
-    );
-  } catch {
-    /* ignore */
-  }
-}
 
 function supportsAssetsTableVirtualScroller(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -209,56 +158,6 @@ function supportsAssetsTableVirtualScroller(): boolean {
     /edg\//i.test(ua) ||
     /opr\//i.test(ua);
   return !firefox && !chromium;
-}
-
-/**
- * Build tree roots from filtered rows; parents outside the set become implicit roots.
- * Children are materialized lazily only for expanded branches to keep large trees responsive.
- */
-function buildFilteredAssetTreeNodes(
-  assets: Asset[],
-  expandedKeys: Set<string>,
-): TreeNode[] {
-  const idSet = new Set(assets.map((a) => a.id));
-  const byParent = new Map<string | null, Asset[]>();
-
-  const effectiveParentId = (a: Asset): string | null => {
-    if (!a.parentAssetId) return null;
-    if (!idSet.has(a.parentAssetId)) return null;
-    return a.parentAssetId;
-  };
-
-  for (const a of assets) {
-    const p = effectiveParentId(a);
-    const list = byParent.get(p) ?? [];
-    list.push(a);
-    byParent.set(p, list);
-  }
-  for (const list of byParent.values()) {
-    list.sort((x, y) =>
-      x.key.localeCompare(y.key, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      }),
-    );
-  }
-
-  const toNodes = (parentId: string | null): TreeNode[] => {
-    const rows = byParent.get(parentId) ?? [];
-    return rows.map((row) => {
-      const node: TreeNode = { key: row.id, data: row };
-      const hasChildren = (byParent.get(row.id)?.length ?? 0) > 0;
-      if (hasChildren) {
-        node.leaf = false;
-        if (expandedKeys.has(row.id)) {
-          node.children = toNodes(row.id);
-        }
-      }
-      return node;
-    });
-  };
-
-  return toNodes(null);
 }
 
 type CostCenterListRow = {
@@ -564,35 +463,7 @@ const assetDialogTabs = {
   Documents: 1,
 } as const;
 
-function collectDescendantIds(
-  parentId: string,
-  assets: Asset[],
-  expandedSet: Set<string>,
-): string[] {
-  const byParent = new Map<string, Asset[]>();
-  for (const row of assets) {
-    if (!row.parentAssetId) continue;
-    const siblings = byParent.get(row.parentAssetId) ?? [];
-    siblings.push(row);
-    byParent.set(row.parentAssetId, siblings);
-  }
-
-  const descendants: string[] = [];
-  const stack = [...(byParent.get(parentId) ?? [])];
-  while (stack.length > 0) {
-    const current = stack.shift();
-    if (!current) continue;
-    descendants.push(current.id);
-    if (expandedSet.has(current.id)) {
-      const children = byParent.get(current.id) ?? [];
-      stack.unshift(...children);
-    }
-  }
-  return descendants;
-}
-
 type AssetDialogTab = (typeof assetDialogTabs)[keyof typeof assetDialogTabs];
-type AssetsPageProps = { mode?: "table" | "tree" };
 type HeaderActionsProps = {
   t: (key: string) => string;
   selectedAsset: Asset | null;
@@ -702,16 +573,39 @@ function formatDateOnly(value: Date | null): string {
   return `${year}-${month}-${day}`;
 }
 
-export function AssetsPage({ mode = "table" }: AssetsPageProps) {
+function buildAssetKeyPathPreview(params: {
+  siteKey: string;
+  separator: string;
+  assets: Asset[];
+  parentAssetId: string | null;
+  assetKeyTrimmed: string;
+}): string {
+  const sep = params.separator.length === 1 ? params.separator : ".";
+  const chainUp: string[] = [];
+  let pid: string | null = params.parentAssetId;
+  const seen = new Set<string>();
+  while (pid) {
+    if (seen.has(pid)) break;
+    seen.add(pid);
+    const node = params.assets.find((a) => a.id === pid);
+    if (!node) break;
+    chainUp.push(node.key);
+    pid = node.parentAssetId;
+  }
+  chainUp.reverse();
+  const parts = [params.siteKey, ...chainUp];
+  if (params.assetKeyTrimmed) parts.push(params.assetKeyTrimmed);
+  return parts.join(sep);
+}
+
+export function AssetsPage() {
   const { t, i18n } = useTranslation();
-  const { user, appParameterBooleans, appParameterAssetTypes } = useAuth();
+  const { user, appParameterBooleans, appParameterAssetTypes, appParameterAssetKeyMode, appParameterShowAssetKeyPath, appParameterAssetKeyPathSeparator } =
+    useAuth();
   const langDe = i18n.language?.toLowerCase().startsWith("de");
   const calendarDateFormat = langDe ? "dd.mm.yy" : "mm/dd/yy";
   const siteFieldLocked =
     !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
-  const colorizeTreeRows = Boolean(
-    appParameterBooleans[APP_PARAM_KEY_COLORIZE_ASSET_TREE_ROWS],
-  );
   const { setHeaderActions, setHeaderRowCount } =
     useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
@@ -721,10 +615,6 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
   const [costCenters, setCostCenters] = useState<CostCenterListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
-  /** Until `assets` is loaded, Prime state restore may fire `onSelectionChange` with an id we cannot resolve yet. */
-  const [pendingTreeSelectionId, setPendingTreeSelectionId] = useState<
-    string | null
-  >(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [activeTabIndex, setActiveTabIndex] = useState<AssetDialogTab>(
     assetDialogTabs.General,
@@ -749,22 +639,8 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
   const [documentEditCategory, setDocumentEditCategory] =
     useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
-  const [treeExpandedKeys, setTreeExpandedKeys] = useState<
-    Record<string, boolean>
-  >({});
-  const [treeAnimatedCollapsingRows, setTreeAnimatedCollapsingRows] = useState<
-    Record<string, boolean>
-  >({});
-  const [treeAnimatedEnteringRows, setTreeAnimatedEnteringRows] = useState<
-    Record<string, boolean>
-  >({});
   const [assetsGridScrollHeight, setAssetsGridScrollHeight] = useState("60vh");
   const assetsGridHostRef = useRef<HTMLDivElement | null>(null);
-  const treePendingCollapseKeysRef = useRef<Record<string, boolean>>({});
-  const treeCollapseTimersRef = useRef(new Map<string, number>());
-  const treeCollapseRowsByParentRef = useRef(new Map<string, string[]>());
-  const treeEnterTimersRef = useRef(new Map<string, number>());
-  const treeMode = mode === "tree";
   const debouncedSearchTerm = useDebouncedValue(searchTermInput, 180);
 
   const dateTimeFormatter = useMemo(
@@ -783,25 +659,6 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
         : undefined,
     [],
   );
-  const treeTypeColors =
-    appParameterAssetTypes ?? DEFAULT_ASSET_TYPE_DISPLAY_CONFIG;
-  const treeTableStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!colorizeTreeRows) return undefined;
-    return {
-      ["--app-asset-type-row-site" as string]: treeTypeColors.site.colorHex,
-      ["--app-asset-type-row-structure" as string]:
-        treeTypeColors.structure.colorHex,
-      ["--app-asset-type-row-line" as string]: treeTypeColors.line.colorHex,
-      ["--app-asset-type-row-maintenance-object" as string]:
-        treeTypeColors.maintenanceObject.colorHex,
-    };
-  }, [
-    colorizeTreeRows,
-    treeTypeColors.line.colorHex,
-    treeTypeColors.maintenanceObject.colorHex,
-    treeTypeColors.site.colorHex,
-    treeTypeColors.structure.colorHex,
-  ]);
 
   const editingIdRef = useRef<string | null>(null);
   const formRef = useRef(form);
@@ -823,157 +680,6 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       window.clearTimeout(timer);
     pendingAutoTimersRef.current.clear();
   }, []);
-
-  const clearTreeCollapseTimer = useCallback((key: string) => {
-    const timer = treeCollapseTimersRef.current.get(key);
-    if (timer) {
-      window.clearTimeout(timer);
-      treeCollapseTimersRef.current.delete(key);
-    }
-  }, []);
-
-  const clearAllTreeCollapseTimers = useCallback(() => {
-    for (const timer of treeCollapseTimersRef.current.values()) {
-      window.clearTimeout(timer);
-    }
-    treeCollapseTimersRef.current.clear();
-  }, []);
-
-  const clearTreeEnterTimer = useCallback((key: string) => {
-    const timer = treeEnterTimersRef.current.get(key);
-    if (timer) {
-      window.clearTimeout(timer);
-      treeEnterTimersRef.current.delete(key);
-    }
-  }, []);
-
-  const clearAllTreeEnterTimers = useCallback(() => {
-    for (const timer of treeEnterTimersRef.current.values()) {
-      window.clearTimeout(timer);
-    }
-    treeEnterTimersRef.current.clear();
-  }, []);
-
-  const scheduleTreeEnterAnimationRows = useCallback(
-    (rowIds: string[]) => {
-      if (rowIds.length === 0) return;
-      setTreeAnimatedEnteringRows((current) => {
-        const next = { ...current };
-        for (const id of rowIds) {
-          next[id] = true;
-          clearTreeEnterTimer(id);
-          const timer = window.setTimeout(() => {
-            treeEnterTimersRef.current.delete(id);
-            setTreeAnimatedEnteringRows((rows) => {
-              if (!(id in rows)) return rows;
-              const updated = { ...rows };
-              delete updated[id];
-              return updated;
-            });
-          }, ASSETS_TREE_ROW_ANIMATION_MS);
-          treeEnterTimersRef.current.set(id, timer);
-        }
-        return next;
-      });
-    },
-    [clearTreeEnterTimer],
-  );
-
-  const syncTreeAnimatedCollapsingRows = useCallback(() => {
-    const next: Record<string, boolean> = {};
-    for (const rowIds of treeCollapseRowsByParentRef.current.values()) {
-      for (const id of rowIds) next[id] = true;
-    }
-    setTreeAnimatedCollapsingRows(next);
-  }, []);
-
-  const updateTreeExpansionWithAnimation = useCallback(
-    (nextExpandedKeys: Record<string, boolean>) => {
-      const activeNext: Record<string, boolean> = {};
-      for (const [key, enabled] of Object.entries(nextExpandedKeys)) {
-        if (enabled) activeNext[key] = true;
-      }
-
-      const currentExpanded = new Set(
-        Object.entries(treeExpandedKeys)
-          .filter(([, enabled]) => Boolean(enabled))
-          .map(([key]) => key),
-      );
-      const nextExpanded = new Set(Object.keys(activeNext));
-      const collapsedKeys = [...currentExpanded].filter(
-        (key) => !nextExpanded.has(key),
-      );
-      const expandedKeysAdded = [...nextExpanded].filter(
-        (key) => !currentExpanded.has(key),
-      );
-
-      if (expandedKeysAdded.length > 0) {
-        const rowsToAnimate = new Set<string>();
-        for (const key of expandedKeysAdded) {
-          const directChildren = assets
-            .filter((row) => row.parentAssetId === key)
-            .map((row) => row.id);
-          for (const id of directChildren) rowsToAnimate.add(id);
-          const expandedBeforeSet = new Set(
-            Object.keys(activeNext).filter((id) => id !== key),
-          );
-          for (const id of collectDescendantIds(
-            key,
-            assets,
-            expandedBeforeSet,
-          )) {
-            rowsToAnimate.add(id);
-          }
-        }
-        scheduleTreeEnterAnimationRows([...rowsToAnimate]);
-      }
-
-      const pendingCollapse = treePendingCollapseKeysRef.current;
-      const collapseRowsByParent = treeCollapseRowsByParentRef.current;
-
-      for (const key of Object.keys(pendingCollapse)) {
-        if (!collapsedKeys.includes(key)) {
-          delete pendingCollapse[key];
-          clearTreeCollapseTimer(key);
-          collapseRowsByParent.delete(key);
-        }
-      }
-
-      for (const key of collapsedKeys) {
-        const visibleDescendantIds = collectDescendantIds(
-          key,
-          assets,
-          currentExpanded,
-        );
-        if (visibleDescendantIds.length === 0) {
-          delete pendingCollapse[key];
-          clearTreeCollapseTimer(key);
-          collapseRowsByParent.delete(key);
-          continue;
-        }
-        pendingCollapse[key] = true;
-        collapseRowsByParent.set(key, visibleDescendantIds);
-        clearTreeCollapseTimer(key);
-        const timer = window.setTimeout(() => {
-          delete treePendingCollapseKeysRef.current[key];
-          treeCollapseTimersRef.current.delete(key);
-          treeCollapseRowsByParentRef.current.delete(key);
-          syncTreeAnimatedCollapsingRows();
-        }, ASSETS_TREE_ROW_ANIMATION_MS);
-        treeCollapseTimersRef.current.set(key, timer);
-      }
-
-      syncTreeAnimatedCollapsingRows();
-      setTreeExpandedKeys(activeNext);
-    },
-    [
-      assets,
-      clearTreeCollapseTimer,
-      scheduleTreeEnterAnimationRows,
-      syncTreeAnimatedCollapsingRows,
-      treeExpandedKeys,
-    ],
-  );
 
   const formatShortDt = useCallback(
     (iso: string) => {
@@ -1050,6 +756,60 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     ),
     [appParameterAssetTypes, langDe, t],
   );
+
+  const selectedSiteIsPlant = useMemo(
+    () => sites.find((s) => s.id === form.siteId)?.isPlant === true,
+    [sites, form.siteId],
+  );
+
+  const assetKeyReadOnly =
+    appParameterAssetKeyMode === "auto_incremental" && selectedSiteIsPlant;
+
+  const keyColumnBody = useCallback(
+    (row: Asset) => (
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate font-mono text-sm">{row.key}</span>
+        {appParameterShowAssetKeyPath && row.keyPath ? (
+          <span
+            className="truncate font-mono text-xs text-on-surface-variant"
+            title={row.keyPath}
+          >
+            {row.keyPath}
+          </span>
+        ) : null}
+      </div>
+    ),
+    [appParameterShowAssetKeyPath],
+  );
+
+  const assetKeyPathModalPreview = useMemo(() => {
+    if (!appParameterShowAssetKeyPath || !dialogVisible) return null;
+    const siteKey = sites.find((s) => s.id === form.siteId)?.key;
+    if (!siteKey) return null;
+    const sep =
+      typeof appParameterAssetKeyPathSeparator === "string" &&
+      appParameterAssetKeyPathSeparator.length === 1
+        ? appParameterAssetKeyPathSeparator
+        : ".";
+    const parentRaw = form.parentAssetId?.trim();
+    const parentId = parentRaw ? parentRaw : null;
+    return buildAssetKeyPathPreview({
+      siteKey,
+      separator: sep,
+      assets,
+      parentAssetId: parentId,
+      assetKeyTrimmed: form.key.trim(),
+    });
+  }, [
+    appParameterAssetKeyPathSeparator,
+    appParameterShowAssetKeyPath,
+    assets,
+    dialogVisible,
+    form.key,
+    form.parentAssetId,
+    form.siteId,
+    sites,
+  ]);
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () =>
@@ -1290,6 +1050,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
             row.serialNumber ?? "",
             row.manufacturer ?? "",
             row.remark ?? "",
+            row.keyPath ?? "",
             String(row.documentCount),
             row.createdBy,
             row.updatedBy,
@@ -1309,173 +1070,6 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     );
   }, [assetSearchHaystacks, assets, debouncedSearchTerm]);
 
-  const treeMergedExpandedKeys = useMemo(
-    () => ({
-      ...treeExpandedKeys,
-      ...treePendingCollapseKeysRef.current,
-    }),
-    [treeAnimatedCollapsingRows, treeExpandedKeys],
-  );
-  const treeAnimatedExpandedKeySet = useMemo(
-    () =>
-      new Set(
-        Object.entries(treeMergedExpandedKeys)
-          .filter(([, enabled]) => Boolean(enabled))
-          .map(([key]) => key),
-      ),
-    [treeMergedExpandedKeys],
-  );
-  const assetTreeNodes = useMemo(
-    () =>
-      buildFilteredAssetTreeNodes(filteredAssets, treeAnimatedExpandedKeySet),
-    [filteredAssets, treeAnimatedExpandedKeySet],
-  );
-
-  /** Prime `selectionMode="single"`: `selectionKeys` is the node key string or null — not `{ id: true }`. */
-  const treeSelectionKey = selectedAsset?.id ?? pendingTreeSelectionId ?? null;
-
-  const handleTreeSelectionChange = useCallback(
-    (e: TreeTableSelectionEvent) => {
-      const val = e.value as
-        | string
-        | Record<string, boolean>
-        | null
-        | undefined;
-      if (val == null) {
-        setPendingTreeSelectionId(null);
-        setSelectedAsset(null);
-        return;
-      }
-      const id =
-        typeof val === "string"
-          ? val
-          : (Object.keys(val).find((k) => val[k] === true) ?? null);
-      if (!id) {
-        setPendingTreeSelectionId(null);
-        setSelectedAsset(null);
-        return;
-      }
-      const row = assets.find((a) => a.id === id);
-      if (row) {
-        setPendingTreeSelectionId(null);
-        setSelectedAsset(row);
-        return;
-      }
-      if (assets.length === 0) {
-        setPendingTreeSelectionId(id);
-        return;
-      }
-      setPendingTreeSelectionId(null);
-      setSelectedAsset(null);
-    },
-    [assets],
-  );
-
-  const handleTreeRowToggle = useCallback(
-    (e: TreeTableToggleEvent) => {
-      updateTreeExpansionWithAnimation(
-        (e.value ?? {}) as Record<string, boolean>,
-      );
-    },
-    [updateTreeExpansionWithAnimation],
-  );
-
-  useEffect(() => {
-    if (!treeMode) {
-      clearAllTreeCollapseTimers();
-      clearAllTreeEnterTimers();
-      treePendingCollapseKeysRef.current = {};
-      treeCollapseRowsByParentRef.current.clear();
-      setTreeAnimatedCollapsingRows({});
-      setTreeAnimatedEnteringRows({});
-      setPendingTreeSelectionId(null);
-      return;
-    }
-    if (!pendingTreeSelectionId || assets.length === 0) return;
-    const row = assets.find((a) => a.id === pendingTreeSelectionId);
-    setPendingTreeSelectionId(null);
-    setSelectedAsset(row ?? null);
-  }, [
-    assets,
-    clearAllTreeCollapseTimers,
-    clearAllTreeEnterTimers,
-    pendingTreeSelectionId,
-    treeMode,
-  ]);
-
-  useEffect(() => {
-    const existingIds = new Set(filteredAssets.map((a) => a.id));
-    setTreeExpandedKeys((current) => {
-      const next: Record<string, boolean> = {};
-      for (const [k, v] of Object.entries(current)) {
-        if (v && existingIds.has(k)) next[k] = true;
-      }
-      return next;
-    });
-
-    const pendingCollapse = treePendingCollapseKeysRef.current;
-    const collapseRowsByParent = treeCollapseRowsByParentRef.current;
-    for (const key of Object.keys(pendingCollapse)) {
-      if (!existingIds.has(key)) {
-        delete pendingCollapse[key];
-        clearTreeCollapseTimer(key);
-        collapseRowsByParent.delete(key);
-      }
-    }
-
-    for (const [parentId, rowIds] of collapseRowsByParent.entries()) {
-      if (!existingIds.has(parentId)) {
-        collapseRowsByParent.delete(parentId);
-        continue;
-      }
-      const filteredRowIds = rowIds.filter((id) => existingIds.has(id));
-      if (filteredRowIds.length === 0) {
-        collapseRowsByParent.delete(parentId);
-        continue;
-      }
-      if (filteredRowIds.length !== rowIds.length) {
-        collapseRowsByParent.set(parentId, filteredRowIds);
-      }
-    }
-    syncTreeAnimatedCollapsingRows();
-
-    setTreeAnimatedEnteringRows((current) => {
-      const next: Record<string, boolean> = {};
-      for (const [k, v] of Object.entries(current)) {
-        if (v && existingIds.has(k)) next[k] = true;
-      }
-      return next;
-    });
-  }, [clearTreeCollapseTimer, filteredAssets, syncTreeAnimatedCollapsingRows]);
-
-  useEffect(() => {
-    return () => {
-      clearAllTreeCollapseTimers();
-      clearAllTreeEnterTimers();
-      treePendingCollapseKeysRef.current = {};
-      treeCollapseRowsByParentRef.current.clear();
-    };
-  }, [clearAllTreeCollapseTimers, clearAllTreeEnterTimers]);
-
-  const treeRowClassName = useCallback(
-    (node: TreeNode): Record<string, boolean> => {
-      if (!node.data) return {};
-      const row = node.data as Asset;
-      const classes: Record<string, boolean> = {};
-      if (colorizeTreeRows) {
-        classes[`app-asset-row-type-${row.type}`] = true;
-      }
-      if (treeAnimatedCollapsingRows[row.id]) {
-        classes["app-assets-tree-row-collapsing"] = true;
-      }
-      if (treeAnimatedEnteringRows[row.id]) {
-        classes["app-assets-tree-row-entering"] = true;
-      }
-      return classes;
-    },
-    [colorizeTreeRows, treeAnimatedCollapsingRows, treeAnimatedEnteringRows],
-  );
-
   useLayoutEffect(() => {
     const recalcAssetsGridHeight = () => {
       const host = assetsGridHostRef.current;
@@ -1488,7 +1082,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     recalcAssetsGridHeight();
     window.addEventListener("resize", recalcAssetsGridHeight);
     return () => window.removeEventListener("resize", recalcAssetsGridHeight);
-  }, [treeMode]);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -1650,6 +1244,8 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
       detail = t("assets.invalidParentAsset");
     if (code === "foreign_key_violation") detail = t("assets.foreignKey");
     if (code === "invalid_cost_center") detail = t("assets.invalidCostCenter");
+    if (code === "asset_key_auto_requires_plant_site")
+      detail = t("assets.assetKeyPlantRequired");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -1854,10 +1450,22 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
   }, [clearAllPendingAutoTimers, dialogVisible, editingId, loadDocuments]);
 
   const save = async () => {
-    const key = form.key.trim();
+    const keyTrim = form.key.trim();
     const name = form.name.trim();
     const siteId = form.siteId.trim();
-    if (!key || !name || !siteId) {
+    const createAutoPlant =
+      !editingId &&
+      appParameterAssetKeyMode === "auto_incremental" &&
+      selectedSiteIsPlant;
+    if (!name || !siteId) {
+      toastRef.current?.show({
+        severity: "warn",
+        summary: t("assets.validationRequired"),
+        life: 4000,
+      });
+      return;
+    }
+    if (!createAutoPlant && !keyTrim) {
       toastRef.current?.show({
         severity: "warn",
         summary: t("assets.validationRequired"),
@@ -1877,7 +1485,7 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     try {
       clearAllPendingAutoTimers();
       const payload = {
-        key,
+        key: createAutoPlant ? "" : keyTrim,
         name,
         siteId,
         type: form.type,
@@ -2016,22 +1624,6 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     },
     selection: selectedAsset,
     setSelection: setSelectedAsset,
-  });
-
-  const treeCtx = useTreeTableContextMenu<Asset>({
-    labels: {
-      new: t("assets.new"),
-      edit: t("assets.edit"),
-      delete: t("assets.delete"),
-    },
-    handlers: {
-      onCreate: openCreate,
-      onEdit: openEdit,
-      onDelete: confirmDelete,
-    },
-    selection: selectedAsset,
-    setSelection: setSelectedAsset,
-    rows: assets,
   });
 
   useEffect(() => {
@@ -2358,316 +1950,140 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
-      {!treeMode ? tableCtx.ContextMenuEl : null}
-      {treeMode ? treeCtx.ContextMenuEl : null}
+      {tableCtx.ContextMenuEl}
 
       <div
         ref={assetsGridHostRef}
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        {!treeMode ? (
-          <div
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-            {...tableCtx.wrapperProps}
+        <div
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          {...tableCtx.wrapperProps}
+        >
+          <DataTable
+            className="app-data-table flex min-h-0 min-w-0 w-full flex-1"
+            value={filteredAssets}
+            loading={loading}
+            dataKey="id"
+            selection={selectedAsset}
+            onSelectionChange={(e) =>
+              setSelectedAsset(e.value as Asset | null)
+            }
+            onRowDoubleClick={(e) => openEdit(e.data as Asset)}
+            {...tableCtx.tableProps}
+            selectionMode="single"
+            metaKeySelection={false}
+            stripedRows
+            showGridlines
+            scrollable
+            resizableColumns
+            reorderableColumns
+            columnResizeMode="expand"
+            scrollHeight={assetsGridScrollHeight}
+            virtualScrollerOptions={assetsTableVirtualScrollerOptions}
+            tableStyle={{ minWidth: "118rem" }}
+            stateStorage="local"
+            stateKey="athene-assets-table"
+            emptyMessage={t("assets.empty")}
           >
-            <DataTable
-              className="app-data-table flex min-h-0 min-w-0 w-full flex-1"
-              value={filteredAssets}
-              loading={loading}
-              dataKey="id"
-              selection={selectedAsset}
-              onSelectionChange={(e) =>
-                setSelectedAsset(e.value as Asset | null)
-              }
-              onRowDoubleClick={(e) => openEdit(e.data as Asset)}
-              {...tableCtx.tableProps}
-              selectionMode="single"
-              metaKeySelection={false}
-              stripedRows
-              showGridlines
-              scrollable
-              resizableColumns
-              columnResizeMode="expand"
-              scrollHeight={assetsGridScrollHeight}
-              virtualScrollerOptions={assetsTableVirtualScrollerOptions}
-              tableStyle={{ minWidth: "118rem" }}
-              stateStorage="local"
-              stateKey="athene-assets-table"
-              emptyMessage={t("assets.empty")}
-            >
-              <Column
-                field="key"
-                header={t("assets.key")}
-                sortable
-                className="min-w-28"
-              />
-              <Column
-                field="name"
-                header={t("assets.name")}
-                sortable
-                className="min-w-56"
-              />
-              <Column
-                field="type"
-                header={t("assets.type")}
-                sortable
-                body={typeColumnBody}
-                className="min-w-36"
-              />
-              <Column
-                field="siteName"
-                header={t("assets.site")}
-                sortable
-                body={siteColumnBody}
-                className="min-w-44"
-              />
-              <Column
-                field="costCenterName"
-                header={t("assets.costCenter")}
-                sortable
-                body={costCenterBody}
-                className="min-w-48"
-              />
-              <Column
-                field="parentAssetName"
-                sortField="parentAssetName"
-                header={t("assets.parentAsset")}
-                body={parentBody}
-                sortable
-                className="min-w-72"
-              />
-              <Column
-                field="serialNumber"
-                header={t("assets.serialNumber")}
-                body={(row: Asset) => nullableTextBody(row.serialNumber)}
-                sortable
-                className="min-w-40"
-              />
-              <Column
-                field="buildDate"
-                header={t("assets.buildDate")}
-                body={(row: Asset) => dateOnlyBody(row.buildDate)}
-                sortable
-                className="min-w-28"
-              />
-              <Column
-                field="manufacturer"
-                header={t("assets.manufacturer")}
-                body={(row: Asset) => nullableTextBody(row.manufacturer)}
-                sortable
-                className="min-w-56"
-              />
-              <Column
-                field="documentCount"
-                header={t("assets.references")}
-                body={referencesBody}
-                sortable
-                style={{ width: "8rem", minWidth: "8rem", maxWidth: "8rem" }}
-              />
-              <Column
-                field="createdAt"
-                header={t("assets.createdAt")}
-                body={(row: Asset) => formatShortDt(row.createdAt)}
-                sortable
-                className="min-w-44 whitespace-nowrap text-on-surface-variant"
-              />
-              <Column
-                field="createdBy"
-                header={t("assets.createdBy")}
-                sortable
-                className="min-w-36 text-on-surface-variant"
-              />
-              <Column
-                field="updatedAt"
-                header={t("assets.updatedAt")}
-                body={(row: Asset) => formatShortDt(row.updatedAt)}
-                sortable
-                className="min-w-44 whitespace-nowrap text-on-surface-variant"
-              />
-              <Column
-                field="updatedBy"
-                header={t("assets.updatedBy")}
-                sortable
-                className="min-w-36 text-on-surface-variant"
-              />
-            </DataTable>
-          </div>
-        ) : (
-          <div
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-            {...treeCtx.wrapperProps}
-          >
-            <TreeTable
-              className={`app-data-table app-assets-treetable flex min-h-0 min-w-0 w-full flex-1 ${
-                colorizeTreeRows ? "app-assets-treetable--type-colored" : ""
-              }`}
-              value={assetTreeNodes}
-              loading={loading}
-              selectionMode="single"
-              selectionKeys={treeSelectionKey}
-              onSelectionChange={handleTreeSelectionChange}
-              {...treeCtx.treeTableProps}
-              expandedKeys={treeMergedExpandedKeys}
-              onToggle={handleTreeRowToggle}
-              rowClassName={treeRowClassName}
-              onRowClick={(e: TreeTableEvent) => {
-                const oe = e.originalEvent as MouseEvent<HTMLElement>;
-                if (oe.detail === 2) {
-                  const row = e.node?.data as Asset | undefined;
-                  if (row) openEdit(row);
-                }
-              }}
-              metaKeySelection={false}
-              stripedRows
-              showGridlines
-              scrollable
-              resizableColumns
-              columnResizeMode="expand"
-              scrollHeight={assetsGridScrollHeight}
-              tableStyle={{ minWidth: "118rem" }}
-              style={treeTableStyle}
-              stateStorage="custom"
-              stateKey={ASSETS_TREE_TABLE_STATE_STORAGE_KEY}
-              customRestoreState={readAssetsTreeTableStoredState}
-              customSaveState={writeAssetsTreeTableState}
-              emptyMessage={t("assets.empty")}
-            >
-              <Column
-                field="key"
-                header={t("assets.key")}
-                expander
-                sortable
-                className="min-w-28"
-              />
-              <Column
-                field="name"
-                header={t("assets.name")}
-                sortable
-                className="min-w-56"
-              />
-              <Column
-                field="type"
-                header={t("assets.type")}
-                sortable
-                className="min-w-36"
-                body={(node: TreeNode) =>
-                  node.data ? typeColumnBody(node.data as Asset) : null
-                }
-              />
-              <Column
-                field="siteName"
-                header={t("assets.site")}
-                sortable
-                className="min-w-44"
-                body={(node: TreeNode) =>
-                  node.data ? siteColumnBody(node.data as Asset) : null
-                }
-              />
-              <Column
-                field="costCenterName"
-                header={t("assets.costCenter")}
-                sortable
-                body={(node: TreeNode) =>
-                  node.data ? costCenterBody(node.data as Asset) : null
-                }
-                className="min-w-48"
-              />
-              <Column
-                field="parentAssetName"
-                sortField="parentAssetName"
-                header={t("assets.parentAsset")}
-                body={(node: TreeNode) =>
-                  node.data ? parentBody(node.data as Asset) : null
-                }
-                sortable
-                className="min-w-72"
-              />
-              <Column
-                field="serialNumber"
-                header={t("assets.serialNumber")}
-                sortable
-                className="min-w-40"
-                body={(node: TreeNode) =>
-                  node.data
-                    ? nullableTextBody((node.data as Asset).serialNumber)
-                    : null
-                }
-              />
-              <Column
-                field="buildDate"
-                header={t("assets.buildDate")}
-                sortable
-                className="min-w-28"
-                body={(node: TreeNode) =>
-                  node.data
-                    ? dateOnlyBody((node.data as Asset).buildDate)
-                    : null
-                }
-              />
-              <Column
-                field="manufacturer"
-                header={t("assets.manufacturer")}
-                sortable
-                body={(node: TreeNode) =>
-                  node.data
-                    ? nullableTextBody((node.data as Asset).manufacturer)
-                    : null
-                }
-                className="min-w-56"
-              />
-              <Column
-                field="documentCount"
-                header={t("assets.references")}
-                body={(node: TreeNode) =>
-                  node.data ? referencesBody(node.data as Asset) : null
-                }
-                sortable
-                style={{ width: "8rem", minWidth: "8rem", maxWidth: "8rem" }}
-                bodyClassName="app-assets-treetable-ref-cell"
-              />
-              <Column
-                field="createdAt"
-                header={t("assets.createdAt")}
-                body={(node: TreeNode) =>
-                  node.data
-                    ? formatShortDt((node.data as Asset).createdAt)
-                    : null
-                }
-                sortable
-                className="min-w-44 whitespace-nowrap text-on-surface-variant"
-              />
-              <Column
-                field="createdBy"
-                header={t("assets.createdBy")}
-                sortable
-                className="min-w-36 text-on-surface-variant"
-                body={(node: TreeNode) =>
-                  node.data ? (node.data as Asset).createdBy : null
-                }
-              />
-              <Column
-                field="updatedAt"
-                header={t("assets.updatedAt")}
-                body={(node: TreeNode) =>
-                  node.data
-                    ? formatShortDt((node.data as Asset).updatedAt)
-                    : null
-                }
-                sortable
-                className="min-w-44 whitespace-nowrap text-on-surface-variant"
-              />
-              <Column
-                field="updatedBy"
-                header={t("assets.updatedBy")}
-                sortable
-                className="min-w-36 text-on-surface-variant"
-                body={(node: TreeNode) =>
-                  node.data ? (node.data as Asset).updatedBy : null
-                }
-              />
-            </TreeTable>
-          </div>
-        )}
+            <Column
+              field="key"
+              header={t("assets.key")}
+              sortable
+              body={keyColumnBody}
+              className="min-w-28"
+            />
+            <Column
+              field="name"
+              header={t("assets.name")}
+              sortable
+              className="min-w-56"
+            />
+            <Column
+              field="type"
+              header={t("assets.type")}
+              sortable
+              body={typeColumnBody}
+              className="min-w-36"
+            />
+            <Column
+              field="siteName"
+              header={t("assets.site")}
+              sortable
+              body={siteColumnBody}
+              className="min-w-44"
+            />
+            <Column
+              field="costCenterName"
+              header={t("assets.costCenter")}
+              sortable
+              body={costCenterBody}
+              className="min-w-48"
+            />
+            <Column
+              field="parentAssetName"
+              sortField="parentAssetName"
+              header={t("assets.parentAsset")}
+              body={parentBody}
+              sortable
+              className="min-w-72"
+            />
+            <Column
+              field="serialNumber"
+              header={t("assets.serialNumber")}
+              body={(row: Asset) => nullableTextBody(row.serialNumber)}
+              sortable
+              className="min-w-40"
+            />
+            <Column
+              field="buildDate"
+              header={t("assets.buildDate")}
+              body={(row: Asset) => dateOnlyBody(row.buildDate)}
+              sortable
+              className="min-w-28"
+            />
+            <Column
+              field="manufacturer"
+              header={t("assets.manufacturer")}
+              body={(row: Asset) => nullableTextBody(row.manufacturer)}
+              sortable
+              className="min-w-56"
+            />
+            <Column
+              field="documentCount"
+              header={t("assets.references")}
+              body={referencesBody}
+              sortable
+              style={{ width: "8rem", minWidth: "8rem", maxWidth: "8rem" }}
+            />
+            <Column
+              field="createdAt"
+              header={t("assets.createdAt")}
+              body={(row: Asset) => formatShortDt(row.createdAt)}
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="createdBy"
+              header={t("assets.createdBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+            />
+            <Column
+              field="updatedAt"
+              header={t("assets.updatedAt")}
+              body={(row: Asset) => formatShortDt(row.updatedAt)}
+              sortable
+              className="min-w-44 whitespace-nowrap text-on-surface-variant"
+            />
+            <Column
+              field="updatedBy"
+              header={t("assets.updatedBy")}
+              sortable
+              className="min-w-36 text-on-surface-variant"
+            />
+          </DataTable>
+        </div>
       </div>
       <Dialog
         header={editingId ? t("assets.editTitle") : t("assets.createTitle")}
@@ -2695,9 +2111,11 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
                     className="block text-[11px] text-outline uppercase tracking-[0.1em]"
                   >
                     {t("assets.key")}
-                    <span className="app-required-marker" aria-hidden>
-                      *
-                    </span>
+                    {!(assetKeyReadOnly && !editingId) ? (
+                      <span className="app-required-marker" aria-hidden>
+                        *
+                      </span>
+                    ) : null}
                   </label>
                   <InputText
                     id="asset-key"
@@ -2707,7 +2125,22 @@ export function AssetsPage({ mode = "table" }: AssetsPageProps) {
                     }
                     className="w-full"
                     autoComplete="off"
+                    disabled={assetKeyReadOnly}
+                    placeholder={
+                      assetKeyReadOnly && !editingId ? t("assets.keyAutoHint") : undefined
+                    }
                   />
+                  {assetKeyReadOnly && !editingId ? (
+                    <p className="m-0 text-xs text-on-surface-variant">{t("assets.keyAutoHint")}</p>
+                  ) : null}
+                  {appParameterShowAssetKeyPath && assetKeyPathModalPreview ? (
+                    <p
+                      className="m-0 break-all font-mono text-xs text-on-surface-variant"
+                      title={assetKeyPathModalPreview}
+                    >
+                      {assetKeyPathModalPreview}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label
