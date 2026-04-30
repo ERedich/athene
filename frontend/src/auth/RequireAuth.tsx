@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
 import { apiFetch } from "../lib/api";
+import { applyUiTranslationOverrides } from "../lib/applyUiTranslationOverrides";
 
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
@@ -41,6 +42,7 @@ export function RequireAuth() {
     const res = await apiFetch("/api/auth/me");
     if (!res.ok) return;
     const data = (await res.json()) as MeResponse;
+    await applyUiTranslationOverrides();
     setSessionBase({
       user: data.user,
       appParameterBooleans: data.appParameterBooleans ?? {},
@@ -62,6 +64,7 @@ export function RequireAuth() {
           return;
         }
         const data = (await r.json()) as MeResponse;
+        await applyUiTranslationOverrides();
         setSessionBase({
           user: data.user,
           appParameterBooleans: data.appParameterBooleans ?? {},

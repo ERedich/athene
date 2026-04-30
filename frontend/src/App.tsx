@@ -14,6 +14,7 @@ import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { SitesPage } from "./pages/SitesPage";
 import { TableViewerPage } from "./pages/TableViewerPage";
+import { TranslationsPage } from "./pages/TranslationsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />
+          <Route path="translations" element={<TranslationsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

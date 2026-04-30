@@ -658,5 +658,24 @@
     "foreignColumns": "FK columns",
     "yes": "Yes",
     "no": "No"
+  },
+  "translations": {
+    "appName": "Translations",
+    "navTranslations": "Translations",
+    "searchPlaceholder": "Search keys or text",
+    "colKey": "Key",
+    "colDe": "German",
+    "colEn": "English",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveSuccess": "Translations saved.",
+    "saveError": "Could not save translations.",
+    "loadError": "Could not load translation overrides.",
+    "ctxCopyKey": "Copy key",
+    "ctxResetRow": "Reset row to bundled defaults",
+    "resetRowSuccess": "Overrides cleared for this key.",
+    "resetRowError": "Could not reset this key.",
+    "noChanges": "No changes to save.",
+    "emptyFilter": "No keys match your search."
   }
 }

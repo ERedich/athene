@@ -655,5 +655,24 @@
     "foreignColumns": "FK-Spalten",
     "yes": "Ja",
     "no": "Nein"
+  },
+  "translations": {
+    "appName": "Übersetzungen",
+    "navTranslations": "Übersetzungen",
+    "searchPlaceholder": "Schlüssel oder Text suchen",
+    "colKey": "Schlüssel",
+    "colDe": "Deutsch",
+    "colEn": "Englisch",
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "saveSuccess": "Übersetzungen gespeichert.",
+    "saveError": "Übersetzungen konnten nicht gespeichert werden.",
+    "loadError": "Übersetzungs-Overrides konnten nicht geladen werden.",
+    "ctxCopyKey": "Schlüssel kopieren",
+    "ctxResetRow": "Zeile auf Bundle-Stand zurücksetzen",
+    "resetRowSuccess": "Overrides für diesen Schlüssel entfernt.",
+    "resetRowError": "Zurücksetzen fehlgeschlagen.",
+    "noChanges": "Keine Änderungen zum Speichern.",
+    "emptyFilter": "Keine Schlüssel für die Suche."
   }
 }

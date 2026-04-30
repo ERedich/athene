@@ -41,6 +41,7 @@ function headerTitleKey(pathname: string): string {
     "app-parameters": "appParameters.appName",
     "audit-log": "auditLog.appName",
     "table-viewer": "tableViewer.appName",
+    translations: "translations.appName",
   };
   if (!seg) return "dashboard.appName";
   return map[seg.toLowerCase()] ?? "dashboard.appName";
@@ -110,6 +111,11 @@ const navItems: NavItem[] = [
     to: "/table-viewer",
     icon: "pi pi-table",
     labelKey: "tableViewer.navTableViewer",
+  },
+  {
+    to: "/translations",
+    icon: "pi pi-language",
+    labelKey: "translations.navTranslations",
   },
 ];
 
