@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
@@ -37,7 +37,6 @@ import {
   useAssetsQuery,
   useClassificationsQuery,
   useCostCentersQuery,
-  useDeleteWorkOrderMutation,
   useWorkOrderDocumentsQuery,
   useWorkgroupsQuery,
   useWorkOrdersQuery,
@@ -119,11 +118,11 @@ export function WorkOrderEditor({ orderId }: Props) {
   const isNew = !orderId;
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const navigation = useNavigation();
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
   const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
-  const deleteMutation = useDeleteWorkOrderMutation();
 
   const { data: orders = [], isLoading: ordersLoading } = useWorkOrdersQuery();
   const { data: assets = [], isLoading: assetsLoading } = useAssetsQuery();
@@ -151,6 +150,13 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [effectiveOrderId, setEffectiveOrderId] = useState<string | null>(orderId ?? null);
 
   const { data: documents = [], isLoading: docsLoading, refetch: refetchDocs } = useWorkOrderDocumentsQuery(effectiveOrderId);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerRight: undefined });
+    return () => {
+      navigation.setOptions({ headerRight: undefined });
+    };
+  }, [navigation]);
 
   useEffect(() => {
     if (isNew || !row || hydrated) return;
@@ -370,16 +376,6 @@ export function WorkOrderEditor({ orderId }: Props) {
           alignItems: "center",
         },
         primaryText: { fontWeight: "700", color: "#fff" },
-        danger: {
-          marginTop: 18,
-          padding: 14,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: isDark ? "rgba(248, 113, 113, 0.45)" : "#fecaca",
-          backgroundColor: isDark ? "rgba(127, 29, 29, 0.35)" : "#fef2f2",
-          alignItems: "center",
-        },
-        dangerText: { fontWeight: "700", color: "#f87171" },
         search: { marginBottom: 10 },
         uploadBtn: {
           borderWidth: 1,
@@ -582,27 +578,6 @@ export function WorkOrderEditor({ orderId }: Props) {
     } finally {
       setSaving(false);
     }
-  };
-
-  const onDelete = () => {
-    if (!effectiveOrderId && !orderId) return;
-    Alert.alert(t("workOrders.delete"), t("workOrders.confirmDelete", { name: form.name || "?" }), [
-      { text: t("workOrders.no"), style: "cancel" },
-      {
-        text: t("workOrders.yes"),
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            try {
-              await deleteMutation.mutateAsync(effectiveOrderId ?? orderId ?? "");
-              router.back();
-            } catch {
-              Alert.alert("", t("workOrders.deleteError"));
-            }
-          })();
-        },
-      },
-    ]);
   };
 
   const openDocument = async (doc: WorkOrderDocumentRow) => {
@@ -913,12 +888,6 @@ export function WorkOrderEditor({ orderId }: Props) {
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t("workOrders.save")}</Text>}
         </Pressable>
       </View>
-
-      {!isNew ? (
-        <Pressable style={styles.danger} onPress={onDelete}>
-          <Text style={styles.dangerText}>{t("workOrders.delete")}</Text>
-        </Pressable>
-      ) : null}
 
       {docEdit ? (
         <View style={[styles.card, { marginTop: 14 }]}>

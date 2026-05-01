@@ -87,6 +87,17 @@ export type AssetRow = {
 
 export type WorkOrderType = "maintenance" | "repair" | "breakdown";
 
+/** Aligns with `frontend/src/index.css` work-order status cell backgrounds (~30%). */
+export type WorkOrderStatus =
+  | "open"
+  | "assigned"
+  | "started"
+  | "paused"
+  | "continued"
+  | "ended"
+  | "done"
+  | "cancelled";
+
 export type WorkOrderDocumentCategory =
   | "general"
   | "protocols"
@@ -117,6 +128,7 @@ export type WorkOrderRow = {
   plannedEnd: string;
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
+  status: WorkOrderStatus;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
+import { Checkbox } from "primereact/checkbox";
 import { Calendar } from "primereact/calendar";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -29,7 +30,15 @@ import {
 } from "../constants/assetDocumentCategory";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
-type WorkOrderStatus = "open" | "assigned" | "started" | "paused" | "ended" | "done";
+type WorkOrderStatus =
+  | "open"
+  | "assigned"
+  | "started"
+  | "paused"
+  | "continued"
+  | "ended"
+  | "done"
+  | "cancelled";
 
 type WorkOrder = {
   id: string;
@@ -170,8 +179,14 @@ const orderDialogTabs = {
   General: 0,
   Planning: 1,
   Documents: 2,
+  Feedback: 3,
 } as const;
 type OrderDialogTab = (typeof orderDialogTabs)[keyof typeof orderDialogTabs];
+
+/** Matches POST /api/work-orders/:id/feedback — only started, continued, ended. */
+function workOrderStatusAllowsFeedback(status: WorkOrderStatus | undefined): boolean {
+  return status === "started" || status === "continued" || status === "ended";
+}
 
 const actionNavItem =
   "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -277,6 +292,10 @@ export function WorkOrdersPage() {
   const [documentEditDisplayName, setDocumentEditDisplayName] = useState("");
   const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
+  const [feedbackHours, setFeedbackHours] = useState("");
+  const [feedbackRemark, setFeedbackRemark] = useState("");
+  const [feedbackCompleteOrder, setFeedbackCompleteOrder] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
@@ -676,6 +695,14 @@ export function WorkOrdersPage() {
     [editingId, orders],
   );
 
+  useEffect(() => {
+    if (!dialogVisible) return;
+    if (activeTabIndex !== orderDialogTabs.Feedback) return;
+    if (!workOrderStatusAllowsFeedback(editingOrder?.status)) {
+      setActiveTabIndex(orderDialogTabs.General);
+    }
+  }, [activeTabIndex, dialogVisible, editingOrder?.status]);
+
   const postAssignmentsForOrder = useCallback(
     async (
       orderId: string,
@@ -971,6 +998,9 @@ export function WorkOrdersPage() {
     setPendingFiles([]);
     setDocumentsSearchTerm("");
     setActiveTabIndex(orderDialogTabs.General);
+    setFeedbackHours("");
+    setFeedbackRemark("");
+    setFeedbackCompleteOrder(false);
     setDialogVisible(true);
   }, []);
 
@@ -998,6 +1028,9 @@ export function WorkOrdersPage() {
     setPendingFiles([]);
     setAssignmentEmployeeIds([]);
     setDocumentsSearchTerm("");
+    setFeedbackHours("");
+    setFeedbackRemark("");
+    setFeedbackCompleteOrder(false);
     setActiveTabIndex(orderDialogTabs.General);
     setDialogVisible(true);
   }, []);
@@ -1006,6 +1039,15 @@ export function WorkOrdersPage() {
     openEdit(row);
     setActiveTabIndex(orderDialogTabs.Planning);
   }, [openEdit]);
+
+  const openFeedbackTab = useCallback(
+    (row: WorkOrder) => {
+      if (!workOrderStatusAllowsFeedback(row.status)) return;
+      openEdit(row);
+      setActiveTabIndex(orderDialogTabs.Feedback);
+    },
+    [openEdit],
+  );
 
   const openDocumentsTab = useCallback(
     (row: WorkOrder) => {
@@ -1174,29 +1216,6 @@ export function WorkOrdersPage() {
     },
     [deleteRow, t],
   );
-
-  const workOrderContextMenuExtraItems = useCallback(
-    (row: WorkOrder | null) => {
-      if (!row) return [];
-      return [
-        {
-          label: t("workOrders.contextMenuAssignEmployees"),
-          icon: "pi pi-user-plus",
-          disabled: row.status === "ended" || row.status === "done",
-          command: () => openPlanningTab(row),
-        },
-      ];
-    },
-    [openPlanningTab, t],
-  );
-
-  const tableCtx = useTableContextMenu<WorkOrder>({
-    labels: { new: t("workOrders.new"), edit: t("workOrders.edit"), delete: t("workOrders.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
-    selection: selectedOrder,
-    setSelection: setSelectedOrder,
-    extraItems: workOrderContextMenuExtraItems,
-  });
 
   useEffect(() => {
     setHeaderActions(
@@ -1385,6 +1404,164 @@ export function WorkOrdersPage() {
     [loadData, t],
   );
 
+  const pauseOrder = useCallback(
+    async (row: WorkOrder) => {
+      const res = await apiFetch(`/api/work-orders/${row.id}/pause`, { method: "POST" });
+      if (!res.ok) {
+        let code: string | undefined;
+        try {
+          code = ((await res.json()) as { error?: string }).error;
+        } catch {
+          /* ignore */
+        }
+        const msg =
+          code === "cannot_pause_from_status"
+            ? t("workOrders.cannotPauseFromStatus")
+            : t("workOrders.pauseError");
+        toastRef.current?.show({ severity: "warn", summary: msg, life: 4000 });
+        return;
+      }
+      await loadData();
+    },
+    [loadData, t],
+  );
+
+  const cancelWorkOrder = useCallback(
+    async (row: WorkOrder) => {
+      try {
+        const res = await apiFetch(`/api/work-orders/${row.id}/cancel`, { method: "POST" });
+        if (!res.ok) {
+          let code: string | undefined;
+          try {
+            code = ((await res.json()) as { error?: string }).error;
+          } catch {
+            /* ignore */
+          }
+          const msg =
+            code === "cannot_cancel_from_status"
+              ? t("workOrders.cannotCancelFromStatus")
+              : t("workOrders.cancelError");
+          toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
+          return;
+        }
+        const updated = (await res.json()) as WorkOrder;
+        setSelectedOrder((cur) => (cur?.id === updated.id ? updated : cur));
+        await loadData();
+        toastRef.current?.show({ severity: "success", summary: t("workOrders.cancelled"), life: 3000 });
+      } catch {
+        toastRef.current?.show({ severity: "error", summary: t("workOrders.cancelError"), life: 6000 });
+      }
+    },
+    [loadData, t],
+  );
+
+  const confirmCancelWorkOrder = useCallback(
+    (row: WorkOrder) => {
+      confirmDialog({
+        message: t("workOrders.confirmCancel", { name: row.name }),
+        header: t("workOrders.confirmCancelTitle"),
+        icon: "pi pi-exclamation-triangle",
+        acceptClassName: "p-button-danger",
+        acceptLabel: t("workOrders.yes"),
+        rejectLabel: t("workOrders.no"),
+        accept: () => void cancelWorkOrder(row),
+      });
+    },
+    [cancelWorkOrder, t],
+  );
+
+  const saveFeedback = useCallback(async () => {
+    if (!editingId) return;
+    const hoursRaw = feedbackHours.trim().replace(",", ".");
+    const hours =
+      hoursRaw === "" ? NaN : Number.isFinite(Number(hoursRaw)) && Number(hoursRaw) > 0 ? Number(hoursRaw) : NaN;
+    if (Number.isNaN(hours)) {
+      toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackHoursInvalid"), life: 4000 });
+      return;
+    }
+    if (feedbackRemark.length > 2000) {
+      toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackRemarkTooLong"), life: 4000 });
+      return;
+    }
+    setFeedbackSaving(true);
+    try {
+      const res = await apiFetch(`/api/work-orders/${editingId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hours,
+          remark: feedbackRemark.trim() || null,
+          completeOrder: feedbackCompleteOrder,
+        }),
+      });
+      if (!res.ok) {
+        let code: string | undefined;
+        try {
+          code = ((await res.json()) as { error?: string }).error;
+        } catch {
+          /* ignore */
+        }
+        const msg =
+          code === "cannot_feedback_from_status"
+            ? t("workOrders.cannotFeedbackFromStatus")
+            : code === "invalid_body"
+              ? t("workOrders.feedbackInvalidBody")
+              : t("workOrders.feedbackSaveError");
+        toastRef.current?.show({ severity: "error", summary: msg, life: 6000 });
+        return;
+      }
+      const updated = (await res.json()) as WorkOrder;
+      setSelectedOrder((cur) => (cur?.id === updated.id ? updated : cur));
+      await loadData();
+      setFeedbackHours("");
+      setFeedbackRemark("");
+      setFeedbackCompleteOrder(false);
+      setDialogVisible(false);
+      toastRef.current?.show({ severity: "success", summary: t("workOrders.feedbackSaved"), life: 3000 });
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("workOrders.feedbackSaveError"), life: 6000 });
+    } finally {
+      setFeedbackSaving(false);
+    }
+  }, [editingId, feedbackCompleteOrder, feedbackHours, feedbackRemark, loadData, t]);
+
+  const workOrderContextMenuExtraItems = useCallback(
+    (row: WorkOrder | null) => {
+      if (!row) return [];
+      const canFeedback = workOrderStatusAllowsFeedback(row.status);
+      const canCancel = row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
+      return [
+        {
+          label: t("workOrders.contextMenuAssignEmployees"),
+          icon: "pi pi-user-plus",
+          disabled: row.status === "ended" || row.status === "done" || row.status === "cancelled",
+          command: () => openPlanningTab(row),
+        },
+        {
+          label: t("workOrders.contextMenuCreateFeedback"),
+          icon: "pi pi-send",
+          disabled: !canFeedback,
+          command: () => openFeedbackTab(row),
+        },
+        {
+          label: t("workOrders.contextMenuCancelOrder"),
+          icon: "pi pi-times-circle",
+          disabled: !canCancel,
+          command: () => confirmCancelWorkOrder(row),
+        },
+      ];
+    },
+    [confirmCancelWorkOrder, openFeedbackTab, openPlanningTab, t],
+  );
+
+  const tableCtx = useTableContextMenu<WorkOrder>({
+    labels: { new: t("workOrders.new"), edit: t("workOrders.edit"), delete: t("workOrders.delete") },
+    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    selection: selectedOrder,
+    setSelection: setSelectedOrder,
+    extraItems: workOrderContextMenuExtraItems,
+  });
+
   const removeAssignment = useCallback(
     async (employeeId: string) => {
       if (!editingId) return;
@@ -1413,17 +1590,46 @@ export function WorkOrdersPage() {
           />
         );
       }
-      if (row.status === "started") {
+      if (row.status === "started" || row.status === "continued") {
         return (
           <div className="flex items-center gap-1">
-            <Button type="button" text disabled className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0" icon="pi pi-stop" title={t("workOrders.stop")} aria-label={t("workOrders.stop")} />
-            <Button type="button" text disabled className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0" icon="pi pi-pause" title={t("workOrders.pause")} aria-label={t("workOrders.pause")} />
+            <Button
+              type="button"
+              text
+              className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
+              icon="pi pi-stop"
+              title={t("workOrders.stop")}
+              aria-label={t("workOrders.stop")}
+              onClick={() => openFeedbackTab(row)}
+            />
+            <Button
+              type="button"
+              text
+              className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
+              icon="pi pi-pause"
+              title={t("workOrders.pause")}
+              aria-label={t("workOrders.pause")}
+              onClick={() => void pauseOrder(row)}
+            />
           </div>
+        );
+      }
+      if (row.status === "ended") {
+        return (
+          <Button
+            type="button"
+            text
+            className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
+            icon="pi pi-stop"
+            title={t("workOrders.stop")}
+            aria-label={t("workOrders.stop")}
+            onClick={() => openFeedbackTab(row)}
+          />
         );
       }
       return null;
     },
-    [startOrder, t],
+    [openFeedbackTab, pauseOrder, startOrder, t],
   );
 
   const dialogHeaderIcons = useMemo(() => {
@@ -1445,53 +1651,75 @@ export function WorkOrdersPage() {
         </div>
       );
     }
-    if (row.status === "started") {
+    if (row.status === "started" || row.status === "continued") {
       return (
         <div className="mr-1 flex items-center gap-1">
           <Button
             type="button"
             text
             rounded
-            disabled
             className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
             icon="pi pi-stop"
             title={t("workOrders.stop")}
             aria-label={t("workOrders.stop")}
+            onClick={() => openFeedbackTab(row)}
           />
           <Button
             type="button"
             text
             rounded
-            disabled
             className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
             icon="pi pi-pause"
             title={t("workOrders.pause")}
             aria-label={t("workOrders.pause")}
+            onClick={() => void pauseOrder(row)}
+          />
+        </div>
+      );
+    }
+    if (row.status === "ended") {
+      return (
+        <div className="mr-1 flex items-center gap-1">
+          <Button
+            type="button"
+            text
+            rounded
+            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon="pi pi-stop"
+            title={t("workOrders.stop")}
+            aria-label={t("workOrders.stop")}
+            onClick={() => openFeedbackTab(row)}
           />
         </div>
       );
     }
     return null;
-  }, [editingId, editingOrder, startOrder, t]);
+  }, [editingId, editingOrder, openFeedbackTab, pauseOrder, startOrder, t]);
 
-  const dialogFooter = (
-    <div className="flex justify-end gap-2">
-      <Button
-        type="button"
-        label={t("workOrders.cancel")}
-        severity="secondary"
-        outlined
-        disabled={saving}
-        onClick={() => setDialogVisible(false)}
-      />
-      <Button
-        type="button"
-        label={t("workOrders.save")}
-        icon="pi pi-check"
-        loading={saving}
-        onClick={() => void save()}
-      />
-    </div>
+  const isFeedbackTab = activeTabIndex === orderDialogTabs.Feedback;
+
+  const dialogFooter = useMemo(
+    () => (
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          label={t("workOrders.cancel")}
+          severity="secondary"
+          outlined
+          disabled={saving || (isFeedbackTab && feedbackSaving)}
+          onClick={() => setDialogVisible(false)}
+        />
+        <Button
+          type="button"
+          label={isFeedbackTab ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
+          icon="pi pi-check"
+          loading={isFeedbackTab ? feedbackSaving : saving}
+          disabled={isFeedbackTab ? feedbackSaving || !editingId : saving}
+          onClick={() => void (isFeedbackTab ? saveFeedback() : save())}
+        />
+      </div>
+    ),
+    [editingId, feedbackSaving, isFeedbackTab, save, saveFeedback, saving, t],
   );
 
   return (
@@ -1631,12 +1859,17 @@ export function WorkOrdersPage() {
             className="app-sticky-tabs"
             activeIndex={activeTabIndex}
             onTabChange={(e) => {
+              const idx = e.index;
+              if (idx === orderDialogTabs.Feedback && !workOrderStatusAllowsFeedback(editingOrder?.status)) {
+                return;
+              }
               if (
-                e.index === orderDialogTabs.General ||
-                e.index === orderDialogTabs.Planning ||
-                e.index === orderDialogTabs.Documents
+                idx === orderDialogTabs.General ||
+                idx === orderDialogTabs.Planning ||
+                idx === orderDialogTabs.Documents ||
+                idx === orderDialogTabs.Feedback
               ) {
-                setActiveTabIndex(e.index);
+                setActiveTabIndex(idx);
               }
             }}
           >
@@ -1914,7 +2147,8 @@ export function WorkOrdersPage() {
                       disabled={
                         saving ||
                         editingOrder?.status === "ended" ||
-                        editingOrder?.status === "done"
+                        editingOrder?.status === "done" ||
+                        editingOrder?.status === "cancelled"
                       }
                       appendTo={overlayAppendTo}
                     />
@@ -1929,6 +2163,7 @@ export function WorkOrdersPage() {
                         assignmentEmployeeIds.length === 0 ||
                         editingOrder?.status === "ended" ||
                         editingOrder?.status === "done" ||
+                        editingOrder?.status === "cancelled" ||
                         !editingId
                       }
                     />
@@ -1957,7 +2192,11 @@ export function WorkOrdersPage() {
                             className="!h-5 !min-h-5 !w-5 !min-w-5 !p-0"
                             icon="pi pi-times"
                             onClick={() => void removeAssignment(item.employeeId)}
-                            disabled={editingOrder?.status === "ended" || editingOrder?.status === "done"}
+                            disabled={
+                              editingOrder?.status === "ended" ||
+                              editingOrder?.status === "done" ||
+                              editingOrder?.status === "cancelled"
+                            }
                           />
                         </span>
                       ))}
@@ -2115,6 +2354,54 @@ export function WorkOrdersPage() {
                     {t("workOrders.documentsCreateHint")}
                   </div>
                 )}
+              </div>
+            </TabPanel>
+            <TabPanel header={t("workOrders.tabFeedback")} disabled={!editingId || !workOrderStatusAllowsFeedback(editingOrder?.status)}>
+              <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6">
+                <div className="space-y-2 md:col-span-2">
+                  <label htmlFor="order-feedback-hours" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                    {t("workOrders.feedbackHours")}
+                    <span className="app-required-marker" aria-hidden>
+                      *
+                    </span>
+                  </label>
+                  <InputText
+                    id="order-feedback-hours"
+                    value={feedbackHours}
+                    onChange={(e) => setFeedbackHours(e.target.value)}
+                    placeholder={t("workOrders.feedbackHoursPlaceholder")}
+                    className="w-full"
+                    disabled={feedbackSaving}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-6">
+                  <label htmlFor="order-feedback-remark" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                    {t("workOrders.feedbackRemark")}
+                  </label>
+                  <textarea
+                    id="order-feedback-remark"
+                    value={feedbackRemark}
+                    maxLength={2000}
+                    onChange={(e) => setFeedbackRemark(e.target.value)}
+                    className="w-full p-inputtext p-component min-h-28 resize-y"
+                    disabled={feedbackSaving}
+                  />
+                  <div className="text-xs text-on-surface-variant text-right">
+                    {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 md:col-span-6">
+                  <Checkbox
+                    inputId="order-feedback-complete"
+                    checked={feedbackCompleteOrder}
+                    onChange={(e) => setFeedbackCompleteOrder(Boolean(e.checked))}
+                    disabled={feedbackSaving}
+                  />
+                  <label htmlFor="order-feedback-complete" className="cursor-pointer text-sm">
+                    {t("workOrders.feedbackCompleteOrder")}
+                  </label>
+                </div>
               </div>
             </TabPanel>
           </TabView>

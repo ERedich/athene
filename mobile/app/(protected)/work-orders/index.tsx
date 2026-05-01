@@ -4,7 +4,6 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -14,7 +13,8 @@ import {
 } from "react-native";
 
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
-import { useDeleteWorkOrderMutation, useWorkOrdersQuery } from "../../../src/hooks/queries";
+import { useWorkOrdersQuery } from "../../../src/hooks/queries";
+import { workOrderStatusBackground, workOrderStatusForeground } from "../../../src/lib/workOrderStatusColors";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
 
 export default function WorkOrdersListScreen() {
@@ -24,7 +24,6 @@ export default function WorkOrdersListScreen() {
   const { colors } = useAppTheme();
   const [q, setQ] = useState("");
   const { data = [], isLoading, isError, refetch } = useWorkOrdersQuery();
-  const deleteMutation = useDeleteWorkOrderMutation();
 
   const styles = useMemo(
     () =>
@@ -58,7 +57,10 @@ export default function WorkOrdersListScreen() {
           backgroundColor: colors.surface,
         },
         rowMain: { flex: 1 },
+        keyRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 4 },
         key: { fontSize: 13, fontWeight: "700", color: colors.primary },
+        statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+        statusPillText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
         name: { fontSize: 16, fontWeight: "600", color: colors.onSurface, marginTop: 2 },
         type: { fontSize: 12, color: colors.onSurfaceVariant, marginTop: 2 },
         empty: { textAlign: "center", color: colors.onSurfaceVariant, marginTop: 32 },
@@ -119,6 +121,8 @@ export default function WorkOrdersListScreen() {
         row.siteKey,
         row.siteName,
         row.orderType,
+        row.status,
+        t(`workOrders.statusValues.${row.status}`),
         row.createdBy,
         row.updatedBy,
       ]
@@ -126,7 +130,7 @@ export default function WorkOrdersListScreen() {
         .toLowerCase()
         .includes(s),
     );
-  }, [data, q]);
+  }, [data, q, t]);
 
   if (isLoading) {
     return (
@@ -170,23 +174,16 @@ export default function WorkOrdersListScreen() {
           <Pressable
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.9 }]}
             onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-            onLongPress={() => {
-              Alert.alert(t("workOrders.confirmDeleteTitle"), t("workOrders.confirmDelete", { name: item.name }), [
-                { text: t("workOrders.no"), style: "cancel" },
-                {
-                  text: t("workOrders.yes"),
-                  style: "destructive",
-                  onPress: () => {
-                    void deleteMutation.mutateAsync(item.id).catch(() => {
-                      Alert.alert("", t("workOrders.deleteError"));
-                    });
-                  },
-                },
-              ]);
-            }}
           >
             <View style={styles.rowMain}>
-              <Text style={styles.key}>{item.orderNumber}</Text>
+              <View style={styles.keyRow}>
+                <Text style={styles.key}>{item.orderNumber}</Text>
+                <View style={[styles.statusPill, { backgroundColor: workOrderStatusBackground(item.status) }]}>
+                  <Text style={[styles.statusPillText, { color: workOrderStatusForeground(item.status) }]}>
+                    {t(`workOrders.statusValues.${item.status}`)}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.type}>
                 {item.assetKey} — {item.assetName}

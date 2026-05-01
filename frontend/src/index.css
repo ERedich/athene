@@ -679,6 +679,20 @@ html.theme-crossfade-fallback #root {
 .app-work-orders-data-grid.p-datatable
   .p-datatable-tbody
   > tr
+  > td.app-wo-status-cell.app-wo-status-continued {
+  background: color-mix(in srgb, rgb(45 212 191) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
+  > td.app-wo-status-cell.app-wo-status-cancelled {
+  background: color-mix(in srgb, rgb(248 113 113) 30%, transparent) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-work-orders-data-grid.p-datatable
+  .p-datatable-tbody
+  > tr
   > td.app-wo-status-cell.app-wo-status-ended,
 .app-work-orders-data-grid.p-datatable
   .p-datatable-tbody
@@ -706,6 +720,12 @@ html.theme-crossfade-fallback #root {
 .app-wo-status-modal.app-wo-status-paused {
   color: rgb(234 88 12);
 }
+.app-wo-status-modal.app-wo-status-continued {
+  color: rgb(13 148 136);
+}
+.app-wo-status-modal.app-wo-status-cancelled {
+  color: rgb(220 38 38);
+}
 .app-wo-status-modal.app-wo-status-ended,
 .app-wo-status-modal.app-wo-status-done {
   color: rgb(22 163 74);
@@ -732,6 +752,14 @@ html.theme-crossfade-fallback #root {
 .app-wo-status-input.p-inputtext.app-wo-status-paused:disabled {
   color: rgb(234 88 12) !important;
   -webkit-text-fill-color: rgb(234 88 12);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-continued:disabled {
+  color: rgb(13 148 136) !important;
+  -webkit-text-fill-color: rgb(13 148 136);
+}
+.app-wo-status-input.p-inputtext.app-wo-status-cancelled:disabled {
+  color: rgb(220 38 38) !important;
+  -webkit-text-fill-color: rgb(220 38 38);
 }
 .app-wo-status-input.p-inputtext.app-wo-status-ended:disabled,
 .app-wo-status-input.p-inputtext.app-wo-status-done:disabled {

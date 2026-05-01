@@ -186,6 +186,16 @@
       "maintenance": "Wartung",
       "repair": "Instandsetzung",
       "breakdown": "Breakdown"
+    },
+    "statusValues": {
+      "open": "Offen",
+      "assigned": "Zugewiesen",
+      "started": "Gestartet",
+      "paused": "Pausiert",
+      "continued": "Aufgenommen",
+      "ended": "Beendet",
+      "done": "Erledigt",
+      "cancelled": "Storniert"
     }
   }
 }

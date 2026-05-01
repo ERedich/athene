@@ -186,6 +186,16 @@
       "maintenance": "Maintenance",
       "repair": "Repair",
       "breakdown": "Breakdown"
+    },
+    "statusValues": {
+      "open": "Open",
+      "assigned": "Assigned",
+      "started": "Started",
+      "paused": "Paused",
+      "continued": "Continued",
+      "ended": "Ended",
+      "done": "Done",
+      "cancelled": "Cancelled"
     }
   }
 }

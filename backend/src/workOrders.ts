@@ -11,7 +11,15 @@ import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
-type WorkOrderStatus = "open" | "assigned" | "started" | "paused" | "ended" | "done";
+type WorkOrderStatus =
+  | "open"
+  | "assigned"
+  | "started"
+  | "paused"
+  | "continued"
+  | "ended"
+  | "done"
+  | "cancelled";
 type WorkOrderDocumentCategory =
   | "general"
   | "protocols"
@@ -120,8 +128,10 @@ const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "assigned",
   "started",
   "paused",
+  "continued",
   "ended",
   "done",
+  "cancelled",
 ];
 const allowedDocumentCategories: WorkOrderDocumentCategory[] = [
   "general",
@@ -146,6 +156,35 @@ function isWorkOrderDocumentCategory(value: unknown): value is WorkOrderDocument
 
 function isWorkOrderStatus(value: unknown): value is WorkOrderStatus {
   return typeof value === "string" && (allowedWorkOrderStatuses as string[]).includes(value);
+}
+
+function workOrderAssignmentsLocked(status: WorkOrderStatus): boolean {
+  return status === "ended" || status === "done" || status === "cancelled";
+}
+
+type ParsedFeedbackBody = {
+  hours: number;
+  remark: string | null;
+  completeOrder: boolean;
+};
+
+function parseFeedbackBody(body: unknown): ParsedFeedbackBody | null {
+  if (body === null || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const hoursRaw = o.hours;
+  if (typeof hoursRaw !== "number" || !Number.isFinite(hoursRaw) || hoursRaw <= 0) return null;
+  if (hoursRaw > 99999.9999) return null;
+
+  let remark: string | null = null;
+  if (o.remark !== undefined && o.remark !== null) {
+    if (typeof o.remark !== "string") return null;
+    const t = o.remark.trim();
+    if (t.length > 2000) return null;
+    remark = t.length ? t : null;
+  }
+
+  const completeOrder = o.completeOrder === true;
+  return { hours: hoursRaw, remark, completeOrder };
 }
 
 function readTrimmedOptionalString(value: unknown): string | null {
@@ -568,7 +607,7 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       const wo = workOrder.rows[0];
       if (!wo) return null;
       if (!isWorkOrderStatus(wo.status)) throw new Error("invalid_status");
-      if (wo.status === "ended" || wo.status === "done") throw new Error("assignment_locked_by_status");
+      if (workOrderAssignmentsLocked(wo.status)) throw new Error("assignment_locked_by_status");
       await assertResponsibleEmployeeContext(
         client,
         meta.userId,
@@ -666,7 +705,7 @@ router.delete("/:id/assignments/:employeeId", async (req: Request, res: Response
       const wo = workOrder.rows[0];
       if (!wo) return 0;
       if (!isWorkOrderStatus(wo.status)) throw new Error("invalid_status");
-      if (wo.status === "ended" || wo.status === "done") throw new Error("assignment_locked_by_status");
+      if (workOrderAssignmentsLocked(wo.status)) throw new Error("assignment_locked_by_status");
       const result = await client.query(
         `
         DELETE FROM "workOrderEmployeeAssignment"
@@ -723,7 +762,8 @@ router.post("/:id/start", async (req: Request, res: Response) => {
       if (!current) return null;
       if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
       if (!["open", "assigned", "paused"].includes(current.status)) throw new Error("cannot_start_from_status");
-      await client.query(`UPDATE "workOrder" SET "status" = 'started' WHERE "id" = $1::uuid`, [id]);
+      const nextStatus: WorkOrderStatus = current.status === "paused" ? "continued" : "started";
+      await client.query(`UPDATE "workOrder" SET "status" = $2::text WHERE "id" = $1::uuid`, [id, nextStatus]);
       const { rows } = await client.query<WorkOrderRow>(
         `
         ${selectWorkOrdersSql}
@@ -747,6 +787,196 @@ router.post("/:id/start", async (req: Request, res: Response) => {
     }
     if (message === "cannot_start_from_status") {
       res.status(409).json({ error: "cannot_start_from_status" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/pause", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
+        `
+        SELECT "id", "siteId"::text AS "siteId", "status"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      const current = wo.rows[0];
+      if (!current) return null;
+      if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
+      if (!["started", "continued"].includes(current.status)) throw new Error("cannot_pause_from_status");
+      await client.query(`UPDATE "workOrder" SET "status" = 'paused' WHERE "id" = $1::uuid`, [id]);
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        ${selectWorkOrdersSql}
+        WHERE w."id" = $1::uuid
+        LIMIT 1
+        `,
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (message === "cannot_pause_from_status") {
+      res.status(409).json({ error: "cannot_pause_from_status" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/cancel", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
+        `
+        SELECT "id", "siteId"::text AS "siteId", "status"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      const current = wo.rows[0];
+      if (!current) return null;
+      if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
+      if (current.status === "ended" || current.status === "done" || current.status === "cancelled") {
+        throw new Error("cannot_cancel_from_status");
+      }
+      await client.query(`UPDATE "workOrder" SET "status" = 'cancelled' WHERE "id" = $1::uuid`, [id]);
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        ${selectWorkOrdersSql}
+        WHERE w."id" = $1::uuid
+        LIMIT 1
+        `,
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (message === "cannot_cancel_from_status") {
+      res.status(409).json({ error: "cannot_cancel_from_status" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/feedback", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const parsed = parseFeedbackBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
+        `
+        SELECT "id", "siteId"::text AS "siteId", "status"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      const current = wo.rows[0];
+      if (!current) return null;
+      if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
+      if (!["started", "continued", "ended"].includes(current.status)) {
+        throw new Error("cannot_feedback_from_status");
+      }
+      const qtyRounded = Math.round(parsed.hours * 10_000) / 10_000;
+      await client.query(
+        `
+        INSERT INTO "transaction" ("siteId", "type", "quantity", "workOrderId", "remark")
+        VALUES ($1::uuid, 'IN', $2::numeric, $3::uuid, $4)
+        `,
+        [current.siteId, qtyRounded, id, parsed.remark],
+      );
+      if (parsed.completeOrder && current.status !== "ended") {
+        await client.query(`UPDATE "workOrder" SET "status" = 'ended' WHERE "id" = $1::uuid`, [id]);
+      }
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        ${selectWorkOrdersSql}
+        WHERE w."id" = $1::uuid
+        LIMIT 1
+        `,
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (message === "cannot_feedback_from_status") {
+      res.status(409).json({ error: "cannot_feedback_from_status" });
       return;
     }
     sendPgError(res, err);

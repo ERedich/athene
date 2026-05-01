@@ -12,5 +12,10 @@ export function ShellHeaderActions({ extra }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingEnd: 12,
+  },
 });
