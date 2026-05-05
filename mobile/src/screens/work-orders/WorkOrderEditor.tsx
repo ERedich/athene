@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import { MaterialIcons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -11,10 +12,12 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SceneRendererProps, TabBar, TabView } from "react-native-tab-view";
 
 import { useAuth } from "../../auth/AuthContext";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../lib/appParameterKeys";
@@ -25,9 +28,13 @@ import { CostCenterPicker } from "../../components/CostCenterPicker";
 import { DateTimeField } from "../../components/DateTimeField";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import {
+  WorkOrderActionError,
   deleteWorkOrderDocument,
   fetchAssetDocumentBlob,
   fetchWorkOrderDocumentBlob,
+  postWorkOrderFeedback,
+  postWorkOrderPause,
+  postWorkOrderStart,
   patchAssetDocument,
   patchWorkOrderDocument,
   postWorkOrder,
@@ -38,18 +45,21 @@ import {
   useClassificationsQuery,
   useCostCentersQuery,
   useWorkOrderDocumentsQuery,
+  useWorkOrderAssignmentsQuery,
   useWorkgroupsQuery,
   useWorkOrdersQuery,
   type WorkOrderSaveBody,
 } from "../../hooks/queries";
-import type { WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
+import type { WorkOrderAssignmentRow, WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
+import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../../lib/workOrderLifecycle";
 import { useAppTheme } from "../../theme/AppThemeContext";
 
 type Props = {
   orderId?: string;
 };
 
-type TabId = "general" | "documents";
+type TabId = "general" | "documents" | "assignments" | "feedback";
+type TabRoute = { key: TabId; title: string };
 type PendingDoc = {
   localId: string;
   uri: string;
@@ -131,7 +141,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const { data: workgroups = [], isLoading: wgLoading } = useWorkgroupsQuery();
 
   const row = useMemo(() => (orderId ? orders.find((o) => o.id === orderId) : undefined), [orderId, orders]);
-  const [activeTab, setActiveTab] = useState<TabId>("general");
+  const [tabIndex, setTabIndex] = useState(0);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [hydrated, setHydrated] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -148,15 +158,121 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [docEditCategory, setDocEditCategory] = useState<WorkOrderDocumentCategory>("general");
   const [docEditSaving, setDocEditSaving] = useState(false);
   const [effectiveOrderId, setEffectiveOrderId] = useState<string | null>(orderId ?? null);
+  const [feedbackHours, setFeedbackHours] = useState("");
+  const [feedbackRemark, setFeedbackRemark] = useState("");
+  const [feedbackCompleteOrder, setFeedbackCompleteOrder] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [showRequiredHints, setShowRequiredHints] = useState(false);
 
   const { data: documents = [], isLoading: docsLoading, refetch: refetchDocs } = useWorkOrderDocumentsQuery(effectiveOrderId);
+  const { data: assignments = [], isLoading: assignmentsLoading } = useWorkOrderAssignmentsQuery(effectiveOrderId);
+
+  const currentOrder = useMemo(
+    () => (effectiveOrderId ? orders.find((o) => o.id === effectiveOrderId) ?? null : null),
+    [effectiveOrderId, orders],
+  );
+  const tabRoutes = useMemo<TabRoute[]>(
+    () => [
+      { key: "general", title: t("workOrders.tabGeneral") },
+      { key: "documents", title: t("workOrders.tabDocuments") },
+      { key: "assignments", title: t("workOrders.tabAssignments") },
+      { key: "feedback", title: t("workOrders.tabFeedback") },
+    ],
+    [t],
+  );
+
+  const startOrder = useCallback(async () => {
+    if (!currentOrder || !canStartWorkOrder(currentOrder.status)) return;
+    try {
+      await postWorkOrderStart(currentOrder.id);
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    } catch (err) {
+      const code = err instanceof WorkOrderActionError ? err.code : "unknown";
+      const msg = code === "cannot_start_from_status" ? t("workOrders.cannotStartFromStatus") : t("workOrders.startError");
+      Alert.alert("", msg);
+    }
+  }, [currentOrder, qc, t]);
+
+  const pauseOrder = useCallback(async () => {
+    if (!currentOrder || !canPauseWorkOrder(currentOrder.status)) return;
+    try {
+      await postWorkOrderPause(currentOrder.id);
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    } catch (err) {
+      const code = err instanceof WorkOrderActionError ? err.code : "unknown";
+      const msg = code === "cannot_pause_from_status" ? t("workOrders.cannotPauseFromStatus") : t("workOrders.pauseError");
+      Alert.alert("", msg);
+    }
+  }, [currentOrder, qc, t]);
+
+  const submitFeedback = useCallback(
+    async (body: { hours: number; remark: string | null; completeOrder: boolean }) => {
+      if (!currentOrder) return false;
+      setFeedbackSaving(true);
+      try {
+        await postWorkOrderFeedback(currentOrder.id, body);
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrderDocuments(currentOrder.id) });
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrderAssignments(currentOrder.id) });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrders, type: "all" });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrderDocuments(currentOrder.id), type: "all" });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrderAssignments(currentOrder.id), type: "all" });
+        if (body.completeOrder) {
+          router.replace("/work-orders");
+        }
+        Alert.alert("", t("workOrders.feedbackSaved"));
+        return true;
+      } catch (err) {
+        const code = err instanceof WorkOrderActionError ? err.code : "unknown";
+        const msg =
+          code === "cannot_feedback_from_status"
+            ? t("workOrders.cannotFeedbackFromStatus")
+            : code === "invalid_body"
+              ? t("workOrders.feedbackInvalidBody")
+              : t("workOrders.feedbackSaveError");
+        Alert.alert("", msg);
+        return false;
+      } finally {
+        setFeedbackSaving(false);
+      }
+    },
+    [currentOrder, qc, router, t],
+  );
 
   useLayoutEffect(() => {
-    navigation.setOptions({ headerRight: undefined });
-    return () => {
+    if (!currentOrder) {
       navigation.setOptions({ headerRight: undefined });
-    };
-  }, [navigation]);
+      return () => navigation.setOptions({ headerRight: undefined });
+    }
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
+          <Pressable
+            onPress={() => void startOrder()}
+            disabled={!canStartWorkOrder(currentOrder.status)}
+            style={({ pressed }) => [{ opacity: !canStartWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+          >
+            <MaterialIcons name="play-arrow" size={22} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => void pauseOrder()}
+            disabled={!canPauseWorkOrder(currentOrder.status)}
+            style={({ pressed }) => [{ opacity: !canPauseWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+          >
+            <MaterialIcons name="pause" size={20} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"))}
+            disabled={!canFeedbackWorkOrder(currentOrder.status)}
+            style={({ pressed }) => [{ opacity: !canFeedbackWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+          >
+            <MaterialIcons name="assignment-turned-in" size={20} color={colors.primary} />
+          </Pressable>
+        </View>
+      ),
+    });
+    return () => navigation.setOptions({ headerRight: undefined });
+  }, [colors.primary, currentOrder, navigation, pauseOrder, startOrder, tabRoutes]);
 
   useEffect(() => {
     if (isNew || !row || hydrated) return;
@@ -325,24 +441,33 @@ export function WorkOrderEditor({ orderId }: Props) {
     );
   }, [docSearchTerm, pendingFiles, t]);
 
+  const requiredMissing = useMemo(
+    () => ({
+      name: !form.name.trim(),
+      assetId: !form.assetId,
+      costCenterId: !form.costCenterId,
+      workgroupId: !form.workgroupId.trim(),
+    }),
+    [form.assetId, form.costCenterId, form.name, form.workgroupId],
+  );
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
         center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background },
         page: { padding: 16, paddingBottom: 42, backgroundColor: colors.background },
-        tabs: { flexDirection: "row", gap: 8, marginBottom: 14 },
-        tabBtn: {
-          flex: 1,
+        tabScene: { paddingTop: 14 },
+        assignmentsEmpty: { color: colors.onSurfaceVariant, paddingVertical: 8 },
+        assignmentRow: {
           borderWidth: 1,
           borderColor: colors.border,
           borderRadius: 8,
-          paddingVertical: 10,
-          alignItems: "center",
+          padding: 10,
+          marginBottom: 8,
           backgroundColor: colors.surface,
         },
-        tabBtnActive: { borderColor: colors.primary, backgroundColor: isDark ? "rgba(255,140,66,0.14)" : "rgba(173,44,0,0.08)" },
-        tabText: { color: colors.onSurfaceVariant, fontWeight: "600" },
-        tabTextActive: { color: colors.onSurface, fontWeight: "700" },
+        assignmentTitle: { color: colors.onSurface, fontWeight: "600" },
+        assignmentMeta: { color: colors.onSurfaceVariant, fontSize: 12, marginTop: 2 },
         label: { fontSize: 12, fontWeight: "600", marginBottom: 6, color: colors.outline },
         input: {
           borderWidth: 1,
@@ -353,6 +478,17 @@ export function WorkOrderEditor({ orderId }: Props) {
           marginBottom: 14,
           backgroundColor: colors.inputBackground,
           color: colors.onSurface,
+        },
+        requiredInput: {
+          borderColor: "#ef4444",
+        },
+        requiredWrap: {
+          borderWidth: 1,
+          borderColor: "#ef4444",
+          borderRadius: 10,
+          paddingHorizontal: 4,
+          paddingTop: 4,
+          marginBottom: 10,
         },
         description: { minHeight: 96, textAlignVertical: "top" },
         counter: { fontSize: 12, color: colors.outline, marginTop: -8, marginBottom: 14 },
@@ -456,6 +592,7 @@ export function WorkOrderEditor({ orderId }: Props) {
     const created = await postWorkOrder(payload);
     setEffectiveOrderId(created.id);
     await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    await qc.refetchQueries({ queryKey: queryKeys.workOrders, type: "all" });
     return created.id;
   }, [effectiveOrderId, form, qc]);
 
@@ -527,10 +664,13 @@ export function WorkOrderEditor({ orderId }: Props) {
   const onSave = async () => {
     const name = form.name.trim();
     const description = form.description.trim();
-      if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
-        Alert.alert("", t("workOrders.validationRequired"));
-        return;
-      }
+    if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
+      setShowRequiredHints(true);
+      setTabIndex(tabRoutes.findIndex((r) => r.key === "general"));
+      Alert.alert("", t("workOrders.validationRequired"));
+      return;
+    }
+    setShowRequiredHints(false);
     if (name.length > 200 || description.length > 2000) {
       Alert.alert("", t("workOrders.validationLength"));
       return;
@@ -572,6 +712,10 @@ export function WorkOrderEditor({ orderId }: Props) {
       }
       await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
       await qc.invalidateQueries({ queryKey: queryKeys.workOrderDocuments(saved.id) });
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrderAssignments(saved.id) });
+      await qc.refetchQueries({ queryKey: queryKeys.workOrders, type: "all" });
+      await qc.refetchQueries({ queryKey: queryKeys.workOrderDocuments(saved.id), type: "all" });
+      await qc.refetchQueries({ queryKey: queryKeys.workOrderAssignments(saved.id), type: "all" });
       router.back();
     } catch {
       Alert.alert("", t("workOrders.saveError"));
@@ -629,6 +773,41 @@ export function WorkOrderEditor({ orderId }: Props) {
     });
   };
 
+  const saveFeedbackFromTab = useCallback(async () => {
+    const hoursRaw = feedbackHours.trim().replace(",", ".");
+    const hours = Number(hoursRaw);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      Alert.alert("", t("workOrders.feedbackHoursInvalid"));
+      return;
+    }
+    if (feedbackRemark.length > 2000) {
+      Alert.alert("", t("workOrders.feedbackRemarkTooLong"));
+      return;
+    }
+    const ok = await submitFeedback({
+      hours,
+      remark: feedbackRemark.trim() ? feedbackRemark.trim() : null,
+      completeOrder: feedbackCompleteOrder,
+    });
+    if (!ok) return;
+    setFeedbackHours("");
+    setFeedbackRemark("");
+    setFeedbackCompleteOrder(false);
+  }, [feedbackCompleteOrder, feedbackHours, feedbackRemark, submitFeedback, t]);
+
+  const renderTabBar = useCallback(
+    (props: SceneRendererProps & { navigationState: { index: number; routes: TabRoute[] } }) => (
+      <TabBar
+        {...props}
+        scrollEnabled
+        indicatorStyle={{ backgroundColor: colors.primary, height: 2 }}
+        style={{ backgroundColor: colors.surface, borderRadius: 8 }}
+        tabStyle={{ width: "auto", minHeight: 42 }}
+      />
+    ),
+    [colors.primary, colors.surface],
+  );
+
   if (ordersLoading || assetsLoading || ccLoading || clfLoading || wgLoading) {
     return (
       <View style={styles.center}>
@@ -646,17 +825,16 @@ export function WorkOrderEditor({ orderId }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <View style={styles.tabs}>
-        <Pressable style={[styles.tabBtn, activeTab === "general" && styles.tabBtnActive]} onPress={() => setActiveTab("general")}>
-          <Text style={[styles.tabText, activeTab === "general" && styles.tabTextActive]}>{t("workOrders.tabGeneral")}</Text>
-        </Pressable>
-        <Pressable style={[styles.tabBtn, activeTab === "documents" && styles.tabBtnActive]} onPress={() => setActiveTab("documents")}>
-          <Text style={[styles.tabText, activeTab === "documents" && styles.tabTextActive]}>{t("workOrders.tabDocuments")}</Text>
-        </Pressable>
-      </View>
-
-      {activeTab === "general" ? (
-        <View>
+      <TabView
+        navigationState={{ index: tabIndex, routes: tabRoutes }}
+        onIndexChange={setTabIndex}
+        renderTabBar={renderTabBar}
+        lazy
+        renderScene={({ route }) => {
+          if (route.key === "general") {
+            return (
+              <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
+                <View>
           <Text style={styles.label}>{t("workOrders.orderNumber")}</Text>
           <TextInput
             value={form.orderNumber ? String(form.orderNumber) : t("workOrders.autoNumberHint")}
@@ -677,7 +855,11 @@ export function WorkOrderEditor({ orderId }: Props) {
           />
 
           <Text style={styles.label}>{t("workOrders.name")}</Text>
-          <TextInput value={form.name} onChangeText={(txt) => setForm((cur) => ({ ...cur, name: txt }))} style={styles.input} />
+          <TextInput
+            value={form.name}
+            onChangeText={(txt) => setForm((cur) => ({ ...cur, name: txt }))}
+            style={[styles.input, showRequiredHints && requiredMissing.name && styles.requiredInput]}
+          />
 
           <Text style={styles.label}>{t("workOrders.description")}</Text>
           <TextInput
@@ -688,23 +870,27 @@ export function WorkOrderEditor({ orderId }: Props) {
           />
           <Text style={styles.counter}>{t("workOrders.descriptionCounter", { count: form.description.length, max: 2000 })}</Text>
 
-          <AssetPicker
-            assets={accessibleAssets}
-            value={form.assetId}
-            onChange={(assetId) => setForm((cur) => ({ ...cur, assetId }))}
-            label={t("workOrders.asset")}
-            placeholder={t("workOrders.assetPlaceholder")}
-          />
+          <View style={showRequiredHints && requiredMissing.assetId ? styles.requiredWrap : undefined}>
+            <AssetPicker
+              assets={accessibleAssets}
+              value={form.assetId}
+              onChange={(assetId) => setForm((cur) => ({ ...cur, assetId }))}
+              label={t("workOrders.asset")}
+              placeholder={t("workOrders.assetPlaceholder")}
+            />
+          </View>
 
-          <CostCenterPicker
-            costCenters={selectableCostCenters}
-            siteId={selectedAsset?.siteId ?? ""}
-            value={form.costCenterId || null}
-            onChange={(costCenterId) => setForm((cur) => ({ ...cur, costCenterId: costCenterId ?? "" }))}
-            label={t("workOrders.costCenter")}
-            noneLabel={t("workOrders.costCenterPlaceholder")}
-            markInactiveLabel={() => `(${t("costCenters.active").toLowerCase()} ✕)`}
-          />
+          <View style={showRequiredHints && requiredMissing.costCenterId ? styles.requiredWrap : undefined}>
+            <CostCenterPicker
+              costCenters={selectableCostCenters}
+              siteId={selectedAsset?.siteId ?? ""}
+              value={form.costCenterId || null}
+              onChange={(costCenterId) => setForm((cur) => ({ ...cur, costCenterId: costCenterId ?? "" }))}
+              label={t("workOrders.costCenter")}
+              noneLabel={t("workOrders.costCenterPlaceholder")}
+              markInactiveLabel={() => `(${t("costCenters.active").toLowerCase()} ✕)`}
+            />
+          </View>
 
           <ClassificationPicker
             classifications={selectableClassifications}
@@ -722,7 +908,11 @@ export function WorkOrderEditor({ orderId }: Props) {
             {t("workOrders.workgroup")} <Text style={{ color: colors.primary }}>*</Text>
           </Text>
           <Pressable
-            style={[styles.input, !form.assetId && { opacity: 0.5 }]}
+            style={[
+              styles.input,
+              !form.assetId && { opacity: 0.5 },
+              showRequiredHints && requiredMissing.workgroupId && styles.requiredInput,
+            ]}
             disabled={!form.assetId}
             onPress={() => setWorkgroupModal(true)}
           >
@@ -771,8 +961,13 @@ export function WorkOrderEditor({ orderId }: Props) {
             keyboardType="decimal-pad"
           />
         </View>
-      ) : (
-        <View>
+              </ScrollView>
+            );
+          }
+          if (route.key === "documents") {
+            return (
+              <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
+                <View>
           <Pressable style={styles.uploadBtn} onPress={() => void onPickFiles()}>
             <Text style={styles.uploadText}>{t("workOrders.documentsUpload")}</Text>
           </Pressable>
@@ -878,14 +1073,104 @@ export function WorkOrderEditor({ orderId }: Props) {
             ))
           )}
         </View>
-      )}
+              </ScrollView>
+            );
+          }
+          if (route.key === "assignments") {
+            if (!effectiveOrderId) {
+              return (
+                <View style={styles.tabScene}>
+                  <Text style={styles.assignmentsEmpty}>{t("workOrders.assignmentsAfterSave")}</Text>
+                </View>
+              );
+            }
+            if (assignmentsLoading) {
+              return (
+                <View style={styles.tabScene}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              );
+            }
+            return (
+              <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
+                {assignments.length === 0 ? (
+                  <Text style={styles.assignmentsEmpty}>{t("workOrders.assignmentsEmpty")}</Text>
+                ) : (
+                  assignments.map((a: WorkOrderAssignmentRow) => (
+                    <View key={a.id} style={styles.assignmentRow}>
+                      <Text style={styles.assignmentTitle}>
+                        {a.employeeKey} — {a.employeeName}
+                      </Text>
+                      <Text style={styles.assignmentMeta}>
+                        {t("workOrders.documentsUploadedBy")}: {a.createdBy}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            );
+          }
+          return (
+            <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
+              {!effectiveOrderId ? (
+                <Text style={styles.assignmentsEmpty}>{t("workOrders.assignmentsAfterSave")}</Text>
+              ) : !canFeedbackWorkOrder(currentOrder?.status ?? "open") ? (
+                <Text style={styles.assignmentsEmpty}>{t("workOrders.cannotFeedbackFromStatus")}</Text>
+              ) : (
+                <View>
+                  <Text style={styles.label}>{t("workOrders.feedbackHours")}</Text>
+                  <TextInput
+                    value={feedbackHours}
+                    onChangeText={setFeedbackHours}
+                    placeholder={t("workOrders.feedbackHoursPlaceholder")}
+                    style={styles.input}
+                    keyboardType="decimal-pad"
+                    editable={!feedbackSaving}
+                  />
+                  <Text style={styles.label}>{t("workOrders.feedbackRemark")}</Text>
+                  <TextInput
+                    value={feedbackRemark}
+                    onChangeText={setFeedbackRemark}
+                    style={[styles.input, styles.description]}
+                    multiline
+                    editable={!feedbackSaving}
+                  />
+                  <Text style={styles.counter}>
+                    {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <Text style={{ color: colors.onSurface }}>{t("workOrders.feedbackCompleteOrder")}</Text>
+                    <Switch value={feedbackCompleteOrder} onValueChange={setFeedbackCompleteOrder} disabled={feedbackSaving} />
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          );
+        }}
+      />
 
       <View style={styles.actions}>
         <Pressable style={styles.secondary} onPress={() => router.back()}>
           <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
         </Pressable>
-        <Pressable style={styles.primary} onPress={() => void onSave()} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t("workOrders.save")}</Text>}
+        <Pressable
+          style={({ pressed }) => [styles.primary, pressed && !saving && { transform: [{ scale: 0.98 }], opacity: 0.92 }]}
+          onPress={() => {
+            if (tabRoutes[tabIndex]?.key === "feedback") {
+              void saveFeedbackFromTab();
+              return;
+            }
+            void onSave();
+          }}
+          disabled={saving || feedbackSaving}
+        >
+          {saving || feedbackSaving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryText}>
+              {tabRoutes[tabIndex]?.key === "feedback" ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
+            </Text>
+          )}
         </Pressable>
       </View>
 

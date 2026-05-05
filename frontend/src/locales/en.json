@@ -601,6 +601,10 @@
     "showAssetKeyPath": "Show path",
     "assetKeyPathSeparator": "Separator"
   },
+  "monitoring": {
+    "appName": "Work Order Monitor",
+    "navMonitoring": "Monitoring"
+  },
   "transactions": {
     "appName": "Transactions",
     "navTransactions": "Transactions",

@@ -9,6 +9,7 @@ import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
+import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
 type WorkOrderStatus =
@@ -516,6 +517,18 @@ async function getAccessibleWorkOrder(
   return result.rows[0] ?? null;
 }
 
+async function getWorkOrderRowForRealtime(workOrderId: string): Promise<WorkOrderRow | null> {
+  const { rows } = await pool.query<WorkOrderRow>(
+    `
+    ${selectWorkOrdersSql}
+    WHERE w."id" = $1::uuid
+    LIMIT 1
+    `,
+    [workOrderId],
+  );
+  return rows[0] ?? null;
+}
+
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -653,6 +666,12 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       return;
     }
     res.status(201).json(row);
+    const updatedOrder = await getWorkOrderRowForRealtime(id);
+    if (updatedOrder) {
+      void broadcastWorkOrderUpdated(updatedOrder.siteId, updatedOrder).catch((err) => {
+        console.error("[work-order-realtime] broadcast updated failed", err);
+      });
+    }
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -721,6 +740,12 @@ router.delete("/:id/assignments/:employeeId", async (req: Request, res: Response
       return;
     }
     res.status(204).send();
+    const updatedOrder = await getWorkOrderRowForRealtime(id);
+    if (updatedOrder) {
+      void broadcastWorkOrderUpdated(updatedOrder.siteId, updatedOrder).catch((err) => {
+        console.error("[work-order-realtime] broadcast updated failed", err);
+      });
+    }
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -779,6 +804,9 @@ router.post("/:id/start", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -836,6 +864,9 @@ router.post("/:id/pause", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -895,6 +926,9 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -969,6 +1003,9 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -1418,6 +1455,9 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
     res.status(201).json(row);
+    void broadcastWorkOrderCreated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user" || message === "user_not_found") {
@@ -1625,6 +1665,9 @@ router.put("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user" || message === "user_not_found") {

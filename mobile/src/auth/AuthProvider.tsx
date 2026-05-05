@@ -1,6 +1,10 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-
-import { apiFetch } from "../lib/api";
+import {
+  apiFetch,
+  MOBILE_SESSION_STORAGE_KEY,
+  setMobileBearerToken,
+} from "../lib/api";
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AuthUser } from "../types/api";
 
@@ -15,6 +19,15 @@ type MeResponse = {
   appParameterAssetKeyPathSeparator?: string;
 };
 
+async function clearMobileCredentials(): Promise<void> {
+  setMobileBearerToken(null);
+  try {
+    await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
@@ -24,17 +37,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [appParameterAssetKeyPathSeparator, setAppParameterAssetKeyPathSeparator] = useState(".");
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     try {
       const res = await apiFetch("/api/auth/me");
       if (!res.ok) {
+        await clearMobileCredentials();
         setUser(null);
         setAppParameterBooleans({});
         setAppParameterDefaultWorkgroupId(null);
         setAppParameterAssetKeyMode("manual");
         setAppParameterShowAssetKeyPath(false);
         setAppParameterAssetKeyPathSeparator(".");
-        return;
+        return false;
       }
       const data = (await res.json()) as MeResponse;
       setUser(data.user);
@@ -43,13 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAppParameterAssetKeyMode(data.appParameterAssetKeyMode ?? "manual");
       setAppParameterShowAssetKeyPath(data.appParameterShowAssetKeyPath ?? false);
       setAppParameterAssetKeyPathSeparator(data.appParameterAssetKeyPathSeparator ?? ".");
+      return true;
     } catch {
+      await clearMobileCredentials();
       setUser(null);
       setAppParameterBooleans({});
       setAppParameterDefaultWorkgroupId(null);
       setAppParameterAssetKeyMode("manual");
       setAppParameterShowAssetKeyPath(false);
       setAppParameterAssetKeyPathSeparator(".");
+      return false;
     }
   }, []);
 
@@ -57,6 +74,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     setLoading(true);
     void (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(MOBILE_SESSION_STORAGE_KEY);
+        if (stored) setMobileBearerToken(stored);
+      } catch {
+        /* ignore */
+      }
       await refresh();
       if (alive) setLoading(false);
     })();
@@ -65,18 +88,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  const signIn = useCallback(async (loginName: string, password: string, remember: boolean) => {
-    const res = await apiFetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loginName, password, remember }),
-    });
-    if (res.ok) {
-      await refresh();
-      return { ok: true, status: res.status };
-    }
-    return { ok: false, status: res.status };
-  }, [refresh]);
+  const signIn = useCallback(
+    async (loginName: string, password: string, remember: boolean) => {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        // Always request a bearer token: Expo Web runs on a different origin/port than the API,
+        // so HttpOnly session cookies are often not sent on fetch; native uses the same header.
+        "X-Athene-Mobile-Auth": "1",
+      };
+      const res = await apiFetch("/api/auth/login", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ loginName, password, remember }),
+      });
+      if (!res.ok) {
+        return { ok: false, status: res.status };
+      }
+      const data = (await res.json()) as { sessionToken?: string };
+      if (data.sessionToken) {
+        setMobileBearerToken(data.sessionToken);
+        try {
+          if (remember) {
+            await AsyncStorage.setItem(MOBILE_SESSION_STORAGE_KEY, data.sessionToken);
+          } else {
+            await AsyncStorage.removeItem(MOBILE_SESSION_STORAGE_KEY);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      const authed = await refresh();
+      return { ok: authed, status: res.status };
+    },
+    [refresh],
+  );
 
   const signOut = useCallback(async () => {
     try {
@@ -84,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    await clearMobileCredentials();
     setUser(null);
     setAppParameterBooleans({});
     setAppParameterDefaultWorkgroupId(null);

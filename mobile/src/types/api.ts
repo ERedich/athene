@@ -151,6 +151,16 @@ export type WorkgroupRow = {
 
 export type WorkOrderDocumentSource = "workOrder" | "asset";
 
+export type WorkOrderAssignmentRow = {
+  id: string;
+  workOrderId: string;
+  employeeId: string;
+  employeeKey: string;
+  employeeName: string;
+  createdAt: string;
+  createdBy: string;
+};
+
 export type WorkOrderDocumentRow = {
   id: string;
   source: WorkOrderDocumentSource;

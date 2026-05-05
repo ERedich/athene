@@ -985,6 +985,34 @@ html.theme-crossfade-fallback #root {
   }
 }
 
+@keyframes app-monitoring-row-highlight {
+  0%,
+  90% {
+    background-color: color-mix(in srgb, #16a34a 30%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.app-monitoring-new-row > td {
+  animation: app-monitoring-row-highlight 11s ease-out forwards;
+}
+
+@keyframes app-monitoring-row-update-highlight {
+  0%,
+  90% {
+    background-color: color-mix(in srgb, #2563eb 24%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.app-monitoring-updated-row > td {
+  animation: app-monitoring-row-update-highlight 11s ease-out forwards;
+}
+
 .app-big-modal-window.p-dialog {
   width: 80vw;
   height: 90vh;

@@ -11,7 +11,7 @@ export type AuthSession = {
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;
   loading: boolean;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   signIn: (loginName: string, password: string, remember: boolean) => Promise<{ ok: boolean; status: number }>;
   signOut: () => Promise<void>;
 };

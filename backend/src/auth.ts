@@ -9,7 +9,7 @@ import {
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
-import { clearSessionCookie, writeSessionCookie } from "./sessionToken.js";
+import { clearSessionCookie, createSessionToken, writeSessionCookie } from "./sessionToken.js";
 
 export type AuthUserRow = {
   id: string;
@@ -60,6 +60,12 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
     writeSessionCookie(res, user.id, sessionSecret, isProduction);
+    const wantsMobileBearer =
+      String(req.headers["x-athene-mobile-auth"] ?? "").trim() === "1";
+    if (wantsMobileBearer) {
+      res.json({ user, sessionToken: createSessionToken(user.id, sessionSecret) });
+      return;
+    }
     res.json({ user });
   } catch (err) {
     console.error(err);

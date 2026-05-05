@@ -10,6 +10,7 @@ import { CostCentersPage } from "./pages/CostCentersPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MonitoringPage } from "./pages/MonitoringPage";
 import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { SitesPage } from "./pages/SitesPage";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
+          <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />

@@ -71,10 +71,7 @@ export function createSessionToken(userId: string, secret: string): string {
   return `${payloadBase64Url}.${sig}`;
 }
 
-export function readSessionUserId(req: Request, secret: string): string | undefined {
-  const cookies = parseCookies(req.headers.cookie);
-  const token = cookies[SESSION_COOKIE_NAME];
-  if (!token) return undefined;
+function readSessionUserIdFromSignedTokenString(token: string, secret: string): string | undefined {
   const [payloadBase64Url, sig] = token.split(".", 2);
   if (!payloadBase64Url || !sig) return undefined;
   const expectedSig = sign(payloadBase64Url, secret);
@@ -87,6 +84,45 @@ export function readSessionUserId(req: Request, secret: string): string | undefi
   } catch {
     return undefined;
   }
+}
+
+function bearerTokenFromRequest(req: Request): string | undefined {
+  const raw = req.headers.authorization;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || !value.startsWith("Bearer ")) return undefined;
+  const t = value.slice("Bearer ".length).trim();
+  return t || undefined;
+}
+
+export function readSessionUserId(req: Request, secret: string): string | undefined {
+  const cookies = parseCookies(req.headers.cookie);
+  const fromCookie = cookies[SESSION_COOKIE_NAME];
+  if (fromCookie) {
+    const uid = readSessionUserIdFromSignedTokenString(fromCookie, secret);
+    if (uid) return uid;
+  }
+  const bearer = bearerTokenFromRequest(req);
+  if (bearer) {
+    return readSessionUserIdFromSignedTokenString(bearer, secret);
+  }
+  return undefined;
+}
+
+export function readSessionUserIdFromCookieHeader(
+  cookieHeader: string | undefined,
+  secret: string,
+): string | undefined {
+  const cookies = parseCookies(cookieHeader);
+  return readSessionUserIdFromCookies(cookies, secret);
+}
+
+function readSessionUserIdFromCookies(
+  cookies: Record<string, string>,
+  secret: string,
+): string | undefined {
+  const token = cookies[SESSION_COOKIE_NAME];
+  if (!token) return undefined;
+  return readSessionUserIdFromSignedTokenString(token, secret);
 }
 
 export function writeSessionCookie(

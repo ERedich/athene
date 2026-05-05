@@ -598,6 +598,10 @@
     "showAssetKeyPath": "Pfad anzeigen",
     "assetKeyPathSeparator": "Trennzeichen"
   },
+  "monitoring": {
+    "appName": "Auftragsmonitor",
+    "navMonitoring": "Monitoring"
+  },
   "transactions": {
     "appName": "Transaktionen",
     "navTransactions": "Transaktionen",

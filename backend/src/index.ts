@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { createServer } from "node:http";
 
 import { auditLogRouter } from "./auditLog.js";
 import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
@@ -17,11 +18,13 @@ import { sitesRouter } from "./sites.js";
 import { transactionsRouter } from "./transactions.js";
 import { translationsRouter } from "./translations.js";
 import { usersRouter } from "./users.js";
+import { createWorkOrderWebSocketServer, registerWorkOrderRealtime } from "./workOrderRealtime.js";
 import { workgroupsRouter } from "./workgroups.js";
 import { workOrdersRouter } from "./workOrders.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
+const listenHost = process.env.LISTEN_HOST ?? "0.0.0.0";
 
 if (!configuredSessionSecret || configuredSessionSecret.length < 16) {
   console.warn(
@@ -69,6 +72,27 @@ app.use("/api/app-parameters", requireAuth, appParametersRouter);
 app.use("/api/audit-log", requireAuth, auditLogRouter);
 app.use("/api/db-meta", requireAuth, dbMetaRouter);
 
-app.listen(port, () => {
-  console.log(`backend listening on http://localhost:${port}`);
+const server = createServer(app);
+const workOrdersWss = createWorkOrderWebSocketServer("/api/work-orders/events");
+
+server.on("upgrade", (req, socket, head) => {
+  const pathname = req.url ? new URL(req.url, "http://localhost").pathname : "";
+  if (pathname !== "/api/work-orders/events") {
+    socket.destroy();
+    return;
+  }
+  workOrdersWss.handleUpgrade(req, socket, head, (ws) => {
+    const ok = registerWorkOrderRealtime(req, ws, sessionSecret);
+    if (!ok) {
+      ws.close(1008, "unauthorized");
+      return;
+    }
+    ws.send(JSON.stringify({ type: "connected" }));
+  });
+});
+
+server.listen(port, listenHost, () => {
+  console.log(
+    `backend listening on http://localhost:${port} (bound to ${listenHost}, use http://<this-machine-ip>:${port} on LAN)`,
+  );
 });

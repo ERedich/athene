@@ -8,6 +8,7 @@ import type {
   SiteRow,
   WorkOrderDocumentCategory,
   WorkOrderDocumentRow,
+  WorkOrderAssignmentRow,
   WorkOrderRow,
   WorkOrderType,
   WorkgroupRow,
@@ -20,8 +21,49 @@ export const queryKeys = {
   assets: ["assets"] as const,
   workOrders: ["workOrders"] as const,
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
+  workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
   workgroups: ["workgroups"] as const,
 };
+
+export type WorkOrderActionErrorCode =
+  | "cannot_start_from_status"
+  | "cannot_pause_from_status"
+  | "cannot_feedback_from_status"
+  | "invalid_body"
+  | "unknown";
+
+export class WorkOrderActionError extends Error {
+  code: WorkOrderActionErrorCode;
+
+  constructor(code: WorkOrderActionErrorCode) {
+    super(code);
+    this.code = code;
+  }
+}
+
+type WorkOrderFeedbackBody = {
+  hours: number;
+  remark?: string | null;
+  completeOrder?: boolean;
+};
+
+async function readActionErrorCode(r: Response): Promise<WorkOrderActionErrorCode> {
+  try {
+    const json = (await r.json()) as { error?: string };
+    const code = json?.error;
+    if (
+      code === "cannot_start_from_status" ||
+      code === "cannot_pause_from_status" ||
+      code === "cannot_feedback_from_status" ||
+      code === "invalid_body"
+    ) {
+      return code;
+    }
+  } catch {
+    // Ignore JSON parsing failures and fallback to unknown.
+  }
+  return "unknown";
+}
 
 export function useSitesQuery() {
   return useQuery({
@@ -75,6 +117,8 @@ export function useWorkOrdersQuery() {
       if (!r.ok) throw new Error("workOrders");
       return r.json() as Promise<WorkOrderRow[]>;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -101,6 +145,19 @@ export function useWorkOrderDocumentsQuery(orderId: string | null | undefined) {
       const r = await apiFetch(`/api/work-orders/${orderId}/documents`);
       if (!r.ok) throw new Error("workOrderDocuments");
       return r.json() as Promise<WorkOrderDocumentRow[]>;
+    },
+  });
+}
+
+export function useWorkOrderAssignmentsQuery(orderId: string | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.workOrderAssignments(orderId ?? ""),
+    enabled: Boolean(orderId),
+    queryFn: async (): Promise<WorkOrderAssignmentRow[]> => {
+      if (!orderId) return [];
+      const r = await apiFetch(`/api/work-orders/${orderId}/assignments`);
+      if (!r.ok) throw new Error("workOrderAssignments");
+      return r.json() as Promise<WorkOrderAssignmentRow[]>;
     },
   });
 }
@@ -140,6 +197,37 @@ export function useDeleteWorkOrderMutation() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    },
+  });
+}
+
+export function useStartWorkOrderMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: postWorkOrderStart,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    },
+  });
+}
+
+export function usePauseWorkOrderMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: postWorkOrderPause,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+    },
+  });
+}
+
+export function useWorkOrderFeedbackMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, body }: { orderId: string; body: WorkOrderFeedbackBody }) => postWorkOrderFeedback(orderId, body),
+    onSuccess: async (_, vars) => {
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrderDocuments(vars.orderId) });
     },
   });
 }
@@ -253,6 +341,38 @@ export async function putWorkOrder(id: string, body: WorkOrderSaveBody): Promise
   if (!r.ok) {
     const err = await r.text();
     throw new Error(err || "save");
+  }
+  return r.json() as Promise<WorkOrderRow>;
+}
+
+export async function postWorkOrderStart(orderId: string): Promise<WorkOrderRow> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/start`, { method: "POST" });
+  if (!r.ok) {
+    throw new WorkOrderActionError(await readActionErrorCode(r));
+  }
+  return r.json() as Promise<WorkOrderRow>;
+}
+
+export async function postWorkOrderPause(orderId: string): Promise<WorkOrderRow> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/pause`, { method: "POST" });
+  if (!r.ok) {
+    throw new WorkOrderActionError(await readActionErrorCode(r));
+  }
+  return r.json() as Promise<WorkOrderRow>;
+}
+
+export async function postWorkOrderFeedback(orderId: string, body: WorkOrderFeedbackBody): Promise<WorkOrderRow> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      hours: body.hours,
+      remark: body.remark ?? null,
+      completeOrder: Boolean(body.completeOrder),
+    }),
+  });
+  if (!r.ok) {
+    throw new WorkOrderActionError(await readActionErrorCode(r));
   }
   return r.json() as Promise<WorkOrderRow>;
 }

@@ -31,6 +31,7 @@ function headerTitleKey(pathname: string): string {
     dashboard: "dashboard.appName",
     assets: "assets.appName",
     workorders: "workOrders.appName",
+    monitoring: "monitoring.appName",
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",
@@ -73,6 +74,11 @@ const navItems: NavItem[] = [
     to: "/workorders",
     icon: "pi pi-briefcase",
     labelKey: "workOrders.navOrders",
+  },
+  {
+    to: "/monitoring",
+    icon: "pi pi-desktop",
+    labelKey: "monitoring.navMonitoring",
   },
   {
     to: "/transactions",
