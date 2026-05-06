@@ -3,8 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { WorkOrderStatus } from "../types/api";
-import { useAppTheme } from "../theme/AppThemeContext";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../lib/workOrderLifecycle";
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
+import { useAppTheme } from "../theme/AppThemeContext";
 
 type Props = {
   visible: boolean;
@@ -17,7 +18,8 @@ type Props = {
 
 export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFeedback, onClose }: Props) {
   const { t } = useTranslation();
-  const { colors, radii } = useAppTheme();
+  const { colors, radii, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
 
   const styles = useMemo(
     () =>
@@ -78,26 +80,45 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
           <Text style={styles.title}>{t("workOrders.actionsTitle")}</Text>
           <Pressable
             disabled={!canStart}
-            style={({ pressed }) => [styles.row, !canStart && styles.rowDisabled, pressed && canStart && { opacity: 0.85 }]}
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.row,
+              !canStart && styles.rowDisabled,
+              canStart && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+            ]}
             onPress={() => run(onStart)}
           >
             <Text style={styles.rowText}>{t("workOrders.start")}</Text>
           </Pressable>
           <Pressable
             disabled={!canPause}
-            style={({ pressed }) => [styles.row, !canPause && styles.rowDisabled, pressed && canPause && { opacity: 0.85 }]}
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.row,
+              !canPause && styles.rowDisabled,
+              canPause && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+            ]}
             onPress={() => run(onPause)}
           >
             <Text style={styles.rowText}>{t("workOrders.stop")}</Text>
           </Pressable>
           <Pressable
             disabled={!canFeedback}
-            style={({ pressed }) => [styles.row, !canFeedback && styles.rowDisabled, pressed && canFeedback && { opacity: 0.85 }]}
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.row,
+              !canFeedback && styles.rowDisabled,
+              canFeedback && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+            ]}
             onPress={() => run(onFeedback)}
           >
             <Text style={styles.rowText}>{t("workOrders.contextMenuCreateFeedback")}</Text>
           </Pressable>
-          <Pressable style={({ pressed }) => [styles.cancel, pressed && { opacity: 0.85 }]} onPress={onClose}>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={onClose}
+          >
             <Text style={styles.cancelText}>{t("workOrders.cancel")}</Text>
           </Pressable>
         </View>

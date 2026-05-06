@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetch as expoFetch } from "expo/fetch";
+import { File as ExpoFile } from "expo-file-system";
+import { Platform } from "react-native";
 
-import { apiFetch } from "../lib/api";
+import { apiFetch, apiUrl, getMobileBearerToken } from "../lib/api";
+import { buildWorkOrderListQueryString, emptyWorkOrderAdvancedSearch } from "../lib/workOrderListQueryString";
+import {
+  fetchWorkOrderSearchPresetDefaults,
+  fetchWorkOrderSearchPresetDetail,
+  fetchWorkOrderSearchPresets,
+  type WorkOrderSearchPresetDefaults,
+  type WorkOrderSearchPresetListItem,
+} from "../lib/workOrderSearchPresetsApi";
 import type {
   AssetRow,
   ClassificationRow,
@@ -9,6 +20,7 @@ import type {
   WorkOrderDocumentCategory,
   WorkOrderDocumentRow,
   WorkOrderAssignmentRow,
+  TransactionRow,
   WorkOrderRow,
   WorkOrderType,
   WorkgroupRow,
@@ -22,6 +34,7 @@ export const queryKeys = {
   workOrders: ["workOrders"] as const,
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
   workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
+  workOrderFeedback: (orderId: string) => ["workOrders", orderId, "feedback"] as const,
   workgroups: ["workgroups"] as const,
 };
 
@@ -109,11 +122,50 @@ export function useAssetsQuery() {
   });
 }
 
-export function useWorkOrdersQuery() {
+export function useWorkOrdersQuery(options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: queryKeys.workOrders,
+    queryKey: [...queryKeys.workOrders, "all"],
     queryFn: async (): Promise<WorkOrderRow[]> => {
       const r = await apiFetch("/api/work-orders");
+      if (!r.ok) throw new Error("workOrders");
+      return r.json() as Promise<WorkOrderRow[]>;
+    },
+    enabled: options?.enabled ?? true,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: true,
+  });
+}
+
+export type WorkOrderSearchPresetsBootstrap = {
+  presets: WorkOrderSearchPresetListItem[];
+  defaults: WorkOrderSearchPresetDefaults;
+};
+
+export function useWorkOrderSearchPresetsBootstrapQuery() {
+  return useQuery({
+    queryKey: ["workOrderSearchPresets", "bootstrap"] as const,
+    queryFn: async (): Promise<WorkOrderSearchPresetsBootstrap> => {
+      const [presets, defaults] = await Promise.all([
+        fetchWorkOrderSearchPresets(),
+        fetchWorkOrderSearchPresetDefaults(),
+      ]);
+      return { presets: Array.isArray(presets) ? presets : [], defaults };
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useWorkOrdersByPresetQuery(presetId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.workOrders, "preset", presetId ?? "none"] as const,
+    enabled: Boolean(enabled && presetId),
+    queryFn: async (): Promise<WorkOrderRow[]> => {
+      if (!presetId) return [];
+      const detail = await fetchWorkOrderSearchPresetDetail(presetId);
+      const adv = { ...emptyWorkOrderAdvancedSearch(), ...detail.payload.advanced };
+      const qs = buildWorkOrderListQueryString(detail.payload.quickSearch ?? "", adv);
+      const path = qs ? `/api/work-orders?${qs}` : "/api/work-orders";
+      const r = await apiFetch(path);
       if (!r.ok) throw new Error("workOrders");
       return r.json() as Promise<WorkOrderRow[]>;
     },
@@ -158,6 +210,20 @@ export function useWorkOrderAssignmentsQuery(orderId: string | null | undefined)
       const r = await apiFetch(`/api/work-orders/${orderId}/assignments`);
       if (!r.ok) throw new Error("workOrderAssignments");
       return r.json() as Promise<WorkOrderAssignmentRow[]>;
+    },
+  });
+}
+
+export function useWorkOrderFeedbackQuery(orderId: string | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.workOrderFeedback(orderId ?? ""),
+    enabled: Boolean(orderId),
+    queryFn: async (): Promise<TransactionRow[]> => {
+      if (!orderId) return [];
+      const r = await apiFetch(`/api/transactions?type=IN&page=1&limit=100&workOrderId=${encodeURIComponent(orderId)}`);
+      if (!r.ok) throw new Error("workOrderFeedback");
+      const data = (await r.json()) as { rows?: TransactionRow[] };
+      return Array.isArray(data.rows) ? data.rows : [];
     },
   });
 }
@@ -388,16 +454,34 @@ export async function uploadWorkOrderDocument(
   const formData = new FormData();
   formData.append("displayName", input.displayName);
   formData.append("category", input.category);
-  formData.append("file", {
-    uri: input.file.uri,
-    name: input.file.name,
-    type: input.file.type ?? "application/octet-stream",
-  } as unknown as Blob);
+  if (Platform.OS === "web") {
+    formData.append("file", {
+      uri: input.file.uri,
+      name: input.file.name,
+      type: input.file.type ?? "application/octet-stream",
+    } as unknown as Blob);
+  } else {
+    formData.append("file", new ExpoFile(input.file.uri));
+  }
 
-  const r = await apiFetch(`/api/work-orders/${orderId}/documents`, {
-    method: "POST",
-    body: formData,
-  });
+  const url = apiUrl(`/api/work-orders/${orderId}/documents`);
+  const r =
+    Platform.OS === "web"
+      ? await apiFetch(`/api/work-orders/${orderId}/documents`, {
+          method: "POST",
+          body: formData,
+        })
+      : await expoFetch(url, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          headers: (() => {
+            const headers = new Headers();
+            const token = getMobileBearerToken();
+            if (token) headers.set("Authorization", `Bearer ${token}`);
+            return headers;
+          })(),
+        });
   if (!r.ok) {
     const err = await r.text();
     throw new Error(err || "upload_document");

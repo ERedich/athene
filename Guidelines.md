@@ -97,6 +97,13 @@ North star differs by theme but shared principles: **precision / industrial**, *
   - **Behavior**: filter the **current** list or table **live** on the client (trimmed case-insensitive match), including within the **active tab** for tabbed apps, unless the product explicitly specifies server-side search.
 - **Consistency**: reuse the same surface / on-surface / outline tokens as login; keep the “no-line” and typography rules from **Shared rules** above.
 
+### Range filters (von–bis) and filter drawers
+
+- **Mirror bis from von**: For every **from–to** pair in the UI (numbers, dates, or other bounded fields), **when the user changes the “from” (von) value, set the “to” (bis) value to the same value in one state update** so a single bound can be entered once. The user may still edit **bis** afterward for a true range. Apply this pattern consistently wherever von–bis controls appear (search panels, reports, etc.).
+- **Enter submits Apply**: For **search / filter drawers** (or similar panels) that expose **Apply** and **Reset**, wrap the filter body in a **`<form>`**. Use **`type="submit"`** for Apply and **`type="button"`** for Reset; **`preventDefault`** on **`onSubmit`** and call the same handler as Apply. That way **Enter** in a text field submits the form and runs **Apply** (native form behavior).
+- **Audit “created by” / “updated by” on work orders**: These are **discrete filters** on **`workOrder.createdBy` / `workOrder.updatedBy`** (user UUIDs), **not** free-text LIKE. Populate options from **`GET /api/users`** (or the same user directory source as the Users app); use **multi-select** and query params **`createdBy`** / **`updatedBy`** as repeated UUIDs, matching the backend list API.
+- **Work order search panel — discrete vs free text**: Any field backed by a **foreign key** or **stable key/name column on a referenced entity** (site, asset, cost center, classification, work group, responsible employee, assignments, etc.) must use **discrete multi-select** (UUID params), **not** LIKE on keys or display names. **LIKE / substring filters** belong only on columns that store **real user-entered prose** on the order itself (e.g. **short name**, **description**). The header **quick search** string should similarly avoid searching FK display strings unless product asks otherwise; default is **order free text + order number** only.
+
 ### Reference affordances (“Referenzen” in tables)
 
 Use these **background** colors for reference icon buttons (and matching border) so users can read the reference *type* from color alone. Implement via shared classes in `frontend/src/index.css` (`app-ref-button--…`); do not invent ad‑hoc hex values per screen.
@@ -148,6 +155,7 @@ Use these **background** colors for reference icon buttons (and matching border)
 - Keep tab state controlled via `activeIndex` and `onTabChange`.
 - Use named tab indexes instead of inline magic numbers.
 - Tabs in BMW should stay sticky at the top and sit close to the title, while preserving PrimeReact's default TabView styling and selected-tab highlight.
+- When a tab represents countable related data (for example documents, assignments, feedback entries/drafts), show the count directly in the tab label in both web and mobile, using the format `Label [n]` (example: `Dokumente [4]`).
 
 ---
 

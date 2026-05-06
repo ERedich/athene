@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { SiteRow } from "../types/api";
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
 import { SelectModal, type SelectItem } from "./SelectModal";
@@ -15,7 +16,8 @@ type Props = {
 };
 
 export function SitePicker({ sites, value, onChange, disabled, label }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const [open, setOpen] = useState(false);
   const items: SelectItem[] = useMemo(
     () => sites.map((s) => ({ id: s.id, label: `${s.key} — ${s.name}` })),
@@ -47,8 +49,13 @@ export function SitePicker({ sites, value, onChange, disabled, label }: Props) {
       <Text style={styles.label}>{label}</Text>
       <Pressable
         disabled={disabled}
+        {...androidRippleProps(ripple)}
         onPress={() => setOpen(true)}
-        style={[styles.btn, disabled && styles.btnDisabled]}
+        style={({ pressed }) => [
+          styles.btn,
+          disabled && styles.btnDisabled,
+          !disabled && pressedOpacity(pressed, PRESSED_OPACITY_ROW),
+        ]}
       >
         <Text style={styles.btnText} numberOfLines={1}>
           {summary}

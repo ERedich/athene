@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { allowedParentTypesFor } from "../types/assetRules";
 import type { AssetRow, AssetType } from "../types/api";
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
 import { SelectModal, type SelectItem } from "./SelectModal";
@@ -29,7 +30,8 @@ export function ParentAssetPicker({
   noneLabel,
   excludeAssetId,
 }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const [open, setOpen] = useState(false);
   const allowedTypes = allowedParentTypesFor(childType);
 
@@ -76,7 +78,11 @@ export function ParentAssetPicker({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable onPress={() => setOpen(true)} style={styles.btn}>
+      <Pressable
+        {...androidRippleProps(ripple)}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+      >
         <Text style={styles.btnText} numberOfLines={2}>
           {summary}
         </Text>

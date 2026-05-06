@@ -33,6 +33,13 @@ import {
   useDeleteAssetMutation,
   useSitesQuery,
 } from "../../hooks/queries";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  PRESSED_OPACITY_ROW,
+  surfaceRippleColor,
+} from "../../styles/pressableFeedback";
 import { allowedAssetTypes } from "../../types/assetRules";
 import type { AssetType } from "../../types/api";
 import { useAppTheme } from "../../theme/AppThemeContext";
@@ -55,6 +62,7 @@ export function AssetEditor({ assetId }: Props) {
   const { user, appParameterBooleans, appParameterAssetKeyMode } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
 
   const { data: sites = [], isLoading: sitesLoading } = useSitesQuery();
   const { data: costCenters = [], isLoading: ccLoading } = useCostCentersQuery();
@@ -340,7 +348,11 @@ export function AssetEditor({ assetId }: Props) {
       {siteFieldLocked ? <Text style={styles.hint}>{t("assets.siteLocked")}</Text> : null}
 
       <Text style={styles.label}>{t("assets.type")}</Text>
-      <Pressable onPress={() => setTypeModal(true)} style={styles.inputLike}>
+      <Pressable
+        {...androidRippleProps(ripple)}
+        onPress={() => setTypeModal(true)}
+        style={({ pressed }) => [styles.inputLike, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+      >
         <Text style={styles.inputLikeText}>{t(`assets.types.${type}`)}</Text>
       </Pressable>
       <SelectModal
@@ -406,10 +418,19 @@ export function AssetEditor({ assetId }: Props) {
       <Text style={styles.counter}>{t("assets.remarkCount", { count: remarkLen, max: 2000 })}</Text>
 
       <View style={styles.actions}>
-        <Pressable style={styles.secondary} onPress={() => router.back()}>
+        <Pressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => router.back()}
+        >
           <Text style={styles.secondaryText}>{t("assets.cancel")}</Text>
         </Pressable>
-        <Pressable style={styles.primary} onPress={() => void onSave()} disabled={saving}>
+        <Pressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => void onSave()}
+          disabled={saving}
+        >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
@@ -419,7 +440,11 @@ export function AssetEditor({ assetId }: Props) {
       </View>
 
       {!isNew ? (
-        <Pressable style={styles.danger} onPress={() => void onDelete()}>
+        <Pressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.danger, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => void onDelete()}
+        >
           <Text style={styles.dangerText}>{t("assets.delete")}</Text>
         </Pressable>
       ) : null}

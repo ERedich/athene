@@ -15,13 +15,21 @@ import {
 
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
 import { useCostCentersQuery, useDeleteCostCenterMutation } from "../../../src/hooks/queries";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  PRESSED_OPACITY_ROW,
+  surfaceRippleColor,
+} from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
 
 export default function CostCentersListScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const navigation = useNavigation();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const rowRipple = surfaceRippleColor(isDark);
   const [q, setQ] = useState("");
   const { data = [], isLoading, isError, refetch } = useCostCentersQuery();
   const deleteMutation = useDeleteCostCenterMutation();
@@ -82,7 +90,11 @@ export default function CostCentersListScreen() {
       headerRight: () => (
         <ShellHeaderActions
           extra={
-            <Pressable onPress={() => router.push("/cost-centers/new")} style={styles.newBtn}>
+            <Pressable
+              onPress={() => router.push("/cost-centers/new")}
+              {...androidRippleProps(rowRipple, true)}
+              style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            >
               <MaterialIcons name="add" size={22} color={colors.primary} />
               <Text style={styles.newBtnText}>{t("costCenters.new")}</Text>
             </Pressable>
@@ -90,7 +102,7 @@ export default function CostCentersListScreen() {
         />
       ),
     });
-  }, [colors, navigation, router, styles, t]);
+  }, [colors.primary, navigation, router, rowRipple, styles.newBtn, styles.newBtnText, t]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -116,7 +128,11 @@ export default function CostCentersListScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("costCenters.loadError")}</Text>
-        <Pressable onPress={() => void refetch()} style={styles.retry}>
+        <Pressable
+          onPress={() => void refetch()}
+          {...androidRippleProps(rowRipple, true)}
+          style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+        >
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>
       </View>
@@ -144,7 +160,8 @@ export default function CostCentersListScreen() {
         contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
         renderItem={({ item }) => (
           <Pressable
-            style={({ pressed }) => [styles.row, pressed && { opacity: 0.9 }]}
+            {...androidRippleProps(rowRipple)}
+            style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
             onPress={() => router.push(`/cost-centers/${item.id}`)}
             onLongPress={() => {
               Alert.alert(t("costCenters.delete"), t("costCenters.deleteConfirm"), [

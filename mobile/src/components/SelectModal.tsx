@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
 export type SelectItem = { id: string; label: string };
@@ -21,7 +22,8 @@ type Props = {
 };
 
 export function SelectModal({ visible, title, items, onSelect, onClose }: Props) {
-  const { colors, radii } = useAppTheme();
+  const { colors, radii, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
 
   const styles = useMemo(
     () =>
@@ -76,7 +78,8 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <Pressable
-                style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
+                {...androidRippleProps(ripple)}
+                style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                 onPress={() => {
                   onSelect(item.id);
                   onClose();
@@ -86,7 +89,11 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
               </Pressable>
             )}
           />
-          <Pressable style={styles.cancel} onPress={onClose}>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={onClose}
+          >
             <Text style={styles.cancelText}>OK</Text>
           </Pressable>
         </View>

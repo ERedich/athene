@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
+import { buildTransactionListExtraFilters } from "./transactionListQuery.js";
 
 export type TransactionRow = {
   id: string;
@@ -54,6 +55,11 @@ router.get("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_site_id" });
     return;
   }
+  const workOrderIdRaw = typeof q.workOrderId === "string" ? q.workOrderId.trim() : "";
+  if (workOrderIdRaw && !isUuid(workOrderIdRaw)) {
+    res.status(400).json({ error: "invalid_work_order_id" });
+    return;
+  }
 
   const from = typeof q.from === "string" ? q.from.trim() : "";
   const to = typeof q.to === "string" ? q.to.trim() : "";
@@ -70,6 +76,10 @@ router.get("/", async (req: Request, res: Response) => {
     conditions.push(`t."siteId" = $${i++}::uuid`);
     params.push(siteIdRaw);
   }
+  if (workOrderIdRaw) {
+    conditions.push(`t."workOrderId" = $${i++}::uuid`);
+    params.push(workOrderIdRaw);
+  }
   if (from) {
     conditions.push(`t."bookedAt" >= $${i++}::timestamptz`);
     params.push(from);
@@ -79,12 +89,24 @@ router.get("/", async (req: Request, res: Response) => {
     params.push(to);
   }
 
+  const extra = await buildTransactionListExtraFilters(q, userId, pool, i);
+  if (!extra.ok) {
+    res.status(extra.status).json({ error: extra.error });
+    return;
+  }
+  for (const c of extra.conditions) {
+    conditions.push(c);
+  }
+  params.push(...extra.params);
+  i += extra.params.length;
+
   const filterSql = conditions.length ? ` AND ${conditions.join(" AND ")}` : "";
 
   try {
     const countSql = `
       SELECT count(*)::bigint AS c
       FROM "transaction" t
+      LEFT JOIN "workOrder" w ON w."id" = t."workOrderId"
       WHERE ${siteAccessSql('t."siteId"', "$1")}
       ${filterSql}
     `;

@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
@@ -17,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SceneRendererProps, TabBar, TabView } from "react-native-tab-view";
 
 import { useAuth } from "../../auth/AuthContext";
@@ -46,12 +48,21 @@ import {
   useCostCentersQuery,
   useWorkOrderDocumentsQuery,
   useWorkOrderAssignmentsQuery,
+  useWorkOrderFeedbackQuery,
   useWorkgroupsQuery,
   useWorkOrdersQuery,
   type WorkOrderSaveBody,
 } from "../../hooks/queries";
-import type { WorkOrderAssignmentRow, WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
+import type { TransactionRow, WorkOrderAssignmentRow, WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../../lib/workOrderLifecycle";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  PRESSED_OPACITY_ROW,
+  PRESSED_OPACITY_STRONG,
+  surfaceRippleColor,
+} from "../../styles/pressableFeedback";
 import { useAppTheme } from "../../theme/AppThemeContext";
 
 type Props = {
@@ -131,6 +142,8 @@ export function WorkOrderEditor({ orderId }: Props) {
   const navigation = useNavigation();
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
+  const insets = useSafeAreaInsets();
   const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
 
@@ -166,19 +179,23 @@ export function WorkOrderEditor({ orderId }: Props) {
 
   const { data: documents = [], isLoading: docsLoading, refetch: refetchDocs } = useWorkOrderDocumentsQuery(effectiveOrderId);
   const { data: assignments = [], isLoading: assignmentsLoading } = useWorkOrderAssignmentsQuery(effectiveOrderId);
+  const { data: feedbackRows = [], isLoading: feedbackRowsLoading } = useWorkOrderFeedbackQuery(effectiveOrderId);
 
   const currentOrder = useMemo(
     () => (effectiveOrderId ? orders.find((o) => o.id === effectiveOrderId) ?? null : null),
     [effectiveOrderId, orders],
   );
+  const documentsTabCount = documents.length + pendingFiles.length;
+  const assignmentsTabCount = assignments.length;
+  const feedbackTabCount = Number(Boolean(feedbackHours.trim() || feedbackRemark.trim() || feedbackCompleteOrder));
   const tabRoutes = useMemo<TabRoute[]>(
     () => [
       { key: "general", title: t("workOrders.tabGeneral") },
-      { key: "documents", title: t("workOrders.tabDocuments") },
-      { key: "assignments", title: t("workOrders.tabAssignments") },
-      { key: "feedback", title: t("workOrders.tabFeedback") },
+      { key: "documents", title: `${t("workOrders.tabDocuments")} [${documentsTabCount}]` },
+      { key: "assignments", title: `${t("workOrders.tabAssignments")} [${assignmentsTabCount}]` },
+      { key: "feedback", title: `${t("workOrders.tabFeedback")} [${feedbackTabCount}]` },
     ],
-    [t],
+    [assignmentsTabCount, documentsTabCount, feedbackTabCount, t],
   );
 
   const startOrder = useCallback(async () => {
@@ -207,16 +224,22 @@ export function WorkOrderEditor({ orderId }: Props) {
 
   const submitFeedback = useCallback(
     async (body: { hours: number; remark: string | null; completeOrder: boolean }) => {
-      if (!currentOrder) return false;
+      const targetOrderId = effectiveOrderId ?? orderId ?? null;
+      if (!targetOrderId) {
+        Alert.alert("", t("workOrders.assignmentsAfterSave"));
+        return false;
+      }
       setFeedbackSaving(true);
       try {
-        await postWorkOrderFeedback(currentOrder.id, body);
+        await postWorkOrderFeedback(targetOrderId, body);
         await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
-        await qc.invalidateQueries({ queryKey: queryKeys.workOrderDocuments(currentOrder.id) });
-        await qc.invalidateQueries({ queryKey: queryKeys.workOrderAssignments(currentOrder.id) });
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrderDocuments(targetOrderId) });
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrderAssignments(targetOrderId) });
+        await qc.invalidateQueries({ queryKey: queryKeys.workOrderFeedback(targetOrderId) });
         await qc.refetchQueries({ queryKey: queryKeys.workOrders, type: "all" });
-        await qc.refetchQueries({ queryKey: queryKeys.workOrderDocuments(currentOrder.id), type: "all" });
-        await qc.refetchQueries({ queryKey: queryKeys.workOrderAssignments(currentOrder.id), type: "all" });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrderDocuments(targetOrderId), type: "all" });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrderAssignments(targetOrderId), type: "all" });
+        await qc.refetchQueries({ queryKey: queryKeys.workOrderFeedback(targetOrderId), type: "all" });
         if (body.completeOrder) {
           router.replace("/work-orders");
         }
@@ -236,7 +259,7 @@ export function WorkOrderEditor({ orderId }: Props) {
         setFeedbackSaving(false);
       }
     },
-    [currentOrder, qc, router, t],
+    [effectiveOrderId, orderId, qc, router, t],
   );
 
   useLayoutEffect(() => {
@@ -250,21 +273,51 @@ export function WorkOrderEditor({ orderId }: Props) {
           <Pressable
             onPress={() => void startOrder()}
             disabled={!canStartWorkOrder(currentOrder.status)}
-            style={({ pressed }) => [{ opacity: !canStartWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+            {...androidRippleProps(ripple, true)}
+            style={({ pressed }) => [
+              { padding: 8 },
+              {
+                opacity: !canStartWorkOrder(currentOrder.status)
+                  ? 0.35
+                  : pressed
+                    ? PRESSED_OPACITY_CONTROL
+                    : 1,
+              },
+            ]}
           >
             <MaterialIcons name="play-arrow" size={22} color={colors.primary} />
           </Pressable>
           <Pressable
             onPress={() => void pauseOrder()}
             disabled={!canPauseWorkOrder(currentOrder.status)}
-            style={({ pressed }) => [{ opacity: !canPauseWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+            {...androidRippleProps(ripple, true)}
+            style={({ pressed }) => [
+              { padding: 8 },
+              {
+                opacity: !canPauseWorkOrder(currentOrder.status)
+                  ? 0.35
+                  : pressed
+                    ? PRESSED_OPACITY_CONTROL
+                    : 1,
+              },
+            ]}
           >
             <MaterialIcons name="pause" size={20} color={colors.primary} />
           </Pressable>
           <Pressable
             onPress={() => setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"))}
             disabled={!canFeedbackWorkOrder(currentOrder.status)}
-            style={({ pressed }) => [{ opacity: !canFeedbackWorkOrder(currentOrder.status) ? 0.35 : pressed ? 0.75 : 1, padding: 8 }]}
+            {...androidRippleProps(ripple, true)}
+            style={({ pressed }) => [
+              { padding: 8 },
+              {
+                opacity: !canFeedbackWorkOrder(currentOrder.status)
+                  ? 0.35
+                  : pressed
+                    ? PRESSED_OPACITY_CONTROL
+                    : 1,
+              },
+            ]}
           >
             <MaterialIcons name="assignment-turned-in" size={20} color={colors.primary} />
           </Pressable>
@@ -272,7 +325,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       ),
     });
     return () => navigation.setOptions({ headerRight: undefined });
-  }, [colors.primary, currentOrder, navigation, pauseOrder, startOrder, tabRoutes]);
+  }, [colors.primary, currentOrder, navigation, pauseOrder, ripple, startOrder, tabRoutes]);
 
   useEffect(() => {
     if (isNew || !row || hydrated) return;
@@ -455,9 +508,19 @@ export function WorkOrderEditor({ orderId }: Props) {
     () =>
       StyleSheet.create({
         center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background },
-        page: { padding: 16, paddingBottom: 42, backgroundColor: colors.background },
+        editorBody: { flex: 1, paddingHorizontal: 16, paddingTop: 16, backgroundColor: colors.background },
         tabScene: { paddingTop: 14 },
         assignmentsEmpty: { color: colors.onSurfaceVariant, paddingVertical: 8 },
+        feedbackRow: {
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: 8,
+          padding: 10,
+          marginTop: 8,
+          backgroundColor: colors.surface,
+        },
+        feedbackRowTitle: { color: colors.onSurface, fontWeight: "600" },
+        feedbackRowMeta: { color: colors.onSurfaceVariant, fontSize: 12, marginTop: 2 },
         assignmentRow: {
           borderWidth: 1,
           borderColor: colors.border,
@@ -494,7 +557,23 @@ export function WorkOrderEditor({ orderId }: Props) {
         counter: { fontSize: 12, color: colors.outline, marginTop: -8, marginBottom: 14 },
         durationRow: { flexDirection: "row", gap: 10 },
         half: { flex: 1 },
-        actions: { flexDirection: "row", gap: 12, marginTop: 10 },
+        actions: { flexDirection: "row", gap: 12 },
+        footer: {
+          backgroundColor: colors.surface,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.border,
+          paddingTop: 12,
+          paddingHorizontal: 16,
+        },
+        docEditWrap: {
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 4,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.border,
+          backgroundColor: colors.background,
+          maxHeight: 280,
+        },
         secondary: {
           flex: 1,
           padding: 14,
@@ -661,6 +740,50 @@ export function WorkOrderEditor({ orderId }: Props) {
     incoming.forEach(scheduleAutoUpload);
   };
 
+  const onCapturePhoto = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("", t("workOrders.documentsCameraNotSupportedWeb"));
+      return;
+    }
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("", t("workOrders.documentsCameraPermissionDenied"));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 0.85,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const ts = new Date();
+    const fallbackName = `photo-${ts.toISOString().replace(/[:.]/g, "-")}.jpg`;
+    const incoming = result.assets.map((asset) => ({
+      localId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+      uri: asset.uri,
+      name: asset.fileName ?? fallbackName,
+      mimeType: asset.mimeType ?? "image/jpeg",
+      size: asset.fileSize,
+      displayName: asset.fileName ?? fallbackName,
+      category: "general" as WorkOrderDocumentCategory,
+      addedAt: Date.now(),
+    }));
+    setPendingFiles((cur) => [...cur, ...incoming]);
+    incoming.forEach(scheduleAutoUpload);
+  };
+
+  const onUploadPress = () => {
+    if (Platform.OS === "web") {
+      void onPickFiles();
+      return;
+    }
+    Alert.alert(t("workOrders.documentsUpload"), t("workOrders.documentsSourceChooserTitle"), [
+      { text: t("workOrders.documentsSourceChooserExisting"), onPress: () => void onPickFiles() },
+      { text: t("workOrders.documentsSourceChooserCamera"), onPress: () => void onCapturePhoto() },
+      { text: t("workOrders.cancel"), style: "cancel" },
+    ]);
+  };
+
   const onSave = async () => {
     const name = form.name.trim();
     const description = form.description.trim();
@@ -803,9 +926,13 @@ export function WorkOrderEditor({ orderId }: Props) {
         indicatorStyle={{ backgroundColor: colors.primary, height: 2 }}
         style={{ backgroundColor: colors.surface, borderRadius: 8 }}
         tabStyle={{ width: "auto", minHeight: 42 }}
+        activeColor={colors.primary}
+        inactiveColor={colors.onSurfaceVariant}
+        pressColor={ripple}
+        pressOpacity={PRESSED_OPACITY_ROW}
       />
     ),
-    [colors.primary, colors.surface],
+    [colors.onSurfaceVariant, colors.primary, colors.surface, ripple],
   );
 
   if (ordersLoading || assetsLoading || ccLoading || clfLoading || wgLoading) {
@@ -824,8 +951,10 @@ export function WorkOrderEditor({ orderId }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <TabView
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={styles.editorBody}>
+        <TabView
+        style={{ flex: 1 }}
         navigationState={{ index: tabIndex, routes: tabRoutes }}
         onIndexChange={setTabIndex}
         renderTabBar={renderTabBar}
@@ -843,7 +972,14 @@ export function WorkOrderEditor({ orderId }: Props) {
           />
 
           <Text style={styles.label}>{t("workOrders.orderType")}</Text>
-          <Pressable style={styles.input} onPress={() => setTypeModal(true)}>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.input,
+              pressedOpacity(pressed, PRESSED_OPACITY_ROW),
+            ]}
+            onPress={() => setTypeModal(true)}
+          >
             <Text style={{ color: colors.onSurface }}>{t(`workOrders.typeValues.${form.orderType}`)}</Text>
           </Pressable>
           <SelectModal
@@ -908,10 +1044,12 @@ export function WorkOrderEditor({ orderId }: Props) {
             {t("workOrders.workgroup")} <Text style={{ color: colors.primary }}>*</Text>
           </Text>
           <Pressable
-            style={[
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
               styles.input,
               !form.assetId && { opacity: 0.5 },
               showRequiredHints && requiredMissing.workgroupId && styles.requiredInput,
+              form.assetId ? pressedOpacity(pressed, PRESSED_OPACITY_ROW) : null,
             ]}
             disabled={!form.assetId}
             onPress={() => setWorkgroupModal(true)}
@@ -968,7 +1106,11 @@ export function WorkOrderEditor({ orderId }: Props) {
             return (
               <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
                 <View>
-          <Pressable style={styles.uploadBtn} onPress={() => void onPickFiles()}>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [styles.uploadBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={onUploadPress}
+          >
             <Text style={styles.uploadText}>{t("workOrders.documentsUpload")}</Text>
           </Pressable>
           <TextInput
@@ -991,7 +1133,8 @@ export function WorkOrderEditor({ orderId }: Props) {
               </Text>
               <View style={styles.rowActions}>
                 <Pressable
-                  style={styles.actionBtn}
+                  {...androidRippleProps(ripple, true)}
+                  style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => {
                     clearAutoTimer(doc.localId);
                     setPendingFiles((cur) => cur.filter((x) => x.localId !== doc.localId));
@@ -1009,7 +1152,12 @@ export function WorkOrderEditor({ orderId }: Props) {
             <ActivityIndicator color={colors.primary} />
           ) : (
             filteredDocs.map((doc) => (
-              <Pressable key={doc.id} style={styles.card} onPress={() => void openDocument(doc)}>
+              <Pressable
+                key={doc.id}
+                {...androidRippleProps(ripple)}
+                style={({ pressed }) => [styles.card, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+                onPress={() => void openDocument(doc)}
+              >
                 <Text
                   style={[
                     styles.sourcePill,
@@ -1030,7 +1178,8 @@ export function WorkOrderEditor({ orderId }: Props) {
                 </Text>
                 <View style={styles.rowActions}>
                   <Pressable
-                    style={styles.actionBtn}
+                    {...androidRippleProps(ripple, true)}
+                    style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                     onPress={(e) => {
                       e.stopPropagation();
                       setDocEdit(doc);
@@ -1042,7 +1191,8 @@ export function WorkOrderEditor({ orderId }: Props) {
                   </Pressable>
                   {doc.source === "workOrder" && doc.workOrderId ? (
                     <Pressable
-                      style={styles.actionBtn}
+                      {...androidRippleProps(ripple, true)}
+                      style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                       onPress={(e) => {
                         e.stopPropagation();
                         Alert.alert(t("workOrders.delete"), t("workOrders.documentsDeleteError"), [
@@ -1142,102 +1292,146 @@ export function WorkOrderEditor({ orderId }: Props) {
                     <Text style={{ color: colors.onSurface }}>{t("workOrders.feedbackCompleteOrder")}</Text>
                     <Switch value={feedbackCompleteOrder} onValueChange={setFeedbackCompleteOrder} disabled={feedbackSaving} />
                   </View>
+                  <Text style={styles.label}>{t("workOrders.feedbackExisting")}</Text>
+                  {feedbackRowsLoading ? (
+                    <ActivityIndicator color={colors.primary} />
+                  ) : feedbackRows.length === 0 ? (
+                    <Text style={styles.assignmentsEmpty}>{t("workOrders.feedbackEmpty")}</Text>
+                  ) : (
+                    feedbackRows.map((fb: TransactionRow) => (
+                      <View key={fb.id} style={styles.feedbackRow}>
+                        <Text style={styles.feedbackRowTitle}>
+                          {t("workOrders.feedbackHours")}: {fb.quantity}
+                        </Text>
+                        <Text style={styles.feedbackRowMeta}>
+                          {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
+                            new Date(fb.bookedAt),
+                          )}
+                        </Text>
+                        {fb.remark ? <Text style={styles.feedbackRowMeta}>{fb.remark}</Text> : null}
+                      </View>
+                    ))
+                  )}
                 </View>
               )}
             </ScrollView>
           );
         }}
       />
-
-      <View style={styles.actions}>
-        <Pressable style={styles.secondary} onPress={() => router.back()}>
-          <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.primary, pressed && !saving && { transform: [{ scale: 0.98 }], opacity: 0.92 }]}
-          onPress={() => {
-            if (tabRoutes[tabIndex]?.key === "feedback") {
-              void saveFeedbackFromTab();
-              return;
-            }
-            void onSave();
-          }}
-          disabled={saving || feedbackSaving}
-        >
-          {saving || feedbackSaving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryText}>
-              {tabRoutes[tabIndex]?.key === "feedback" ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
-            </Text>
-          )}
-        </Pressable>
       </View>
 
       {docEdit ? (
-        <View style={[styles.card, { marginTop: 14 }]}>
-          <Text style={styles.label}>{t("workOrders.documentsDisplayName")}</Text>
-          <TextInput value={docEditDisplayName} onChangeText={setDocEditDisplayName} style={styles.input} />
-          <Text style={styles.label}>{t("workOrders.documentsCategory")}</Text>
-          <Pressable style={styles.input} onPress={() => setSearchTerm("open-category-modal")}>
-            <Text>{t(`workOrders.documentCategories.${docEditCategory}`)}</Text>
-          </Pressable>
-          <SelectModal
-            visible={searchTerm === "open-category-modal"}
-            title={t("workOrders.documentsCategory")}
-            items={DOC_CATEGORIES.map((c) => ({ id: c, label: t(`workOrders.documentCategories.${c}`) }))}
-            onSelect={(id) => setDocEditCategory(id as WorkOrderDocumentCategory)}
-            onClose={() => setSearchTerm("")}
-          />
-          <View style={styles.actions}>
-            <Pressable style={styles.secondary} onPress={() => setDocEdit(null)} disabled={docEditSaving}>
-              <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
-            </Pressable>
+        <ScrollView style={styles.docEditWrap} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+          <View style={styles.card}>
+            <Text style={styles.label}>{t("workOrders.documentsDisplayName")}</Text>
+            <TextInput value={docEditDisplayName} onChangeText={setDocEditDisplayName} style={styles.input} />
+            <Text style={styles.label}>{t("workOrders.documentsCategory")}</Text>
             <Pressable
-              style={styles.primary}
-              onPress={() => {
-                void (async () => {
-                  if (!docEdit) return;
-                  const name = docEditDisplayName.trim();
-                  if (!name) {
-                    Alert.alert("", t("workOrders.documentsDisplayNameRequired"));
-                    return;
-                  }
-                  setDocEditSaving(true);
-                  try {
-                    if (docEdit.source === "asset") {
-                      await patchAssetDocument(docEdit.assetId ?? "", docEdit.id, {
-                        displayName: name,
-                        category: docEditCategory,
-                      });
-                      await qc.invalidateQueries({ queryKey: queryKeys.assets });
-                    } else {
-                      await patchWorkOrderDocument(docEdit.workOrderId ?? "", docEdit.id, {
-                        displayName: name,
-                        category: docEditCategory,
-                      });
-                    }
-                    setDocEdit(null);
-                    await refetchDocs();
-                    await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
-                  } catch {
-                    Alert.alert("", t("workOrders.documentsUpdateError"));
-                  } finally {
-                    setDocEditSaving(false);
-                  }
-                })();
-              }}
-              disabled={docEditSaving}
+              {...androidRippleProps(ripple)}
+              style={({ pressed }) => [styles.input, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+              onPress={() => setSearchTerm("open-category-modal")}
             >
-              {docEditSaving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryText}>{t("workOrders.save")}</Text>
-              )}
+              <Text>{t(`workOrders.documentCategories.${docEditCategory}`)}</Text>
             </Pressable>
+            <SelectModal
+              visible={searchTerm === "open-category-modal"}
+              title={t("workOrders.documentsCategory")}
+              items={DOC_CATEGORIES.map((c) => ({ id: c, label: t(`workOrders.documentCategories.${c}`) }))}
+              onSelect={(id) => setDocEditCategory(id as WorkOrderDocumentCategory)}
+              onClose={() => setSearchTerm("")}
+            />
+            <View style={styles.actions}>
+              <Pressable
+                {...androidRippleProps(ripple)}
+                style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                onPress={() => setDocEdit(null)}
+                disabled={docEditSaving}
+              >
+                <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
+              </Pressable>
+              <Pressable
+                {...androidRippleProps(ripple)}
+                style={({ pressed }) => [styles.primary, !docEditSaving && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                onPress={() => {
+                  void (async () => {
+                    if (!docEdit) return;
+                    const name = docEditDisplayName.trim();
+                    if (!name) {
+                      Alert.alert("", t("workOrders.documentsDisplayNameRequired"));
+                      return;
+                    }
+                    setDocEditSaving(true);
+                    try {
+                      if (docEdit.source === "asset") {
+                        await patchAssetDocument(docEdit.assetId ?? "", docEdit.id, {
+                          displayName: name,
+                          category: docEditCategory,
+                        });
+                        await qc.invalidateQueries({ queryKey: queryKeys.assets });
+                      } else {
+                        await patchWorkOrderDocument(docEdit.workOrderId ?? "", docEdit.id, {
+                          displayName: name,
+                          category: docEditCategory,
+                        });
+                      }
+                      setDocEdit(null);
+                      await refetchDocs();
+                      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
+                    } catch {
+                      Alert.alert("", t("workOrders.documentsUpdateError"));
+                    } finally {
+                      setDocEditSaving(false);
+                    }
+                  })();
+                }}
+                disabled={docEditSaving}
+              >
+                {docEditSaving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryText}>{t("workOrders.save")}</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       ) : null}
-    </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View style={styles.actions}>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
+          </Pressable>
+          <Pressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.primary,
+              !(saving || feedbackSaving) && pressedOpacity(pressed, PRESSED_OPACITY_STRONG),
+              !(saving || feedbackSaving) && pressed && { transform: [{ scale: 0.98 }] },
+            ]}
+            onPress={() => {
+              if (tabRoutes[tabIndex]?.key === "feedback") {
+                void saveFeedbackFromTab();
+                return;
+              }
+              void onSave();
+            }}
+            disabled={saving || feedbackSaving}
+          >
+            {saving || feedbackSaving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryText}>
+                {tabRoutes[tabIndex]?.key === "feedback" ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
 }

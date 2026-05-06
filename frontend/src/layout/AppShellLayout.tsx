@@ -32,6 +32,7 @@ function headerTitleKey(pathname: string): string {
     assets: "assets.appName",
     workorders: "workOrders.appName",
     monitoring: "monitoring.appName",
+    suchkonfig: "suchkonfig.appName",
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",
@@ -79,6 +80,11 @@ const navItems: NavItem[] = [
     to: "/monitoring",
     icon: "pi pi-desktop",
     labelKey: "monitoring.navMonitoring",
+  },
+  {
+    to: "/suchkonfig",
+    icon: "pi pi-share-alt",
+    labelKey: "suchkonfig.navSuchkonfig",
   },
   {
     to: "/transactions",

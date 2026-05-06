@@ -27,6 +27,12 @@ import {
   useDeleteCostCenterMutation,
   useSitesQuery,
 } from "../../../src/hooks/queries";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  surfaceRippleColor,
+} from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
 
 export default function CostCenterEditScreen() {
@@ -35,7 +41,8 @@ export default function CostCenterEditScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const qc = useQueryClient();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const { appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { data: sites = [], isLoading: sitesLoading } = useSitesQuery();
@@ -119,6 +126,8 @@ export default function CostCenterEditScreen() {
         <ShellHeaderActions
           extra={
             <Pressable
+              {...androidRippleProps(ripple, true)}
+              style={({ pressed }) => [{ paddingHorizontal: 6 }, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => {
                 Alert.alert(t("costCenters.delete"), t("costCenters.deleteConfirm"), [
                   { text: t("costCenters.cancel"), style: "cancel" },
@@ -139,7 +148,6 @@ export default function CostCenterEditScreen() {
                   },
                 ]);
               }}
-              style={{ paddingHorizontal: 6 }}
             >
               <MaterialIcons name="delete-outline" size={24} color="#b91c1c" />
             </Pressable>
@@ -147,7 +155,7 @@ export default function CostCenterEditScreen() {
         />
       ),
     });
-  }, [deleteMutation, id, navigation, qc, router, t]);
+  }, [deleteMutation, id, navigation, qc, ripple, router, t]);
 
   async function onSave() {
     const k = key.trim();
@@ -217,10 +225,19 @@ export default function CostCenterEditScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.secondary} onPress={() => router.back()}>
+        <Pressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => router.back()}
+        >
           <Text style={styles.secondaryText}>{t("costCenters.cancel")}</Text>
         </Pressable>
-        <Pressable style={styles.primary} onPress={() => void onSave()} disabled={saving}>
+        <Pressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => void onSave()}
+          disabled={saving}
+        >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (

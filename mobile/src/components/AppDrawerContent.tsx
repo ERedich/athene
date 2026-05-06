@@ -7,6 +7,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "../auth/AuthContext";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  PRESSED_OPACITY_ROW,
+  surfaceRippleColor,
+} from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
 export function AppDrawerContent(props: DrawerContentComponentProps) {
@@ -15,6 +22,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { colors, isDark, toggleScheme } = useAppTheme();
+  const navRipple = surfaceRippleColor(isDark);
   const { signOut } = useAuth();
   const activeLang = i18n.language.startsWith("de") ? "de" : "en";
 
@@ -85,7 +93,8 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
 
       <Pressable
         onPress={() => closeAndGo("/home")}
-        style={[styles.navItem, activeHome && styles.navItemActive]}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [styles.navItem, activeHome && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
         <MaterialIcons name="home" size={24} color={activeHome ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeHome ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navStart")}</Text>
@@ -93,7 +102,8 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
 
       <Pressable
         onPress={() => closeAndGo("/cost-centers")}
-        style={[styles.navItem, activeCc && styles.navItemActive]}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [styles.navItem, activeCc && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
         <MaterialIcons
           name="account-balance"
@@ -107,7 +117,8 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
 
       <Pressable
         onPress={() => closeAndGo("/assets")}
-        style={[styles.navItem, activeAssets && styles.navItemActive]}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [styles.navItem, activeAssets && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
         <MaterialIcons
           name="precision-manufacturing"
@@ -119,7 +130,12 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
 
       <Pressable
         onPress={() => closeAndGo("/work-orders")}
-        style={[styles.navItem, activeWorkOrders && styles.navItemActive]}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [
+          styles.navItem,
+          activeWorkOrders && styles.navItemActive,
+          pressedOpacity(pressed, PRESSED_OPACITY_ROW),
+        ]}
       >
         <MaterialIcons
           name="assignment"
@@ -138,14 +154,16 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.footerRow}>
           <Pressable
             onPress={toggleScheme}
-            style={styles.iconBtn}
+            {...androidRippleProps(navRipple, true)}
+            style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             accessibilityLabel={isDark ? t("shell.themeToggleToLight") : t("shell.themeToggleToDark")}
           >
             <MaterialIcons name={isDark ? "light-mode" : "dark-mode"} size={24} color={colors.onSurface} />
           </Pressable>
           <Pressable
             onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
-            style={styles.pill}
+            {...androidRippleProps(navRipple, true)}
+            style={({ pressed }) => [styles.pill, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           >
             <Text style={styles.pillText}>{activeLang === "de" ? "DE" : "EN"}</Text>
           </Pressable>
@@ -158,6 +176,8 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
               router.replace("/");
             })();
           }}
+          {...androidRippleProps(navRipple)}
+          style={({ pressed }) => [pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.signOut}>{t("shell.signOut")}</Text>
         </Pressable>

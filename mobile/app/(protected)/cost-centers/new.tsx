@@ -18,13 +18,20 @@ import { useAuth } from "../../../src/auth/AuthContext";
 import { SitePicker } from "../../../src/components/SitePicker";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../../src/lib/appParameterKeys";
 import { postCostCenter, queryKeys, useCostCentersQuery, useSitesQuery } from "../../../src/hooks/queries";
+import {
+  androidRippleProps,
+  pressedOpacity,
+  PRESSED_OPACITY_CONTROL,
+  surfaceRippleColor,
+} from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
 
 export default function CostCenterNewScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const btnRipple = surfaceRippleColor(isDark);
   const { user, appParameterBooleans } = useAuth();
   const { data: sites = [], isLoading: sitesLoading } = useSitesQuery();
   const { refetch: refetchCc } = useCostCentersQuery();
@@ -147,10 +154,19 @@ export default function CostCenterNewScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.secondary} onPress={() => router.back()}>
+        <Pressable
+          {...androidRippleProps(btnRipple)}
+          style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => router.back()}
+        >
           <Text style={styles.secondaryText}>{t("costCenters.cancel")}</Text>
         </Pressable>
-        <Pressable style={styles.primary} onPress={() => void onSave()} disabled={saving}>
+        <Pressable
+          {...androidRippleProps(btnRipple)}
+          style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => void onSave()}
+          disabled={saving}
+        >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (

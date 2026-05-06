@@ -4,22 +4,28 @@ import { Stack, router } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Pressable } from "react-native";
 
+import { pressedOpacity, PRESSED_OPACITY_CONTROL, androidRippleProps, surfaceRippleColor } from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
 
 export default function WorkOrdersStackLayout() {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const headerRipple = surfaceRippleColor(isDark);
 
   function workOrderBackHeaderLeft(tintColor: string) {
     return (
       <Pressable
         accessibilityRole="button"
+        {...androidRippleProps(headerRipple, true)}
         onPress={() => {
           if (router.canGoBack()) router.back();
           else router.replace("/work-orders");
         }}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        style={{ marginLeft: 8, justifyContent: "center", alignItems: "center", minWidth: 40, minHeight: 40 }}
+        style={({ pressed }) => [
+          { marginLeft: 8, justifyContent: "center", alignItems: "center", minWidth: 40, minHeight: 40 },
+          pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+        ]}
       >
         <MaterialIcons name="arrow-back" size={24} color={tintColor} />
       </Pressable>

@@ -17,6 +17,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../auth/AuthContext";
+import { pressedOpacity, PRESSED_OPACITY_CONTROL, PRESSED_OPACITY_STRONG } from "../../styles/pressableFeedback";
 import { getLoginTokens, loginEffects, type LoginScheme } from "./loginDesign";
 
 const logoSrc =
@@ -80,14 +81,14 @@ export function LoginScreen() {
           <View style={styles.topActions}>
             <Pressable
               onPress={() => setScheme(isLight ? "dark" : "light")}
-              style={styles.iconBtn}
+              style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               accessibilityLabel={isLight ? t("login.themeDark") : t("login.themeLight")}
             >
               <MaterialIcons name={isLight ? "dark-mode" : "light-mode"} size={22} color={onSurface} />
             </Pressable>
             <Pressable
               onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
-              style={styles.langBtn}
+              style={({ pressed }) => [styles.langBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             >
               <Text style={[styles.langText, { color: onSurface, fontFamily: tokens.fonts.label }]}>
                 {activeLang === "de" ? "DE" : "EN"}
@@ -195,7 +196,7 @@ export function LoginScreen() {
 
               <Pressable
                 onPress={() => setRemember(!remember)}
-                style={styles.rememberRow}
+                style={({ pressed }) => [styles.rememberRow, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               >
                 <View
                   style={[
@@ -220,7 +221,11 @@ export function LoginScreen() {
               ) : null}
 
               {isLight ? (
-                <Pressable disabled={submitting} onPress={() => void onSubmit()} style={({ pressed }) => [pressed && { opacity: 0.92 }]}>
+                <Pressable
+                  disabled={submitting}
+                  onPress={() => void onSubmit()}
+                  style={({ pressed }) => [pressedOpacity(pressed, PRESSED_OPACITY_STRONG)]}
+                >
                   <LinearGradient
                     colors={[tokens.colors.primary, tokens.colors.primaryContainer]}
                     start={{ x: 0, y: 0 }}
@@ -246,7 +251,7 @@ export function LoginScreen() {
                   style={({ pressed }) => [
                     styles.ctaDark,
                     { backgroundColor: tokens.colors.atheneOrange },
-                    pressed && { opacity: 0.9 },
+                    pressedOpacity(pressed, PRESSED_OPACITY_STRONG),
                   ]}
                 >
                   {submitting ? (

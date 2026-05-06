@@ -161,6 +161,20 @@ export type WorkOrderAssignmentRow = {
   createdBy: string;
 };
 
+export type TransactionRow = {
+  id: string;
+  transactionNumber: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  type: string;
+  bookedAt: string;
+  quantity: string;
+  workOrderId: string | null;
+  workOrderOrderNumber: string | null;
+  remark: string | null;
+};
+
 export type WorkOrderDocumentRow = {
   id: string;
   source: WorkOrderDocumentSource;

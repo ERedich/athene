@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import type { ClassificationRow } from "../types/api";
 import { useAppTheme } from "../theme/AppThemeContext";
 
@@ -27,7 +28,8 @@ export function ClassificationPicker({
   label,
   noneLabel,
 }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const [open, setOpen] = useState(false);
   const filtered = useMemo(
     () =>
@@ -68,7 +70,11 @@ export function ClassificationPicker({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable onPress={() => setOpen(true)} style={styles.btn}>
+      <Pressable
+        {...androidRippleProps(ripple)}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+      >
         <Text style={styles.btnText} numberOfLines={1}>
           {summary}
         </Text>

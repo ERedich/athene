@@ -22,6 +22,19 @@ import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
+import {
+  buildWorkOrderListQueryString,
+  emptyWorkOrderAdvancedSearch,
+  type WorkOrderAdvancedSearchState,
+} from "../lib/workOrderApiFilters";
+import {
+  createWorkOrderSearchPreset,
+  fetchWorkOrderSearchPresetDefaults,
+  fetchWorkOrderSearchPresetDetail,
+  fetchWorkOrderSearchPresets,
+  isSamePresetId,
+} from "../lib/workOrderSearchPresetApi";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   type AssetDocumentCategory,
@@ -155,6 +168,11 @@ type Workgroup = {
   employeeIds: string[];
 };
 
+type SiteOption = { id: string; key: string; name: string };
+
+/** Fields needed from GET /api/users for search-panel audit filters */
+type UserDirectoryRow = { id: string; loginName: string; name: string };
+
 type FormState = {
   orderNumber: number | null;
   name: string;
@@ -281,6 +299,15 @@ export function WorkOrdersPage() {
   const prevCreateAssetIdForDefaultWgRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryRow[]>([]);
+  const [appliedAdvanced, setAppliedAdvanced] = useState<WorkOrderAdvancedSearchState>(() => emptyWorkOrderAdvancedSearch());
+  const [panelDraft, setPanelDraft] = useState<WorkOrderAdvancedSearchState>(() => emptyWorkOrderAdvancedSearch());
+  const [searchPanelVisible, setSearchPanelVisible] = useState(false);
+  const [searchPresets, setSearchPresets] = useState<{ id: string; name: string; isOwner: boolean }[]>([]);
+  const [headerPresetSelectionId, setHeaderPresetSelectionId] = useState<string | null>(null);
+  const [searchBootstrapDone, setSearchBootstrapDone] = useState(false);
   const [documents, setDocuments] = useState<WorkOrderDocument[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsSearchTerm, setDocumentsSearchTerm] = useState("");
@@ -319,6 +346,61 @@ export function WorkOrdersPage() {
   const accessibleAssets = useMemo(
     () => assets.filter((asset) => !siteFieldLocked || asset.siteId === user.workingSiteId),
     [assets, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchSiteOptions = useMemo(
+    () =>
+      sites
+        .filter((s) => !siteFieldLocked || s.id === user.workingSiteId)
+        .map((s) => ({ label: `${s.key} - ${s.name}`, value: s.id })),
+    [sites, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchAssetOptions = useMemo(
+    () => accessibleAssets.map((asset) => ({ label: `${asset.key} - ${asset.name}`, value: asset.id })),
+    [accessibleAssets],
+  );
+
+  const searchCostCenterOptions = useMemo(
+    () =>
+      costCenters
+        .filter((cc) => (!siteFieldLocked || cc.siteId === user.workingSiteId) && cc.isActive)
+        .map((cc) => ({ label: `${cc.key} - ${cc.name}`, value: cc.id })),
+    [costCenters, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchClassificationOptions = useMemo(
+    () =>
+      classifications
+        .filter((cl) => (!siteFieldLocked || cl.siteId === user.workingSiteId) && cl.appliesToWorkOrder)
+        .map((cl) => ({ label: `${cl.key} - ${cl.name}`, value: cl.id })),
+    [classifications, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchWorkgroupOptions = useMemo(
+    () =>
+      workgroups
+        .filter((w) => w.isActive && (!siteFieldLocked || w.siteId === user.workingSiteId))
+        .map((w) => ({ label: `${w.key} - ${w.name}`, value: w.id })),
+    [workgroups, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchEmployeeOptions = useMemo(
+    () =>
+      employees
+        .filter((e) => e.isActive && (!siteFieldLocked || e.siteId === user.workingSiteId))
+        .map((e) => ({ label: `${e.key} - ${e.name}`, value: e.id })),
+    [employees, siteFieldLocked, user.workingSiteId],
+  );
+
+  const searchUserOptions = useMemo<SelectOption[]>(
+    () => directoryUsers.map((u) => ({ label: `${u.loginName} — ${u.name}`, value: u.id })),
+    [directoryUsers],
+  );
+
+  const headerPresetDropdownOptions = useMemo(
+    () => searchPresets.map((p) => ({ label: p.name, value: p.id })),
+    [searchPresets],
   );
 
   const assetOptions = useMemo<SelectOption[]>(
@@ -412,34 +494,6 @@ export function WorkOrdersPage() {
     });
   }, [form.responsibleEmployeeId, form.workgroupId, selectedWorkgroup, t]);
 
-  const filteredOrders = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter((row) =>
-      [
-        row.orderNumber,
-        row.name,
-        row.description ?? "",
-        row.assetKey,
-        row.assetName,
-        row.costCenterKey,
-        row.costCenterName,
-        row.classificationKey ?? "",
-        row.classificationName ?? "",
-        row.siteKey,
-        row.siteName,
-        row.orderType,
-        row.workgroupKey ?? "",
-        row.workgroupName ?? "",
-        row.createdBy,
-        row.updatedBy,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [orders, searchTerm]);
-
   const filteredDocuments = useMemo(() => {
     const q = documentsSearchTerm.trim().toLowerCase();
     if (!q) return documents;
@@ -512,43 +566,138 @@ export function WorkOrdersPage() {
     [loading, orders.length],
   );
 
-  const tableRows = preloadRows.length > 0 ? preloadRows : filteredOrders;
+  const tableRows = preloadRows.length > 0 ? preloadRows : orders;
 
   useEffect(() => {
-    setHeaderRowCount(filteredOrders.length);
+    setHeaderRowCount(orders.length);
     return () => {
       setHeaderRowCount(null);
     };
-  }, [filteredOrders.length, setHeaderRowCount]);
+  }, [orders.length, setHeaderRowCount]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 350);
+    return () => window.clearTimeout(id);
+  }, [searchTerm]);
   const isPreloadMode = preloadRows.length > 0;
+
+  const loadSearchPresets = useCallback(async () => {
+    try {
+      const rows = await fetchWorkOrderSearchPresets();
+      setSearchPresets(rows);
+    } catch {
+      setSearchPresets([]);
+    }
+  }, []);
+
+  const bootstrapSearchPresets = useCallback(async () => {
+    try {
+      const [rows, defaults] = await Promise.all([fetchWorkOrderSearchPresets(), fetchWorkOrderSearchPresetDefaults()]);
+      setSearchPresets(rows);
+      const defaultId = defaults.workOrdersPresetId;
+      const match = defaultId ? rows.find((p) => isSamePresetId(p.id, defaultId)) : undefined;
+      if (match) {
+        const d = await fetchWorkOrderSearchPresetDetail(match.id);
+        const q = d.payload.quickSearch ?? "";
+        setSearchTerm(q);
+        setDebouncedSearch(q.trim());
+        setAppliedAdvanced({ ...d.payload.advanced });
+        setPanelDraft({ ...d.payload.advanced });
+        setHeaderPresetSelectionId(match.id);
+      }
+    } catch {
+      setSearchPresets([]);
+    } finally {
+      setSearchBootstrapDone(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void bootstrapSearchPresets();
+  }, [bootstrapSearchPresets]);
+
+  useEffect(() => {
+    if (
+      headerPresetSelectionId &&
+      !searchPresets.some((p) => isSamePresetId(p.id, headerPresetSelectionId))
+    ) {
+      setHeaderPresetSelectionId(null);
+    }
+  }, [headerPresetSelectionId, searchPresets]);
+
+  const applyHeaderSearchPreset = useCallback(
+    async (presetId: string | null) => {
+      if (!presetId) {
+        setHeaderPresetSelectionId(null);
+        return;
+      }
+      try {
+        const d = await fetchWorkOrderSearchPresetDetail(presetId);
+        const q = d.payload.quickSearch ?? "";
+        setSearchTerm(q);
+        setDebouncedSearch(q.trim());
+        setAppliedAdvanced({ ...d.payload.advanced });
+        setPanelDraft({ ...d.payload.advanced });
+        setHeaderPresetSelectionId(presetId);
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("workOrders.searchPresets.applyError"),
+          life: 6000,
+        });
+      }
+    },
+    [t],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes] = await Promise.all([
-        apiFetch("/api/work-orders"),
+      const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
+      const ordersPath = qs ? `/api/work-orders?${qs}` : "/api/work-orders";
+      const [ordersRes, assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes, sitesRes, usersRes] = await Promise.all([
+        apiFetch(ordersPath),
         apiFetch("/api/assets"),
         apiFetch("/api/cost-centers"),
         apiFetch("/api/classifications"),
         apiFetch("/api/employees"),
         apiFetch("/api/workgroups"),
+        apiFetch("/api/sites"),
+        apiFetch("/api/users"),
       ]);
-      if (!ordersRes.ok || !assetsRes.ok || !costCentersRes.ok || !classificationsRes.ok || !employeesRes.ok || !workgroupsRes.ok) {
+      if (
+        !ordersRes.ok ||
+        !assetsRes.ok ||
+        !costCentersRes.ok ||
+        !classificationsRes.ok ||
+        !employeesRes.ok ||
+        !workgroupsRes.ok ||
+        !sitesRes.ok ||
+        !usersRes.ok
+      ) {
         throw new Error("load");
       }
-      const [ordersData, assetsData, costCentersData, classificationsData, employeesData, workgroupsRaw] = (await Promise.all([
+      const [ordersData, assetsData, costCentersData, classificationsData, employeesData, workgroupsRaw, sitesData, usersData] = (await Promise.all([
         ordersRes.json(),
         assetsRes.json(),
         costCentersRes.json(),
         classificationsRes.json(),
         employeesRes.json(),
         workgroupsRes.json(),
-      ])) as [WorkOrder[], Asset[], CostCenter[], ClassificationListRow[], Employee[], Workgroup[]];
+        sitesRes.json(),
+        usersRes.json(),
+      ])) as [WorkOrder[], Asset[], CostCenter[], ClassificationListRow[], Employee[], Workgroup[], SiteOption[], UserDirectoryRow[]];
       setOrders(ordersData);
       setAssets(assetsData);
       setCostCenters(costCentersData);
       setClassifications(classificationsData);
       setEmployees(employeesData);
+      setSites(Array.isArray(sitesData) ? sitesData : []);
+      setDirectoryUsers(
+        Array.isArray(usersData)
+          ? usersData.map((u) => ({ id: u.id, loginName: u.loginName, name: u.name }))
+          : [],
+      );
       setWorkgroups(
         Array.isArray(workgroupsRaw)
           ? workgroupsRaw.map((wg) => ({
@@ -562,11 +711,12 @@ export function WorkOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [appliedAdvanced, debouncedSearch, t]);
 
   useEffect(() => {
+    if (!searchBootstrapDone) return;
     void loadData();
-  }, [loadData]);
+  }, [loadData, searchBootstrapDone]);
 
   useEffect(() => {
     editingIdRef.current = editingId;
@@ -1252,6 +1402,35 @@ export function WorkOrdersPage() {
             <span>{t("workOrders.delete")}</span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            className={primaryActionNavItem}
+            onClick={() => {
+              setPanelDraft(appliedAdvanced);
+              setSearchPanelVisible(true);
+            }}
+          >
+            <i className={`pi pi-filter ${primaryActionIcon}`} aria-hidden />
+            <span>{t("workOrders.searchPanel.open")}</span>
+          </button>
+        </li>
+        {searchPresets.length > 0 ? (
+          <li className="flex items-center gap-2">
+            <span className="hidden text-xs text-on-surface-variant lg:inline">{t("workOrders.searchPresets.headerLabel")}</span>
+            <Dropdown
+              value={headerPresetSelectionId}
+              options={headerPresetDropdownOptions}
+              optionLabel="label"
+              optionValue="value"
+              placeholder={t("workOrders.searchPresets.placeholder")}
+              showClear
+              onChange={(e) => void applyHeaderSearchPreset((e.value as string | null) ?? null)}
+              className="h-9 w-48 min-w-[11rem] text-sm"
+              appendTo={overlayAppendTo}
+            />
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
@@ -1268,7 +1447,20 @@ export function WorkOrdersPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedOrder, setHeaderActions, t]);
+  }, [
+    appliedAdvanced,
+    applyHeaderSearchPreset,
+    confirmDelete,
+    headerPresetDropdownOptions,
+    headerPresetSelectionId,
+    openCreate,
+    openEdit,
+    searchPresets.length,
+    searchTerm,
+    selectedOrder,
+    setHeaderActions,
+    t,
+  ]);
 
   const formatShortDt = useCallback(
     (iso: string) => {
@@ -1697,6 +1889,9 @@ export function WorkOrdersPage() {
   }, [editingId, editingOrder, openFeedbackTab, pauseOrder, startOrder, t]);
 
   const isFeedbackTab = activeTabIndex === orderDialogTabs.Feedback;
+  const documentsTabCount = (editingId ? documents.length : 0) + pendingFiles.length;
+  const assignmentsTabCount = assignments.length + assignmentEmployeeIds.length;
+  const feedbackTabCount = Number(Boolean(feedbackHours.trim() || feedbackRemark.trim() || feedbackCompleteOrder));
 
   const dialogFooter = useMemo(
     () => (
@@ -1725,6 +1920,42 @@ export function WorkOrdersPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
+      <WorkOrderSearchPanel
+        visible={searchPanelVisible}
+        onHide={() => setSearchPanelVisible(false)}
+        value={panelDraft}
+        onChange={setPanelDraft}
+        onApply={() => {
+          setAppliedAdvanced(panelDraft);
+          setSearchPanelVisible(false);
+        }}
+        onReset={() => {
+          setAppliedAdvanced(emptyWorkOrderAdvancedSearch());
+          setPanelDraft(emptyWorkOrderAdvancedSearch());
+        }}
+        siteOptions={searchSiteOptions}
+        assetOptions={searchAssetOptions}
+        costCenterOptions={searchCostCenterOptions}
+        classificationOptions={searchClassificationOptions}
+        workgroupOptions={searchWorkgroupOptions}
+        employeeOptions={searchEmployeeOptions}
+        userOptions={searchUserOptions}
+        typeOrder={typeOrder}
+        typeLabel={(code) => typeLabel(code as WorkOrderType)}
+        statusLabel={(code) => statusLabel(code as WorkOrderStatus)}
+        calendarDateFormat={calendarDateFormat}
+        quickSearchForSave={searchTerm}
+        appliedSearchForSave={appliedAdvanced}
+        onSaveSearchPreset={async (name, payload) => {
+          await createWorkOrderSearchPreset(name, payload);
+          toastRef.current?.show({
+            severity: "success",
+            summary: t("workOrders.searchPresets.saveSuccess"),
+            life: 4000,
+          });
+          await loadSearchPresets();
+        }}
+      />
       <ConfirmDialog />
       {!isPreloadMode ? tableCtx.ContextMenuEl : null}
 
@@ -2032,7 +2263,7 @@ export function WorkOrdersPage() {
           </div>
         </div>
             </TabPanel>
-            <TabPanel header={t("workOrders.tabPlandaten")}>
+            <TabPanel header={`${t("workOrders.tabPlandaten")} [${assignmentsTabCount}]`}>
               <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2" style={{ margin: 0, display: "grid" }}>
                 <div
                   className="grid w-full max-w-full grid-cols-1 gap-4 overflow-hidden md:col-span-2 md:grid-cols-3"
@@ -2209,7 +2440,7 @@ export function WorkOrdersPage() {
                 </div>
               </div>
             </TabPanel>
-            <TabPanel header={t("workOrders.tabDocuments")}>
+            <TabPanel header={`${t("workOrders.tabDocuments")} [${documentsTabCount}]`}>
               <div className="space-y-4 pt-1">
                 <div className="grid grid-cols-[8fr_2fr] items-stretch gap-2">
                   <Button
@@ -2356,7 +2587,10 @@ export function WorkOrdersPage() {
                 )}
               </div>
             </TabPanel>
-            <TabPanel header={t("workOrders.tabFeedback")} disabled={!editingId || !workOrderStatusAllowsFeedback(editingOrder?.status)}>
+            <TabPanel
+              header={`${t("workOrders.tabFeedback")} [${feedbackTabCount}]`}
+              disabled={!editingId || !workOrderStatusAllowsFeedback(editingOrder?.status)}
+            >
               <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6">
                 <div className="space-y-2 md:col-span-2">
                   <label htmlFor="order-feedback-hours" className="block text-[11px] text-outline uppercase tracking-[0.1em]">

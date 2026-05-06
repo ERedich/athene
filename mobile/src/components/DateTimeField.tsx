@@ -10,6 +10,8 @@ import {
   type TextInputProps,
 } from "react-native";
 
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
+
 import { useAppTheme } from "../theme/AppThemeContext";
 
 type Props = {
@@ -46,7 +48,8 @@ function toWebInputValue(value: Date | null): string {
 }
 
 export function DateTimeField({ label, value, onChange, locale, placeholder }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const [androidStep, setAndroidStep] = useState<"date" | "time" | null>(null);
   const [androidDraft, setAndroidDraft] = useState<Date | null>(null);
   const [iosOpen, setIosOpen] = useState(false);
@@ -131,7 +134,8 @@ export function DateTimeField({ label, value, onChange, locale, placeholder }: P
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
       <Pressable
-        style={styles.btn}
+        {...androidRippleProps(ripple)}
+        style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
         onPress={() => {
           if (Platform.OS === "android") {
             setAndroidStep("date");

@@ -1,7 +1,7 @@
 import { useNavigation } from "expo-router";
 import { useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "../../src/theme/AppThemeContext";
 

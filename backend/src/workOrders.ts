@@ -10,6 +10,7 @@ import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
+import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
 type WorkOrderStatus =
@@ -536,13 +537,20 @@ router.get("/", async (req: Request, res: Response) => {
     return;
   }
   try {
+    const built = await buildWorkOrderListFilters(req.query, userId, pool);
+    if (!built.ok) {
+      res.status(built.status).json({ error: built.error });
+      return;
+    }
+    const extraWhere = built.conditions.length ? ` AND ${built.conditions.join(" AND ")}` : "";
     const { rows } = await pool.query<WorkOrderRow>(
       `
       ${selectWorkOrdersSql}
       WHERE ${siteAccessSql('w."siteId"', "$1")}
+      ${extraWhere}
       ORDER BY w."orderNumber" DESC
       `,
-      [userId],
+      [userId, ...built.params],
     );
     res.json(rows);
   } catch (err) {

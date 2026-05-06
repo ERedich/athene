@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import type { AssetRow } from "../types/api";
 import { useAppTheme } from "../theme/AppThemeContext";
 
@@ -15,7 +16,8 @@ type Props = {
 };
 
 export function AssetPicker({ assets, value, onChange, label, placeholder }: Props) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const ripple = surfaceRippleColor(isDark);
   const [open, setOpen] = useState(false);
 
   const items: SelectItem[] = useMemo(
@@ -46,7 +48,11 @@ export function AssetPicker({ assets, value, onChange, label, placeholder }: Pro
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable onPress={() => setOpen(true)} style={styles.btn}>
+      <Pressable
+        {...androidRippleProps(ripple)}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+      >
         <Text style={styles.btnText} numberOfLines={1}>
           {summary}
         </Text>
