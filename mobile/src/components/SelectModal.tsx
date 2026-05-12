@@ -2,11 +2,12 @@ import { useMemo } from "react";
 import {
   FlatList,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
@@ -77,7 +78,7 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
             data={items}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <Pressable
+              <HapticPressable
                 {...androidRippleProps(ripple)}
                 style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                 onPress={() => {
@@ -86,16 +87,16 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
                 }}
               >
                 <Text style={styles.rowText}>{item.label}</Text>
-              </Pressable>
+              </HapticPressable>
             )}
           />
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             onPress={onClose}
           >
             <Text style={styles.cancelText}>OK</Text>
-          </Pressable>
+          </HapticPressable>
         </View>
       </View>
     </Modal>

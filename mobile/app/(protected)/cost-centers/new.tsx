@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -15,6 +14,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../../src/auth/AuthContext";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 import { SitePicker } from "../../../src/components/SitePicker";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../../src/lib/appParameterKeys";
 import { postCostCenter, queryKeys, useCostCentersQuery, useSitesQuery } from "../../../src/hooks/queries";
@@ -154,14 +154,14 @@ export default function CostCenterNewScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable
+        <HapticPressable
           {...androidRippleProps(btnRipple)}
           style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => router.back()}
         >
           <Text style={styles.secondaryText}>{t("costCenters.cancel")}</Text>
-        </Pressable>
-        <Pressable
+        </HapticPressable>
+        <HapticPressable
           {...androidRippleProps(btnRipple)}
           style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => void onSave()}
@@ -172,7 +172,7 @@ export default function CostCenterNewScreen() {
           ) : (
             <Text style={styles.primaryText}>{t("costCenters.save")}</Text>
           )}
-        </Pressable>
+        </HapticPressable>
       </View>
     </ScrollView>
   );

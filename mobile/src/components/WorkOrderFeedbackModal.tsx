@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import { pressedOpacity, PRESSED_OPACITY_CONTROL } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
@@ -165,12 +167,12 @@ export function WorkOrderFeedbackModal({ visible, saving, onSubmit, onClose }: P
           </View>
 
           <View style={styles.actions}>
-            <Pressable disabled={saving} onPress={close} style={({ pressed }) => [styles.btnSecondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}>
+            <HapticPressable disabled={saving} onPress={close} style={({ pressed }) => [styles.btnSecondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}>
               <Text style={styles.btnSecondaryText}>{t("workOrders.cancel")}</Text>
-            </Pressable>
-            <Pressable disabled={saving} onPress={() => void submit()} style={({ pressed }) => [styles.btnPrimary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}>
+            </HapticPressable>
+            <HapticPressable disabled={saving} onPress={() => void submit()} style={({ pressed }) => [styles.btnPrimary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}>
               {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnPrimaryText}>{t("workOrders.save")}</Text>}
-            </Pressable>
+            </HapticPressable>
           </View>
         </View>
       </View>

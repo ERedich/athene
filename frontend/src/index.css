@@ -39,6 +39,9 @@
   --focus-ring: 0 0 0 0.2rem rgb(249 115 22 / 0.35);
   --highlight-bg: rgb(249 115 22 / 0.14);
   --highlight-text-color: #fdba74;
+
+  /* Toolbar: Quicksearch (`rounded-sm`) + Suchkonfig-Dropdown — eine gemeinsame Rundung */
+  --app-header-toolbar-radius: 0.125rem;
 }
 
 :root[data-theme="light"] {
@@ -77,6 +80,8 @@
   --focus-ring: 0 0 0 0.2rem rgb(249 115 22 / 0.2);
   --highlight-bg: rgb(249 115 22 / 0.1);
   --highlight-text-color: #c2410c;
+
+  --app-header-toolbar-radius: 0.125rem;
 }
 
 /* Asset type (Standort / Struktur / Linie / IO): icon colors from theme tokens only. */
@@ -276,6 +281,51 @@ html.theme-crossfade-fallback #root {
   backdrop-filter: blur(24px);
 }
 
+/* Work-order advanced search Sidebar: frosted glass nur auf der Panel-Fläche (modal=false → kein Overlay) */
+.app-wo-search-sidebar.p-sidebar {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-high) 38%,
+    transparent
+  ) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-left: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  box-shadow: -18px 0 52px color-mix(in srgb, #000 42%, transparent);
+}
+
+[data-theme="light"] .app-wo-search-sidebar.p-sidebar {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 46%,
+    transparent
+  ) !important;
+  box-shadow: -14px 0 44px color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+}
+
+.app-wo-search-sidebar-header.p-sidebar-header {
+  background: transparent !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-wo-search-sidebar-content.p-sidebar-content {
+  background: transparent !important;
+}
+
+.app-wo-search-sidebar-footer {
+  background: color-mix(in srgb, var(--color-surface-container) 34%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+[data-theme="light"] .app-wo-search-sidebar-footer {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 50%,
+    transparent
+  );
+}
+
 [data-theme="light"] .professional-panel {
   background: rgba(255, 255, 255, 0.94);
   background: color-mix(
@@ -373,6 +423,7 @@ html.theme-crossfade-fallback #root {
   padding-right: 0.75rem !important;
   padding-top: 0.5rem !important;
   padding-bottom: 0.5rem !important;
+  border-radius: var(--app-header-toolbar-radius, 0.125rem) !important;
 }
 
 .p-dropdown:not(.p-disabled).p-focus,
@@ -1282,6 +1333,60 @@ html.theme-crossfade-fallback #root {
   color: var(--color-on-surface-variant) !important;
 }
 
+/* Toolbar Suchkonfig: Prime Dropdown — clip corners; label ohne eigenes rounding/bg (vermeidet dunkle überstehende Ecken); text-sm wie Quicksearch */
+.app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown {
+  border-radius: var(--app-header-toolbar-radius, 0.125rem) !important;
+  overflow: hidden !important;
+}
+
+.app-header-preset-dropdown-panel.p-dropdown-panel {
+  border-radius: var(--app-header-toolbar-radius, 0.125rem) !important;
+  overflow: hidden !important;
+}
+
+.app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown .p-dropdown-label {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown .p-dropdown-label.p-placeholder {
+  color: var(--color-on-surface-variant) !important;
+}
+
+.app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown:has(.p-dropdown-clear-icon)
+  .p-dropdown-label {
+  padding-right: 4.75rem !important;
+}
+
+[data-theme="light"] .app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown {
+  background: var(--color-surface-container-low) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-outline) 45%,
+    transparent
+  ) !important;
+}
+
+[data-theme="dark"] .app-header-preset-dropdown.app-inline-icon-dropdown.p-dropdown {
+  background: color-mix(
+    in srgb,
+    var(--color-surface-container-lowest) 65%,
+    transparent
+  ) !important;
+  border-color: color-mix(in srgb, var(--color-outline) 55%, transparent) !important;
+}
+
+.app-header-preset-dropdown-panel.p-dropdown-panel .p-dropdown-item {
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+}
+
 .app-inline-icon-multiselect .p-multiselect-trigger {
   position: absolute !important;
   top: 0 !important;
@@ -1352,6 +1457,20 @@ html.theme-crossfade-fallback #root {
     var(--color-on-surface) 12%,
     transparent
   ) !important;
+}
+
+/* Monitoring / Aufträge: Raster und Dialog-Kartenrahmen zurückhaltender als Standard-Tabelle */
+.app-work-orders-data-grid.app-data-table .p-datatable-thead > tr > th,
+.app-work-orders-data-grid.app-data-table .p-datatable-tbody > tr > td {
+  border-color: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+}
+
+.app-work-orders-data-grid.p-datatable .p-datatable-thead > tr > th {
+  border-color: color-mix(in srgb, var(--color-on-surface) 6%, transparent) !important;
+}
+
+.app-wo-detail-outline-border {
+  border-color: color-mix(in srgb, var(--color-on-surface) 7%, transparent);
 }
 
 .app-data-table .p-datatable-thead > tr > th:last-child,

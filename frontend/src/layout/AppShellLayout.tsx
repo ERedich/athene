@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
 import { apiFetch } from "../lib/api";
@@ -148,6 +149,7 @@ export function AppShellLayout() {
   const [headerRowCount, setHeaderRowCount] = useState<number | null>(null);
   const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
   const { isCompact, toggleDensity } = useTableDensity();
+  const athene = useAtheneAssistant();
   const [collapsed, setCollapsed] = useState<boolean>(() =>
     readInitialCollapsed(),
   );
@@ -294,6 +296,19 @@ export function AppShellLayout() {
               <span className={isCompact ? "text-xs" : "text-base"} aria-hidden>
                 Aa
               </span>
+            </button>
+            <button
+              type="button"
+              className={`${toggleBtn} font-semibold`}
+              aria-label={t("assistant.open")}
+              title={t("assistant.open")}
+              onClick={athene.open}
+            >
+              {athene.busy ? (
+                <i className="pi pi-spinner pi-spin text-lg" aria-hidden />
+              ) : (
+                <i className="pi pi-star text-lg" aria-hidden />
+              )}
             </button>
             <Button
               type="button"

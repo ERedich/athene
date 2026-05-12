@@ -8,7 +8,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +16,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../auth/AuthContext";
+import { HapticPressable } from "../../components/HapticPressable";
 import { pressedOpacity, PRESSED_OPACITY_CONTROL, PRESSED_OPACITY_STRONG } from "../../styles/pressableFeedback";
 import { getLoginTokens, loginEffects, type LoginScheme } from "./loginDesign";
 
@@ -79,21 +79,21 @@ export function LoginScreen() {
             Ref_001 // Core_System
           </Text>
           <View style={styles.topActions}>
-            <Pressable
+            <HapticPressable
               onPress={() => setScheme(isLight ? "dark" : "light")}
               style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               accessibilityLabel={isLight ? t("login.themeDark") : t("login.themeLight")}
             >
               <MaterialIcons name={isLight ? "dark-mode" : "light-mode"} size={22} color={onSurface} />
-            </Pressable>
-            <Pressable
+            </HapticPressable>
+            <HapticPressable
               onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
               style={({ pressed }) => [styles.langBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             >
               <Text style={[styles.langText, { color: onSurface, fontFamily: tokens.fonts.label }]}>
                 {activeLang === "de" ? "DE" : "EN"}
               </Text>
-            </Pressable>
+            </HapticPressable>
           </View>
         </View>
 
@@ -194,7 +194,7 @@ export function LoginScreen() {
                 </View>
               </View>
 
-              <Pressable
+              <HapticPressable
                 onPress={() => setRemember(!remember)}
                 style={({ pressed }) => [styles.rememberRow, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               >
@@ -212,7 +212,7 @@ export function LoginScreen() {
                 <Text style={{ color: outline, fontFamily: tokens.fonts.label, fontSize: 11, opacity: 0.85 }}>
                   {t("login.remember")}
                 </Text>
-              </Pressable>
+              </HapticPressable>
 
               {error ? (
                 <View style={[styles.errorBox, { borderColor: tokens.colors.error }]}>
@@ -221,7 +221,7 @@ export function LoginScreen() {
               ) : null}
 
               {isLight ? (
-                <Pressable
+                <HapticPressable
                   disabled={submitting}
                   onPress={() => void onSubmit()}
                   style={({ pressed }) => [pressedOpacity(pressed, PRESSED_OPACITY_STRONG)]}
@@ -243,9 +243,9 @@ export function LoginScreen() {
                       </>
                     )}
                   </LinearGradient>
-                </Pressable>
+                </HapticPressable>
               ) : (
-                <Pressable
+                <HapticPressable
                   disabled={submitting}
                   onPress={() => void onSubmit()}
                   style={({ pressed }) => [
@@ -264,7 +264,7 @@ export function LoginScreen() {
                       <MaterialIcons name="arrow-forward-ios" size={18} color="#000" />
                     </>
                   )}
-                </Pressable>
+                </HapticPressable>
               )}
             </View>
           </View>

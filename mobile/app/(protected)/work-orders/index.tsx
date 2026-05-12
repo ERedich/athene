@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -17,8 +16,10 @@ import {
 import PagerView from "react-native-pager-view";
 
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 import { WorkOrderActionsSheet } from "../../../src/components/WorkOrderActionsSheet";
 import { WorkOrderFeedbackModal } from "../../../src/components/WorkOrderFeedbackModal";
+import { useAtheneAssistant } from "../../../src/assistant/AtheneAssistantContext";
 import {
   WorkOrderActionError,
   postWorkOrderFeedback,
@@ -91,13 +92,13 @@ function WorkOrdersAllTabPage({
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-        <Pressable
+        <HapticPressable
           onPress={() => void refetch()}
           {...androidRippleProps(rowRipple, true)}
           style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     );
   }
@@ -122,7 +123,7 @@ function WorkOrdersAllTabPage({
       contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
       renderItem={({ item }) => (
         <View style={styles.row}>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(rowRipple)}
             style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
             onLongPress={() => openActions(item)}
@@ -170,22 +171,22 @@ function WorkOrdersAllTabPage({
                 )}
               </Text>
             </View>
-          </Pressable>
+          </HapticPressable>
           <View style={styles.rowActionSide}>
-            <Pressable
+            <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => openActions(item)}
             >
               <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
-            </Pressable>
-            <Pressable
+            </HapticPressable>
+            <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
             >
               <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
-            </Pressable>
+            </HapticPressable>
           </View>
         </View>
       )}
@@ -258,13 +259,13 @@ function WorkOrdersPresetPage({
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-        <Pressable
+        <HapticPressable
           onPress={() => void refetch()}
           {...androidRippleProps(rowRipple, true)}
           style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     );
   }
@@ -290,7 +291,7 @@ function WorkOrdersPresetPage({
       contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
       renderItem={({ item }) => (
         <View style={styles.row}>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(rowRipple)}
             style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
             onLongPress={() => openActions(item)}
@@ -338,22 +339,22 @@ function WorkOrdersPresetPage({
                 )}
               </Text>
             </View>
-          </Pressable>
+          </HapticPressable>
           <View style={styles.rowActionSide}>
-            <Pressable
+            <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => openActions(item)}
             >
               <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
-            </Pressable>
-            <Pressable
+            </HapticPressable>
+            <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
             >
               <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
-            </Pressable>
+            </HapticPressable>
           </View>
         </View>
       )}
@@ -462,6 +463,7 @@ export default function WorkOrdersListScreen() {
   const navigation = useNavigation();
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
+  const athene = useAtheneAssistant();
   const rowRipple = surfaceRippleColor(isDark);
   const [q, setQ] = useState("");
   const [activePresetIndex, setActivePresetIndex] = useState(0);
@@ -626,7 +628,7 @@ export default function WorkOrdersListScreen() {
         <ShellHeaderActions
           extra={
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Pressable
+              <HapticPressable
                 onPress={() => void refreshFromHeader()}
                 {...androidRippleProps(rowRipple, true)}
                 style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
@@ -638,15 +640,15 @@ export default function WorkOrdersListScreen() {
                 ) : (
                   <MaterialIcons name="refresh" size={20} color={colors.primary} />
                 )}
-              </Pressable>
-              <Pressable
+              </HapticPressable>
+              <HapticPressable
                 onPress={() => router.push("/work-orders/new")}
                 {...androidRippleProps(rowRipple, true)}
                 style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               >
                 <MaterialIcons name="add" size={22} color={colors.primary} />
                 <Text style={styles.newBtnText}>{t("workOrders.new")}</Text>
-              </Pressable>
+              </HapticPressable>
             </View>
           }
         />
@@ -781,13 +783,13 @@ export default function WorkOrdersListScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("workOrders.presetsLoadError")}</Text>
-        <Pressable
+        <HapticPressable
           onPress={() => void bootstrap.refetch()}
           {...androidRippleProps(rowRipple, true)}
           style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     );
   }
@@ -805,13 +807,13 @@ export default function WorkOrdersListScreen() {
       return (
         <View style={styles.center}>
           <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-          <Pressable
+          <HapticPressable
             onPress={() => void refetchAll()}
             {...androidRippleProps(rowRipple, true)}
             style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           >
             <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
+          </HapticPressable>
         </View>
       );
     }
@@ -883,7 +885,7 @@ export default function WorkOrdersListScreen() {
           contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
           renderItem={({ item }) => (
             <View style={styles.row}>
-              <Pressable
+              <HapticPressable
                 {...androidRippleProps(rowRipple)}
                 style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
                 onLongPress={() => openActions(item)}
@@ -931,22 +933,22 @@ export default function WorkOrdersListScreen() {
                     )}
                   </Text>
                 </View>
-              </Pressable>
+              </HapticPressable>
               <View style={styles.rowActionSide}>
-                <Pressable
+                <HapticPressable
                   {...androidRippleProps(rowRipple, true)}
                   style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => openActions(item)}
                 >
                   <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
-                </Pressable>
-                <Pressable
+                </HapticPressable>
+                <HapticPressable
                   {...androidRippleProps(rowRipple, true)}
                   style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
                 >
                   <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
-                </Pressable>
+                </HapticPressable>
               </View>
             </View>
           )}
@@ -956,6 +958,24 @@ export default function WorkOrdersListScreen() {
         visible={actionsOpen}
         status={selectedOrder?.status ?? null}
         onClose={() => setActionsOpen(false)}
+        atheneBusy={athene.busy}
+        onAskAthene={() => {
+          if (!selectedOrder) return;
+          athene.openWithContext({
+            type: "workOrder",
+            id: selectedOrder.id,
+            label: `#${selectedOrder.orderNumber} - ${selectedOrder.name}`,
+            data: {
+              orderNumber: selectedOrder.orderNumber,
+              name: selectedOrder.name,
+              status: selectedOrder.status,
+              siteId: selectedOrder.siteId,
+              siteKey: selectedOrder.siteKey,
+              assetId: selectedOrder.assetId,
+              assetKey: selectedOrder.assetKey,
+            },
+          });
+        }}
         onStart={() => {
           if (!selectedOrder || !canStartWorkOrder(selectedOrder.status)) return;
           void startOrder(selectedOrder);

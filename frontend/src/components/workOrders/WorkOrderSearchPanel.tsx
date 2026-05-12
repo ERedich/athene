@@ -56,6 +56,7 @@ type WorkOrderSearchPanelProps = {
   quickSearchForSave?: string;
   appliedSearchForSave?: WorkOrderAdvancedSearchState;
   onSaveSearchPreset?: (name: string, payload: WorkOrderSearchPresetPayloadV1) => Promise<void>;
+  cleverSearchEnabled?: boolean;
 };
 
 function RangeText({
@@ -165,6 +166,7 @@ export function WorkOrderSearchPanel({
   quickSearchForSave = "",
   appliedSearchForSave,
   onSaveSearchPreset,
+  cleverSearchEnabled = false,
 }: WorkOrderSearchPanelProps) {
   const { t } = useTranslation();
   const patch = (partial: Partial<WorkOrderAdvancedSearchState>) => {
@@ -198,7 +200,8 @@ export function WorkOrderSearchPanel({
 
   const appliedForSave = appliedSearchForSave ?? emptyWorkOrderAdvancedSearch();
 
-  const section = "rounded-sm border border-outline/40 bg-surface-50/80 p-3 dark:bg-surface-900/40";
+  const section =
+    "rounded-sm border border-solid app-wo-detail-outline-border bg-surface-50/80 p-3 dark:bg-surface-900/40";
   const sectionTitle = "mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-variant";
 
   const saveFooter = (
@@ -245,12 +248,15 @@ export function WorkOrderSearchPanel({
       visible={visible}
       position="right"
       onHide={onHide}
-      className="!w-[min(60vw,100vw)] max-w-none"
-      blockScroll
+      modal={false}
+      closeOnEscape={!cleverSearchEnabled}
+      dismissable={!cleverSearchEnabled}
+      className="app-wo-search-sidebar !w-[min(60vw,100vw)] max-w-none"
       appendTo={typeof document !== "undefined" ? document.body : undefined}
       header={t("workOrders.searchPanel.title")}
       pt={{
-        content: { className: "flex min-h-0 flex-1 flex-col p-0" },
+        header: { className: "app-wo-search-sidebar-header" },
+        content: { className: "app-wo-search-sidebar-content flex min-h-0 flex-1 flex-col p-0" },
       }}
     >
       <form
@@ -537,7 +543,7 @@ export function WorkOrderSearchPanel({
           </div>
         </div>
 
-        <div className="sticky bottom-0 z-[1] flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-outline/40 bg-[var(--surface-ground)] px-3 py-3">
+        <div className="app-wo-search-sidebar-footer sticky bottom-0 z-[1] flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-solid app-wo-detail-outline-border px-3 py-3">
           <Button
             type="button"
             label={t("workOrders.searchPanel.reset")}

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
-import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
@@ -29,9 +29,18 @@ export type TransactionRow = {
   remark: string | null;
 };
 
-type SiteOption = { id: string; key: string; name: string };
+const typeLabelKey: Record<string, string> = {
+  IN: "transactions.typeIN",
+  EX: "transactions.typeEX",
+  RM: "transactions.typeRM",
+  RT: "transactions.typeRT",
+  IV: "transactions.typeIV",
+};
 
-const TX_TYPES = ["IN", "EX", "RM", "RT", "IV"] as const;
+const actionNavItem =
+  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
+const deleteActionIcon = "text-red-500";
 
 function typeBadgeClass(type: string): string {
   switch (type) {
@@ -59,49 +68,10 @@ export function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(25);
-
-  const [filterType, setFilterType] = useState<string | null>(null);
-  const [filterSiteId, setFilterSiteId] = useState<string | null>(null);
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-
-  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedRow, setSelectedRow] = useState<TransactionRow | null>(null);
   const [detail, setDetail] = useState<TransactionRow | null>(null);
-
-  const typeLabelKey = useMemo(
-    () =>
-      ({
-        IN: "transactions.typeIN",
-        EX: "transactions.typeEX",
-        RM: "transactions.typeRM",
-        RT: "transactions.typeRT",
-        IV: "transactions.typeIV",
-      }) as Record<string, string>,
-    [],
-  );
-
-  const typeOptions = useMemo(
-    () => [
-      { label: t("transactions.typeAll"), value: null },
-      ...TX_TYPES.map((code) => ({
-        label: t(typeLabelKey[code] ?? code),
-        value: code,
-      })),
-    ],
-    [t, typeLabelKey],
-  );
-
-  const siteOptions = useMemo(
-    () => [
-      { label: t("transactions.filterSiteAll"), value: null },
-      ...sites.map((s) => ({
-        label: `${s.key} — ${s.name}`,
-        value: s.id,
-      })),
-    ],
-    [sites, t],
-  );
 
   useEffect(() => {
     setHeaderRowCount(total);
@@ -111,46 +81,19 @@ export function TransactionsPage() {
   }, [setHeaderRowCount, total]);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const res = await apiFetch(apiUrl("/api/sites"));
-        if (!res.ok) return;
-        const data = (await res.json()) as SiteOption[];
-        setSites(Array.isArray(data) ? data : []);
-      } catch {
-        /* ignore; filters still work without site list */
-      }
-    })();
-  }, []);
-
-  const filteredRows = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      [
-        row.transactionNumber,
-        row.siteKey,
-        row.siteName,
-        row.type,
-        row.workOrderOrderNumber ?? "",
-        row.remark ?? "",
-        row.quantity,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [rows, searchTerm]);
+    const id = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(0);
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [searchTerm]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set("page", String(page + 1));
     params.set("limit", String(limit));
-    if (filterType) params.set("type", filterType);
-    if (filterSiteId) params.set("siteId", filterSiteId);
-    if (filterFrom.trim()) params.set("from", filterFrom.trim());
-    if (filterTo.trim()) params.set("to", filterTo.trim());
+    if (debouncedSearch) params.set("search", debouncedSearch);
     try {
       const res = await apiFetch(apiUrl(`/api/transactions?${params.toString()}`));
       if (!res.ok) throw new Error("load");
@@ -169,15 +112,62 @@ export function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, filterType, filterSiteId, filterFrom, filterTo, t]);
+  }, [debouncedSearch, page, limit, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const deleteRow = useCallback(
+    async (id: string) => {
+      try {
+        const res = await apiFetch(apiUrl(`/api/transactions/${id}`), { method: "DELETE" });
+        if (res.status === 204) {
+          setSelectedRow((cur) => (cur?.id === id ? null : cur));
+          setDetail((cur) => (cur?.id === id ? null : cur));
+          await load();
+          toastRef.current?.show({ severity: "success", summary: t("transactions.deleted"), life: 3000 });
+          return;
+        }
+        toastRef.current?.show({ severity: "error", summary: t("transactions.deleteError"), life: 6000 });
+      } catch {
+        toastRef.current?.show({ severity: "error", summary: t("transactions.deleteError"), life: 6000 });
+      }
+    },
+    [load, t],
+  );
+
+  const confirmDelete = useCallback(
+    (row: TransactionRow) => {
+      confirmDialog({
+        message: t("transactions.confirmDelete", { transactionNumber: row.transactionNumber }),
+        header: t("transactions.confirmDeleteTitle"),
+        icon: "pi pi-exclamation-triangle",
+        acceptClassName: "p-button-danger",
+        acceptLabel: t("transactions.yes"),
+        rejectLabel: t("transactions.no"),
+        accept: () => void deleteRow(row.id),
+      });
+    },
+    [deleteRow, t],
+  );
+
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
+        <li>
+          <button
+            type="button"
+            className={deleteActionNavItem}
+            disabled={!selectedRow}
+            onClick={() => {
+              if (selectedRow) confirmDelete(selectedRow);
+            }}
+          >
+            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <span>{t("transactions.delete")}</span>
+          </button>
+        </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
             <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
@@ -194,7 +184,7 @@ export function TransactionsPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [searchTerm, setHeaderActions, t]);
+  }, [confirmDelete, searchTerm, selectedRow, setHeaderActions, t]);
 
   const onPageChange = (e: PaginatorPageChangeEvent) => {
     if (e.rows !== limit) {
@@ -255,80 +245,18 @@ export function TransactionsPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
-      <p className="m-0 text-sm text-on-surface-variant">{t("transactions.intro")}</p>
-
-      <div className="flex flex-wrap items-end gap-3 rounded-sm border border-white/10 bg-surface-container-low p-3">
-        <div className="space-y-1">
-          <span className="block text-[10px] uppercase tracking-wider text-outline">{t("transactions.filterType")}</span>
-          <Dropdown
-            value={filterType}
-            options={typeOptions}
-            onChange={(e) => {
-              setFilterType(e.value as string | null);
-              setPage(0);
-            }}
-            className="min-w-[14rem] text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <span className="block text-[10px] uppercase tracking-wider text-outline">{t("transactions.filterSite")}</span>
-          <Dropdown
-            value={filterSiteId}
-            options={siteOptions}
-            onChange={(e) => {
-              setFilterSiteId(e.value as string | null);
-              setPage(0);
-            }}
-            className="min-w-[14rem] text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-[10px] uppercase tracking-wider text-outline" htmlFor="tx-from">
-            {t("transactions.filterFrom")}
-          </label>
-          <InputText
-            id="tx-from"
-            value={filterFrom}
-            onChange={(e) => {
-              setFilterFrom(e.target.value);
-              setPage(0);
-            }}
-            className="text-sm"
-            placeholder="2026-01-01T00:00:00Z"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-[10px] uppercase tracking-wider text-outline" htmlFor="tx-to">
-            {t("transactions.filterTo")}
-          </label>
-          <InputText
-            id="tx-to"
-            value={filterTo}
-            onChange={(e) => {
-              setFilterTo(e.target.value);
-              setPage(0);
-            }}
-            className="text-sm"
-            placeholder="2026-12-31T23:59:59Z"
-          />
-        </div>
-        <Button
-          type="button"
-          icon="pi pi-refresh"
-          label={t("transactions.apply")}
-          outlined
-          size="small"
-          className="ml-auto"
-          onClick={() => void load()}
-        />
-      </div>
+      <ConfirmDialog />
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <DataTable
           className="app-data-table w-full"
-          value={filteredRows}
+          value={rows}
           loading={loading}
           dataKey="id"
+          selection={selectedRow}
+          onSelectionChange={(e) => setSelectedRow(e.value as TransactionRow | null)}
+          selectionMode="single"
+          metaKeySelection={false}
           stripedRows
           showGridlines
           scrollable
@@ -340,7 +268,7 @@ export function TransactionsPage() {
           stateStorage="local"
           stateKey="athene-transactions-table"
           emptyMessage={t("transactions.empty")}
-          onRowClick={(e) => setDetail(e.data as TransactionRow)}
+          onRowDoubleClick={(e) => setDetail(e.data as TransactionRow)}
           rowClassName={() => "cursor-pointer"}
         >
           <Column

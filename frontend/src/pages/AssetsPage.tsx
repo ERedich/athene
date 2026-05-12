@@ -23,6 +23,7 @@ import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
@@ -622,6 +623,7 @@ export function AssetsPage() {
     !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } =
     useOutletContext<AppShellOutletContext>();
+  const athene = useAtheneAssistant();
   const toastRef = useRef<Toast>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -1655,6 +1657,33 @@ export function AssetsPage() {
     [deleteRow, t],
   );
 
+  const atheneContextMenuItems = useCallback(
+    (row: Asset | null) => [
+      {
+        label: t("assistant.askAthene"),
+        icon: athene.busy ? "pi pi-spinner pi-spin" : "pi pi-comments",
+        disabled: !row || athene.busy,
+        command: () => {
+          if (!row) return;
+          athene.openWithContext({
+            type: "asset",
+            id: row.id,
+            label: `${row.key} - ${row.name}`,
+            data: {
+              key: row.key,
+              name: row.name,
+              siteId: row.siteId,
+              siteKey: row.siteKey,
+              type: row.type,
+              documentCount: row.documentCount,
+            },
+          });
+        },
+      },
+    ],
+    [athene, t],
+  );
+
   const tableCtx = useTableContextMenu<Asset>({
     labels: {
       new: t("assets.new"),
@@ -1668,6 +1697,7 @@ export function AssetsPage() {
     },
     selection: selectedAsset,
     setSelection: setSelectedAsset,
+    leadingItems: atheneContextMenuItems,
   });
 
   useEffect(() => {

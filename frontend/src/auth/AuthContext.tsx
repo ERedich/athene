@@ -11,6 +11,8 @@ export type AuthUser = {
   employeeId: string | null;
   employeeKey: string | null;
   employeeName: string | null;
+  siteIds: string[];
+  workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
 };
 
 export type AuthSession = {

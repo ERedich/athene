@@ -4,6 +4,7 @@ import express from "express";
 import { createServer } from "node:http";
 
 import { auditLogRouter } from "./auditLog.js";
+import { assistantRouter } from "./assistant.js";
 import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
 import { appParametersRouter } from "./appParameters.js";
 import { assetsRouter } from "./assets.js";
@@ -73,6 +74,7 @@ app.use("/api/ui-translation-overrides", requireAuth, translationsRouter);
 app.use("/api/app-parameters", requireAuth, appParametersRouter);
 app.use("/api/audit-log", requireAuth, auditLogRouter);
 app.use("/api/db-meta", requireAuth, dbMetaRouter);
+app.use("/api/assistant", requireAuth, assistantRouter);
 
 const server = createServer(app);
 const workOrdersWss = createWorkOrderWebSocketServer("/api/work-orders/events");

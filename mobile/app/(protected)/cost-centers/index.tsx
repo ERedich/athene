@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 import { useCostCentersQuery, useDeleteCostCenterMutation } from "../../../src/hooks/queries";
 import {
   androidRippleProps,
@@ -90,14 +90,14 @@ export default function CostCentersListScreen() {
       headerRight: () => (
         <ShellHeaderActions
           extra={
-            <Pressable
+            <HapticPressable
               onPress={() => router.push("/cost-centers/new")}
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             >
               <MaterialIcons name="add" size={22} color={colors.primary} />
               <Text style={styles.newBtnText}>{t("costCenters.new")}</Text>
-            </Pressable>
+            </HapticPressable>
           }
         />
       ),
@@ -128,13 +128,13 @@ export default function CostCentersListScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("costCenters.loadError")}</Text>
-        <Pressable
+        <HapticPressable
           onPress={() => void refetch()}
           {...androidRippleProps(rowRipple, true)}
           style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     );
   }
@@ -159,7 +159,7 @@ export default function CostCentersListScreen() {
         ListEmptyComponent={<Text style={styles.empty}>{t("costCenters.empty")}</Text>}
         contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
         renderItem={({ item }) => (
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(rowRipple)}
             style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
             onPress={() => router.push(`/cost-centers/${item.id}`)}
@@ -184,7 +184,7 @@ export default function CostCentersListScreen() {
               <Text style={styles.meta}>{item.isActive ? "●" : "○"}</Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={colors.outline} />
-          </Pressable>
+          </HapticPressable>
         )}
       />
     </View>

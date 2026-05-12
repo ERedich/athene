@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -16,19 +16,23 @@ import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
-import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
+import { APP_PARAM_KEY_ALLOW_SITE_CHANGE, APP_PARAM_KEY_ENABLE_CLEVER_SEARCH } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import { WorkOrderFeedbackTransactionsSection } from "../components/workOrders/WorkOrderFeedbackTransactionsSection";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
+import { mergeWorkOrderIntoAdvancedSearch } from "../lib/workOrderCleverSearch";
 import {
   buildWorkOrderListQueryString,
   emptyWorkOrderAdvancedSearch,
   hasActiveWorkOrderAdvancedSearch,
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
+import type { TransactionRow } from "./TransactionsPage";
 import {
   createWorkOrderSearchPreset,
   fetchWorkOrderSearchPresetDefaults,
@@ -79,6 +83,9 @@ type WorkOrder = {
   responsibleEmployeeId: string | null;
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
+  doneBy: string | null;
+  doneByEmployeeKey: string | null;
+  doneByEmployeeName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -208,6 +215,11 @@ function workOrderStatusAllowsFeedback(status: WorkOrderStatus | undefined): boo
   return status === "started" || status === "continued" || status === "ended";
 }
 
+/** Feedback tab visible (includes „Erledigt“ for read-only „Erledigt von“). */
+function workOrderStatusAllowsFeedbackTab(status: WorkOrderStatus | undefined): boolean {
+  return workOrderStatusAllowsFeedback(status) || status === "done";
+}
+
 const actionNavItem =
   "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
@@ -287,6 +299,7 @@ function monitoringEventsWsUrl(): string {
 
 export function MonitoringPage() {
   const { t, i18n } = useTranslation();
+  const athene = useAtheneAssistant();
   const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
@@ -334,6 +347,8 @@ export function MonitoringPage() {
   const [feedbackRemark, setFeedbackRemark] = useState("");
   const [feedbackCompleteOrder, setFeedbackCompleteOrder] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackTransactions, setFeedbackTransactions] = useState<TransactionRow[]>([]);
+  const [feedbackTransactionsLoading, setFeedbackTransactionsLoading] = useState(false);
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
@@ -343,6 +358,7 @@ export function MonitoringPage() {
   const assignmentAddingRef = useRef(false);
 
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
+  const cleverSearchEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_ENABLE_CLEVER_SEARCH]);
   const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
   const virtualScrollerOptions = useMemo(
     () => (canUseVirtual ? { itemSize: ORDERS_TABLE_VIRTUAL_ROW_PX, showLoader: true } : undefined),
@@ -353,6 +369,8 @@ export function MonitoringPage() {
   const editingIdRef = useRef<string | null>(null);
   const formRef = useRef(form);
   const orderCreateLockRef = useRef<Promise<string | null> | null>(null);
+  const selectedOrderRef = useRef<WorkOrder | null>(null);
+  selectedOrderRef.current = selectedOrder;
 
   const accessibleAssets = useMemo(
     () => assets.filter((asset) => !siteFieldLocked || asset.siteId === user.workingSiteId),
@@ -408,6 +426,11 @@ export function MonitoringPage() {
     () => directoryUsers.map((u) => ({ label: `${u.loginName} — ${u.name}`, value: u.id })),
     [directoryUsers],
   );
+
+  const userIdByLoginName = useMemo(() => {
+    const byLoginName = new Map(directoryUsers.map((u) => [u.loginName.trim().toLowerCase(), u.id]));
+    return (loginName: string) => byLoginName.get(loginName.trim().toLowerCase()) ?? null;
+  }, [directoryUsers]);
 
   const headerPresetDropdownOptions = useMemo(
     () => searchPresets.map((p) => ({ label: p.name, value: p.id })),
@@ -562,6 +585,9 @@ export function MonitoringPage() {
             responsibleEmployeeId: null,
             responsibleEmployeeKey: null,
             responsibleEmployeeName: null,
+            doneBy: null,
+            doneByEmployeeKey: null,
+            doneByEmployeeName: null,
             workgroupId: null,
             workgroupKey: null,
             workgroupName: null,
@@ -591,6 +617,22 @@ export function MonitoringPage() {
     return () => window.clearTimeout(id);
   }, [searchTerm]);
   const isPreloadMode = preloadRows.length > 0;
+
+  const applyCleverSearchFromOrder = useCallback(
+    (row: WorkOrder | null) => {
+      if (!row || !cleverSearchEnabled || !searchPanelVisible || isPreloadMode) return;
+      setPanelDraft((cur) => mergeWorkOrderIntoAdvancedSearch(cur, row, { userIdByLoginName }));
+    },
+    [cleverSearchEnabled, isPreloadMode, searchPanelVisible, userIdByLoginName],
+  );
+
+  const handleTablePointerDownCapture = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || !cleverSearchEnabled || !searchPanelVisible || isPreloadMode) return;
+      window.requestAnimationFrame(() => applyCleverSearchFromOrder(selectedOrderRef.current));
+    },
+    [applyCleverSearchFromOrder, cleverSearchEnabled, isPreloadMode, searchPanelVisible],
+  );
 
   const loadSearchPresets = useCallback(async () => {
     try {
@@ -631,19 +673,30 @@ export function MonitoringPage() {
     searchBootstrapDoneRef.current = searchBootstrapDone;
   }, [searchBootstrapDone]);
 
+  const resetSearchToUnconfiguredState = useCallback(() => {
+    const empty = emptyWorkOrderAdvancedSearch();
+    setSearchTerm("");
+    setDebouncedSearch("");
+    setAppliedAdvanced(empty);
+    setPanelDraft(empty);
+    setHeaderPresetSelectionId(null);
+  }, []);
+
   useEffect(() => {
-    if (
-      headerPresetSelectionId &&
-      !searchPresets.some((p) => isSamePresetId(p.id, headerPresetSelectionId))
-    ) {
-      setHeaderPresetSelectionId(null);
+    if (!searchBootstrapDone || !headerPresetSelectionId) return;
+    const stillListed = searchPresets.some((p) => isSamePresetId(p.id, headerPresetSelectionId));
+    if (stillListed) return;
+    if (searchPresets.length > 0) {
+      resetSearchToUnconfiguredState();
+      return;
     }
-  }, [headerPresetSelectionId, searchPresets]);
+    setHeaderPresetSelectionId(null);
+  }, [headerPresetSelectionId, resetSearchToUnconfiguredState, searchBootstrapDone, searchPresets]);
 
   const applyHeaderSearchPreset = useCallback(
     async (presetId: string | null) => {
       if (!presetId) {
-        setHeaderPresetSelectionId(null);
+        resetSearchToUnconfiguredState();
         return;
       }
       try {
@@ -662,7 +715,7 @@ export function MonitoringPage() {
         });
       }
     },
-    [t],
+    [resetSearchToUnconfiguredState, t],
   );
 
   const loadData = useCallback(async () => {
@@ -965,10 +1018,42 @@ export function MonitoringPage() {
     [editingId, orders],
   );
 
+  const loadFeedbackTransactions = useCallback(async (orderId: string) => {
+    setFeedbackTransactionsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("workOrderId", orderId);
+      params.set("page", "1");
+      params.set("limit", "200");
+      const res = await apiFetch(`/api/transactions?${params.toString()}`);
+      if (!res.ok) {
+        setFeedbackTransactions([]);
+        return;
+      }
+      const data = (await res.json()) as { rows: TransactionRow[] };
+      setFeedbackTransactions(Array.isArray(data.rows) ? data.rows : []);
+    } catch {
+      setFeedbackTransactions([]);
+    } finally {
+      setFeedbackTransactionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!dialogVisible || !editingId || activeTabIndex !== orderDialogTabs.Feedback) return;
+    void loadFeedbackTransactions(editingId);
+  }, [activeTabIndex, dialogVisible, editingId, loadFeedbackTransactions]);
+
+  useEffect(() => {
+    if (dialogVisible) return;
+    setFeedbackTransactions([]);
+    setFeedbackTransactionsLoading(false);
+  }, [dialogVisible]);
+
   useEffect(() => {
     if (!dialogVisible) return;
     if (activeTabIndex !== orderDialogTabs.Feedback) return;
-    if (!workOrderStatusAllowsFeedback(editingOrder?.status)) {
+    if (!workOrderStatusAllowsFeedbackTab(editingOrder?.status)) {
       setActiveTabIndex(orderDialogTabs.General);
     }
   }, [activeTabIndex, dialogVisible, editingOrder?.status]);
@@ -1271,6 +1356,7 @@ export function MonitoringPage() {
     setFeedbackHours("");
     setFeedbackRemark("");
     setFeedbackCompleteOrder(false);
+    setFeedbackTransactions([]);
     setDialogVisible(true);
   }, []);
 
@@ -1301,6 +1387,7 @@ export function MonitoringPage() {
     setFeedbackHours("");
     setFeedbackRemark("");
     setFeedbackCompleteOrder(false);
+    setFeedbackTransactions([]);
     setActiveTabIndex(orderDialogTabs.General);
     setDialogVisible(true);
   }, []);
@@ -1312,7 +1399,7 @@ export function MonitoringPage() {
 
   const openFeedbackTab = useCallback(
     (row: WorkOrder) => {
-      if (!workOrderStatusAllowsFeedback(row.status)) return;
+      if (!workOrderStatusAllowsFeedbackTab(row.status)) return;
       openEdit(row);
       setActiveTabIndex(orderDialogTabs.Feedback);
     },
@@ -1523,7 +1610,7 @@ export function MonitoringPage() {
             <span>{t("workOrders.delete")}</span>
           </button>
         </li>
-        <li>
+        <li className="ml-auto flex items-center gap-2">
           <button
             type="button"
             className={primaryActionNavItem}
@@ -1535,11 +1622,9 @@ export function MonitoringPage() {
             <i className={`pi pi-filter ${primaryActionIcon}`} aria-hidden />
             <span>{t("workOrders.searchPanel.open")}</span>
           </button>
-        </li>
-        {searchPresets.length > 0 ? (
-          <li className="flex items-center gap-2">
-            <span className="hidden text-xs text-on-surface-variant lg:inline">{t("workOrders.searchPresets.headerLabel")}</span>
+          {searchPresets.length > 0 ? (
             <Dropdown
+              aria-label={t("workOrders.searchPresets.headerLabel")}
               value={headerPresetSelectionId}
               options={headerPresetDropdownOptions}
               optionLabel="label"
@@ -1547,12 +1632,11 @@ export function MonitoringPage() {
               placeholder={t("workOrders.searchPresets.placeholder")}
               showClear
               onChange={(e) => void applyHeaderSearchPreset((e.value as string | null) ?? null)}
-              className="h-9 w-48 min-w-[11rem] text-sm"
+              className="app-header-preset-dropdown app-inline-icon-dropdown h-9 min-w-[16rem] w-72 shrink-0 text-sm"
+              panelClassName="app-header-preset-dropdown-panel"
               appendTo={overlayAppendTo}
             />
-          </li>
-        ) : null}
-        <li className="ml-auto">
+          ) : null}
           <IconField iconPosition="left">
             <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
             <InputText
@@ -1841,7 +1925,7 @@ export function MonitoringPage() {
   const workOrderContextMenuExtraItems = useCallback(
     (row: WorkOrder | null) => {
       if (!row) return [];
-      const canFeedback = workOrderStatusAllowsFeedback(row.status);
+      const canOpenFeedbackTab = workOrderStatusAllowsFeedbackTab(row.status);
       const canCancel = row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
       return [
         {
@@ -1853,7 +1937,7 @@ export function MonitoringPage() {
         {
           label: t("workOrders.contextMenuCreateFeedback"),
           icon: "pi pi-send",
-          disabled: !canFeedback,
+          disabled: !canOpenFeedbackTab,
           command: () => openFeedbackTab(row),
         },
         {
@@ -1867,11 +1951,49 @@ export function MonitoringPage() {
     [confirmCancelWorkOrder, openFeedbackTab, openPlanningTab, t],
   );
 
+  const atheneContextMenuItems = useCallback(
+    (row: WorkOrder | null) => [
+      {
+        label: t("assistant.askAthene"),
+        icon: athene.busy ? "pi pi-spinner pi-spin" : "pi pi-comments",
+        disabled: !row || athene.busy,
+        command: () => {
+          if (!row) return;
+          athene.openWithContext({
+            type: "workOrder",
+            id: row.id,
+            label: `#${row.orderNumber} - ${row.name}`,
+            data: {
+              source: "monitoring",
+              orderNumber: row.orderNumber,
+              name: row.name,
+              status: row.status,
+              siteId: row.siteId,
+              siteKey: row.siteKey,
+              assetId: row.assetId,
+              assetKey: row.assetKey,
+              documentCount: row.documentCount,
+              assetDocumentCount: row.assetDocumentCount,
+              documentReferenceSource:
+                row.documentCount > 0
+                  ? "workOrderDocumentsPresent_blueIcon"
+                  : row.assetDocumentCount > 0
+                    ? "assetOnlyDocuments_greenIcon"
+                    : "noDocuments_inactiveSoftBlueIcon",
+            },
+          });
+        },
+      },
+    ],
+    [athene, t],
+  );
+
   const tableCtx = useTableContextMenu<WorkOrder>({
     labels: { new: t("workOrders.new"), edit: t("workOrders.edit"), delete: t("workOrders.delete") },
     handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
     selection: selectedOrder,
     setSelection: setSelectedOrder,
+    leadingItems: atheneContextMenuItems,
     extraItems: workOrderContextMenuExtraItems,
   });
 
@@ -1936,6 +2058,19 @@ export function MonitoringPage() {
             icon="pi pi-stop"
             title={t("workOrders.stop")}
             aria-label={t("workOrders.stop")}
+            onClick={() => openFeedbackTab(row)}
+          />
+        );
+      }
+      if (row.status === "done") {
+        return (
+          <Button
+            type="button"
+            text
+            className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
+            icon="pi pi-send"
+            title={t("workOrders.tabFeedback")}
+            aria-label={t("workOrders.tabFeedback")}
             onClick={() => openFeedbackTab(row)}
           />
         );
@@ -2006,6 +2141,22 @@ export function MonitoringPage() {
         </div>
       );
     }
+    if (row.status === "done") {
+      return (
+        <div className="mr-1 flex items-center gap-1">
+          <Button
+            type="button"
+            text
+            rounded
+            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon="pi pi-send"
+            title={t("workOrders.tabFeedback")}
+            aria-label={t("workOrders.tabFeedback")}
+            onClick={() => openFeedbackTab(row)}
+          />
+        </div>
+      );
+    }
     return null;
   }, [editingId, editingOrder, openFeedbackTab, pauseOrder, startOrder, t]);
 
@@ -2030,12 +2181,16 @@ export function MonitoringPage() {
           label={isFeedbackTab ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
           icon="pi pi-check"
           loading={isFeedbackTab ? feedbackSaving : saving}
-          disabled={isFeedbackTab ? feedbackSaving || !editingId : saving}
+          disabled={
+            isFeedbackTab
+              ? feedbackSaving || !editingId || editingOrder?.status === "done"
+              : saving
+          }
           onClick={() => void (isFeedbackTab ? saveFeedback() : save())}
         />
       </div>
     ),
-    [editingId, feedbackSaving, isFeedbackTab, save, saveFeedback, saving, t],
+    [editingId, editingOrder?.status, feedbackSaving, isFeedbackTab, save, saveFeedback, saving, t],
   );
 
   return (
@@ -2067,6 +2222,7 @@ export function MonitoringPage() {
         calendarDateFormat={calendarDateFormat}
         quickSearchForSave={searchTerm}
         appliedSearchForSave={appliedAdvanced}
+        cleverSearchEnabled={cleverSearchEnabled}
         onSaveSearchPreset={async (name, payload) => {
           await createWorkOrderSearchPreset(name, payload);
           toastRef.current?.show({
@@ -2082,6 +2238,7 @@ export function MonitoringPage() {
 
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        onPointerDownCapture={handleTablePointerDownCapture}
         {...(!isPreloadMode ? tableCtx.wrapperProps : {})}
       >
         <DataTable
@@ -2092,7 +2249,10 @@ export function MonitoringPage() {
           selection={selectedOrder}
           onSelectionChange={(e) => {
             if (isPreloadMode) return;
-            setSelectedOrder(e.value as WorkOrder | null);
+            const next = e.value as WorkOrder | null;
+            selectedOrderRef.current = next;
+            setSelectedOrder(next);
+            applyCleverSearchFromOrder(next);
           }}
           onRowDoubleClick={(e) => {
             if (isPreloadMode) return;
@@ -2219,7 +2379,7 @@ export function MonitoringPage() {
             activeIndex={activeTabIndex}
             onTabChange={(e) => {
               const idx = e.index;
-              if (idx === orderDialogTabs.Feedback && !workOrderStatusAllowsFeedback(editingOrder?.status)) {
+              if (idx === orderDialogTabs.Feedback && !workOrderStatusAllowsFeedbackTab(editingOrder?.status)) {
                 return;
               }
               if (
@@ -2538,7 +2698,7 @@ export function MonitoringPage() {
                       {assignments.map((item, index) => (
                         <span
                           key={item.id}
-                          className="app-card-cascade inline-flex items-center gap-2 rounded-sm border border-outline-variant px-2 py-1 text-xs"
+                          className="app-card-cascade inline-flex items-center gap-2 rounded-sm border border-solid app-wo-detail-outline-border px-2 py-1 text-xs"
                           style={{ ["--app-cascade-index" as string]: index }}
                         >
                           <span>
@@ -2603,7 +2763,7 @@ export function MonitoringPage() {
                       {filteredPendingFiles.map((doc, index) => (
                         <div
                           key={doc.localId}
-                          className="app-card-cascade flex items-center gap-3 rounded-sm border border-outline-variant px-3 py-2"
+                          className="app-card-cascade flex items-center gap-3 rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2"
                           style={{ ["--app-cascade-index" as string]: index }}
                         >
                           <i className={`${documentTypeIconClass(doc.file.type || "application/octet-stream", doc.file.name)} shrink-0 text-lg`} aria-hidden />
@@ -2651,7 +2811,7 @@ export function MonitoringPage() {
                         {filteredDocuments.map((doc, index) => (
                           <div
                             key={doc.id}
-                            className="app-card-cascade flex cursor-pointer items-center gap-3 rounded-sm border border-outline-variant px-3 py-2"
+                            className="app-card-cascade flex cursor-pointer items-center gap-3 rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2"
                             style={{ ["--app-cascade-index" as string]: index }}
                             onClick={() => void openDocumentContent(doc)}
                           >
@@ -2709,7 +2869,7 @@ export function MonitoringPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-sm border border-outline-variant px-3 py-2 text-sm text-on-surface-variant">
+                  <div className="rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2 text-sm text-on-surface-variant">
                     {t("workOrders.documentsCreateHint")}
                   </div>
                 )}
@@ -2717,9 +2877,27 @@ export function MonitoringPage() {
             </TabPanel>
             <TabPanel
               header={`${t("workOrders.tabFeedback")} [${feedbackTabCount}]`}
-              disabled={!editingId || !workOrderStatusAllowsFeedback(editingOrder?.status)}
+              disabled={!editingId || !workOrderStatusAllowsFeedbackTab(editingOrder?.status)}
             >
               <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6">
+                <div className="space-y-2 md:col-span-6">
+                  <label htmlFor="order-feedback-done-by-monitoring" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                    {t("workOrders.feedbackDoneBy")}
+                  </label>
+                  <InputText
+                    id="order-feedback-done-by-monitoring"
+                    disabled
+                    value={
+                      editingOrder?.doneBy
+                        ? [editingOrder.doneByEmployeeKey, editingOrder.doneByEmployeeName]
+                            .map((x) => (typeof x === "string" ? x.trim() : ""))
+                            .filter(Boolean)
+                            .join(" — ")
+                        : t("workOrders.feedbackDoneByEmpty")
+                    }
+                    className="w-full"
+                  />
+                </div>
                 <div className="space-y-2 md:col-span-2">
                   <label htmlFor="order-feedback-hours" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
                     {t("workOrders.feedbackHours")}
@@ -2733,7 +2911,7 @@ export function MonitoringPage() {
                     onChange={(e) => setFeedbackHours(e.target.value)}
                     placeholder={t("workOrders.feedbackHoursPlaceholder")}
                     className="w-full"
-                    disabled={feedbackSaving}
+                    disabled={feedbackSaving || editingOrder?.status === "done"}
                     autoComplete="off"
                   />
                 </div>
@@ -2747,7 +2925,7 @@ export function MonitoringPage() {
                     maxLength={2000}
                     onChange={(e) => setFeedbackRemark(e.target.value)}
                     className="w-full p-inputtext p-component min-h-28 resize-y"
-                    disabled={feedbackSaving}
+                    disabled={feedbackSaving || editingOrder?.status === "done"}
                   />
                   <div className="text-xs text-on-surface-variant text-right">
                     {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
@@ -2758,11 +2936,15 @@ export function MonitoringPage() {
                     inputId="order-feedback-complete"
                     checked={feedbackCompleteOrder}
                     onChange={(e) => setFeedbackCompleteOrder(Boolean(e.checked))}
-                    disabled={feedbackSaving}
+                    disabled={feedbackSaving || editingOrder?.status === "done"}
                   />
                   <label htmlFor="order-feedback-complete" className="cursor-pointer text-sm">
                     {t("workOrders.feedbackCompleteOrder")}
                   </label>
+                </div>
+                <hr className="m-0 border-0 border-t border-solid app-wo-detail-outline-border md:col-span-6" />
+                <div className="min-w-0 md:col-span-6">
+                  <WorkOrderFeedbackTransactionsSection rows={feedbackTransactions} loading={feedbackTransactionsLoading} />
                 </div>
               </div>
             </TabPanel>

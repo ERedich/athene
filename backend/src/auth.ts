@@ -19,6 +19,8 @@ export type AuthUserRow = {
   employeeId: string | null;
   employeeKey: string | null;
   employeeName: string | null;
+  siteIds: string[];
+  workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
 };
 
 const router = Router();
@@ -31,9 +33,35 @@ const authUserSelect = `
     u."workingSiteId",
     u."employeeId",
     emp."key" AS "employeeKey",
-    emp."name" AS "employeeName"
+    emp."name" AS "employeeName",
+    COALESCE(site_access."siteIds", ARRAY[]::uuid[])::text[] AS "siteIds",
+    COALESCE(workgroups."workgroups", '[]'::json) AS "workgroups"
   FROM "users" u
   LEFT JOIN "employee" emp ON emp."id" = u."employeeId"
+  LEFT JOIN LATERAL (
+    SELECT array_agg(DISTINCT site_all."id") AS "siteIds"
+    FROM (
+      SELECT u."workingSiteId" AS "id"
+      UNION
+      SELECT us."siteId" AS "id"
+      FROM "userSite" us
+      WHERE us."userId" = u."id"
+    ) site_all
+  ) site_access ON true
+  LEFT JOIN LATERAL (
+    SELECT json_agg(
+      jsonb_build_object(
+        'id', wg."id",
+        'key', wg."key",
+        'name', wg."name",
+        'siteId', wg."siteId"
+      )
+      ORDER BY wg."key" ASC
+    ) AS "workgroups"
+    FROM "workgroupUser" wgu
+    JOIN "workgroup" wg ON wg."id" = wgu."workgroupId"
+    WHERE wgu."employeeId" = u."employeeId"
+  ) workgroups ON true
 `;
 
 router.post("/login", async (req: Request, res: Response) => {

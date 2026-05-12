@@ -37,6 +37,7 @@ type DataTableContextMenuOptions<T extends object> = {
   handlers: CrudHandlers<T>;
   selection: T | null;
   setSelection: (row: T | null) => void;
+  leadingItems?: (row: T | null) => MenuItem[];
   extraItems?: (row: T | null) => MenuItem[];
 };
 
@@ -45,11 +46,12 @@ type DataTableContextMenuOptions<T extends object> = {
  * Use `wrapperProps` on a div wrapping the table so empty-area right-clicks still open the menu (Neu only).
  */
 export function useTableContextMenu<T extends object>(opts: DataTableContextMenuOptions<T>) {
-  const { labels, handlers, selection, setSelection, extraItems } = opts;
+  const { labels, handlers, selection, setSelection, leadingItems, extraItems } = opts;
   const cmRef = useRef<ContextMenu>(null);
 
   const model = useMemo((): MenuItem[] => {
     const hasRow = selection != null;
+    const leading = leadingItems?.(selection) ?? [];
     const base: MenuItem[] = [
       {
         label: labels.new,
@@ -74,11 +76,13 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
       },
     ];
     const extra = extraItems?.(selection) ?? [];
-    if (extra.length > 0) {
-      return [...base, { separator: true }, ...extra];
-    }
-    return base;
-  }, [extraItems, handlers, labels.delete, labels.edit, labels.new, selection]);
+    return [
+      ...leading,
+      ...(leading.length > 0 ? [{ separator: true }] : []),
+      ...base,
+      ...(extra.length > 0 ? [{ separator: true }, ...extra] : []),
+    ];
+  }, [extraItems, handlers, labels.delete, labels.edit, labels.new, leadingItems, selection]);
 
   const onContextMenuSelectionChange = useCallback(
     (e: DataTableContextMenuSingleSelectionChangeEvent<T[]>) => {

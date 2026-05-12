@@ -10,7 +10,6 @@ import {
   Alert,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -28,6 +27,7 @@ import { AssetPicker } from "../../components/AssetPicker";
 import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
 import { DateTimeField } from "../../components/DateTimeField";
+import { HapticPressable } from "../../components/HapticPressable";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import {
   WorkOrderActionError,
@@ -270,7 +270,7 @@ export function WorkOrderEditor({ orderId }: Props) {
     navigation.setOptions({
       headerRight: () => (
         <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
-          <Pressable
+          <HapticPressable
             onPress={() => void startOrder()}
             disabled={!canStartWorkOrder(currentOrder.status)}
             {...androidRippleProps(ripple, true)}
@@ -286,8 +286,8 @@ export function WorkOrderEditor({ orderId }: Props) {
             ]}
           >
             <MaterialIcons name="play-arrow" size={22} color={colors.primary} />
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             onPress={() => void pauseOrder()}
             disabled={!canPauseWorkOrder(currentOrder.status)}
             {...androidRippleProps(ripple, true)}
@@ -303,8 +303,8 @@ export function WorkOrderEditor({ orderId }: Props) {
             ]}
           >
             <MaterialIcons name="pause" size={20} color={colors.primary} />
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             onPress={() => setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"))}
             disabled={!canFeedbackWorkOrder(currentOrder.status)}
             {...androidRippleProps(ripple, true)}
@@ -320,7 +320,7 @@ export function WorkOrderEditor({ orderId }: Props) {
             ]}
           >
             <MaterialIcons name="assignment-turned-in" size={20} color={colors.primary} />
-          </Pressable>
+          </HapticPressable>
         </View>
       ),
     });
@@ -972,7 +972,7 @@ export function WorkOrderEditor({ orderId }: Props) {
           />
 
           <Text style={styles.label}>{t("workOrders.orderType")}</Text>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
               styles.input,
@@ -981,7 +981,7 @@ export function WorkOrderEditor({ orderId }: Props) {
             onPress={() => setTypeModal(true)}
           >
             <Text style={{ color: colors.onSurface }}>{t(`workOrders.typeValues.${form.orderType}`)}</Text>
-          </Pressable>
+          </HapticPressable>
           <SelectModal
             visible={typeModal}
             title={t("workOrders.orderType")}
@@ -1043,7 +1043,7 @@ export function WorkOrderEditor({ orderId }: Props) {
           <Text style={styles.label}>
             {t("workOrders.workgroup")} <Text style={{ color: colors.primary }}>*</Text>
           </Text>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
               styles.input,
@@ -1055,7 +1055,7 @@ export function WorkOrderEditor({ orderId }: Props) {
             onPress={() => setWorkgroupModal(true)}
           >
             <Text style={{ color: colors.onSurface }}>{selectedWorkgroupLabel}</Text>
-          </Pressable>
+          </HapticPressable>
           <SelectModal
             visible={workgroupModal}
             title={t("workOrders.workgroup")}
@@ -1106,13 +1106,13 @@ export function WorkOrderEditor({ orderId }: Props) {
             return (
               <ScrollView style={styles.tabScene} contentContainerStyle={{ paddingBottom: 12 }}>
                 <View>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [styles.uploadBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             onPress={onUploadPress}
           >
             <Text style={styles.uploadText}>{t("workOrders.documentsUpload")}</Text>
-          </Pressable>
+          </HapticPressable>
           <TextInput
             value={docSearchTerm}
             onChangeText={setDocSearchTerm}
@@ -1132,7 +1132,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                   : `${Math.max(0, Math.ceil((PENDING_AUTO_UPLOAD_MS - (Date.now() - doc.addedAt)) / 1000))}s`}
               </Text>
               <View style={styles.rowActions}>
-                <Pressable
+                <HapticPressable
                   {...androidRippleProps(ripple, true)}
                   style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => {
@@ -1141,7 +1141,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                   }}
                 >
                   <Text style={styles.actionDanger}>{t("workOrders.documentsRemovePending")}</Text>
-                </Pressable>
+                </HapticPressable>
               </View>
             </View>
           ))}
@@ -1152,7 +1152,7 @@ export function WorkOrderEditor({ orderId }: Props) {
             <ActivityIndicator color={colors.primary} />
           ) : (
             filteredDocs.map((doc) => (
-              <Pressable
+              <HapticPressable
                 key={doc.id}
                 {...androidRippleProps(ripple)}
                 style={({ pressed }) => [styles.card, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
@@ -1177,7 +1177,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                   )}
                 </Text>
                 <View style={styles.rowActions}>
-                  <Pressable
+                  <HapticPressable
                     {...androidRippleProps(ripple, true)}
                     style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                     onPress={(e) => {
@@ -1188,9 +1188,9 @@ export function WorkOrderEditor({ orderId }: Props) {
                     }}
                   >
                     <Text style={styles.actionPrimary}>{t("workOrders.edit")}</Text>
-                  </Pressable>
+                  </HapticPressable>
                   {doc.source === "workOrder" && doc.workOrderId ? (
-                    <Pressable
+                    <HapticPressable
                       {...androidRippleProps(ripple, true)}
                       style={({ pressed }) => [styles.actionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                       onPress={(e) => {
@@ -1216,10 +1216,10 @@ export function WorkOrderEditor({ orderId }: Props) {
                       }}
                     >
                       <Text style={styles.actionDanger}>{t("workOrders.delete")}</Text>
-                    </Pressable>
+                    </HapticPressable>
                   ) : null}
                 </View>
-              </Pressable>
+              </HapticPressable>
             ))
           )}
         </View>
@@ -1326,13 +1326,13 @@ export function WorkOrderEditor({ orderId }: Props) {
             <Text style={styles.label}>{t("workOrders.documentsDisplayName")}</Text>
             <TextInput value={docEditDisplayName} onChangeText={setDocEditDisplayName} style={styles.input} />
             <Text style={styles.label}>{t("workOrders.documentsCategory")}</Text>
-            <Pressable
+            <HapticPressable
               {...androidRippleProps(ripple)}
               style={({ pressed }) => [styles.input, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
               onPress={() => setSearchTerm("open-category-modal")}
             >
               <Text>{t(`workOrders.documentCategories.${docEditCategory}`)}</Text>
-            </Pressable>
+            </HapticPressable>
             <SelectModal
               visible={searchTerm === "open-category-modal"}
               title={t("workOrders.documentsCategory")}
@@ -1341,15 +1341,15 @@ export function WorkOrderEditor({ orderId }: Props) {
               onClose={() => setSearchTerm("")}
             />
             <View style={styles.actions}>
-              <Pressable
+              <HapticPressable
                 {...androidRippleProps(ripple)}
                 style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                 onPress={() => setDocEdit(null)}
                 disabled={docEditSaving}
               >
                 <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
-              </Pressable>
-              <Pressable
+              </HapticPressable>
+              <HapticPressable
                 {...androidRippleProps(ripple)}
                 style={({ pressed }) => [styles.primary, !docEditSaving && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                 onPress={() => {
@@ -1391,7 +1391,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                 ) : (
                   <Text style={styles.primaryText}>{t("workOrders.save")}</Text>
                 )}
-              </Pressable>
+              </HapticPressable>
             </View>
           </View>
         </ScrollView>
@@ -1399,14 +1399,14 @@ export function WorkOrderEditor({ orderId }: Props) {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.actions}>
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             onPress={() => router.back()}
           >
             <Text style={styles.secondaryText}>{t("workOrders.cancel")}</Text>
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
               styles.primary,
@@ -1429,7 +1429,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                 {tabRoutes[tabIndex]?.key === "feedback" ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
               </Text>
             )}
-          </Pressable>
+          </HapticPressable>
         </View>
       </View>
     </View>

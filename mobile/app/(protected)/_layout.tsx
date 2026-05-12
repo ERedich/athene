@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Fragment } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
+import { AtheneAssistantProvider } from "../../src/assistant/AtheneAssistantContext";
 import { AppDrawerContent } from "../../src/components/AppDrawerContent";
 import { useAuth } from "../../src/auth/AuthContext";
 import { useAppTheme } from "../../src/theme/AppThemeContext";
@@ -31,23 +32,25 @@ export default function ProtectedLayout() {
   return (
     <Fragment>
       <StatusBar style={isDark ? "light" : "dark"} />
-      <Drawer
-        initialRouteName="home"
-        drawerContent={(props) => <AppDrawerContent {...props} />}
-        screenOptions={({ route }) => ({
-          drawerActiveTintColor: colors.primary,
-          drawerInactiveTintColor: colors.onSurfaceVariant,
-          headerShown: route.name === "home",
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.onSurface,
-          headerTitleStyle: { fontWeight: "700", fontSize: 17, color: colors.onSurface },
-          drawerStyle: { backgroundColor: colors.surface },
-          headerLeft: (props) =>
-            route.name === "home" ? (
-              <DrawerToggleButton {...props} tintColor={colors.onSurface} />
-            ) : undefined,
-        })}
-      />
+      <AtheneAssistantProvider>
+        <Drawer
+          initialRouteName="home"
+          drawerContent={(props) => <AppDrawerContent {...props} />}
+          screenOptions={({ route }) => ({
+            drawerActiveTintColor: colors.primary,
+            drawerInactiveTintColor: colors.onSurfaceVariant,
+            headerShown: route.name === "home",
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.onSurface,
+            headerTitleStyle: { fontWeight: "700", fontSize: 17, color: colors.onSurface },
+            drawerStyle: { backgroundColor: colors.surface },
+            headerLeft: (props) =>
+              route.name === "home" ? (
+                <DrawerToggleButton {...props} tintColor={colors.onSurface} />
+              ) : undefined,
+          })}
+        />
+      </AtheneAssistantProvider>
     </Fragment>
   );
 }

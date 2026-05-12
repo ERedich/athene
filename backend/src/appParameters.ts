@@ -12,6 +12,9 @@ export const APP_PARAM_KEY_ASSET_TYPES = "GN-ATYP";
 /** Aufträge: Standard-Fachgruppe für Neuanlagen (nullable UUID). */
 export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG";
 
+/** Aufträge: Clever Search / Schnellere Suche im Suchpanel. */
+export const APP_PARAM_KEY_ENABLE_CLEVER_SEARCH = "WO-ECS";
+
 /** Allgemein: Asset-Schlüssel manuell oder automatisch (Werk). */
 export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG";
 

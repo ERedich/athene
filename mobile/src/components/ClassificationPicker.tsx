@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import type { ClassificationRow } from "../types/api";
@@ -70,7 +72,7 @@ export function ClassificationPicker({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable
+      <HapticPressable
         {...androidRippleProps(ripple)}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
@@ -78,7 +80,7 @@ export function ClassificationPicker({
         <Text style={styles.btnText} numberOfLines={1}>
           {summary}
         </Text>
-      </Pressable>
+      </HapticPressable>
       <SelectModal
         visible={open}
         title={label}

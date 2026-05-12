@@ -1,6 +1,9 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import type { WorkOrderStatus } from "../types/api";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../lib/workOrderLifecycle";
@@ -13,10 +16,21 @@ type Props = {
   onStart: () => void;
   onPause: () => void;
   onFeedback: () => void;
+  onAskAthene: () => void;
   onClose: () => void;
+  atheneBusy?: boolean;
 };
 
-export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFeedback, onClose }: Props) {
+export function WorkOrderActionsSheet({
+  visible,
+  status,
+  onStart,
+  onPause,
+  onFeedback,
+  onAskAthene,
+  onClose,
+  atheneBusy = false,
+}: Props) {
   const { t } = useTranslation();
   const { colors, radii, isDark } = useAppTheme();
   const ripple = surfaceRippleColor(isDark);
@@ -44,6 +58,9 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
           borderBottomColor: colors.border,
         },
         row: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
           paddingVertical: 14,
           paddingHorizontal: 16,
           borderBottomWidth: StyleSheet.hairlineWidth,
@@ -78,7 +95,24 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>{t("workOrders.actionsTitle")}</Text>
-          <Pressable
+          <HapticPressable
+            disabled={atheneBusy}
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.row,
+              atheneBusy && styles.rowDisabled,
+              !atheneBusy && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+            ]}
+            onPress={() => run(onAskAthene)}
+          >
+            {atheneBusy ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <MaterialIcons name="psychology" size={20} color={colors.primary} />
+            )}
+            <Text style={styles.rowText}>{t("assistant.askAthene")}</Text>
+          </HapticPressable>
+          <HapticPressable
             disabled={!canStart}
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
@@ -89,8 +123,8 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
             onPress={() => run(onStart)}
           >
             <Text style={styles.rowText}>{t("workOrders.start")}</Text>
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             disabled={!canPause}
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
@@ -101,8 +135,8 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
             onPress={() => run(onPause)}
           >
             <Text style={styles.rowText}>{t("workOrders.stop")}</Text>
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             disabled={!canFeedback}
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [
@@ -113,14 +147,14 @@ export function WorkOrderActionsSheet({ visible, status, onStart, onPause, onFee
             onPress={() => run(onFeedback)}
           >
             <Text style={styles.rowText}>{t("workOrders.contextMenuCreateFeedback")}</Text>
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             {...androidRippleProps(ripple)}
             style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             onPress={onClose}
           >
             <Text style={styles.cancelText}>{t("workOrders.cancel")}</Text>
-          </Pressable>
+          </HapticPressable>
         </View>
       </View>
     </Modal>

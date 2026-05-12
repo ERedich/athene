@@ -2,13 +2,14 @@ import DateTimePicker, { type DateTimePickerEvent } from "@react-native-communit
 import { useMemo, useState } from "react";
 import {
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
   type TextInputProps,
 } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 
@@ -133,7 +134,7 @@ export function DateTimeField({ label, value, onChange, locale, placeholder }: P
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable
+      <HapticPressable
         {...androidRippleProps(ripple)}
         style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
         onPress={() => {
@@ -145,7 +146,7 @@ export function DateTimeField({ label, value, onChange, locale, placeholder }: P
         }}
       >
         <Text style={styles.btnText}>{value ? formatDateTime(value, locale) : placeholder ?? "—"}</Text>
-      </Pressable>
+      </HapticPressable>
 
       {Platform.OS === "android" && androidStep ? (
         <DateTimePicker

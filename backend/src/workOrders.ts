@@ -56,6 +56,9 @@ type WorkOrderRow = {
   responsibleEmployeeId: string | null;
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
+  doneBy: string | null;
+  doneByEmployeeKey: string | null;
+  doneByEmployeeName: string | null;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
@@ -343,6 +346,9 @@ const selectWorkOrdersSql = `
     w."responsibleEmployeeId",
     re."key" AS "responsibleEmployeeKey",
     re."name" AS "responsibleEmployeeName",
+    w."doneBy",
+    dbe."key" AS "doneByEmployeeKey",
+    dbe."name" AS "doneByEmployeeName",
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
@@ -359,6 +365,7 @@ const selectWorkOrdersSql = `
   JOIN "costCenter" c ON c."id" = w."costCenterId"
   LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
   LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
+  LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
@@ -994,7 +1001,21 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
         [current.siteId, qtyRounded, id, parsed.remark],
       );
       if (parsed.completeOrder && current.status !== "ended") {
-        await client.query(`UPDATE "workOrder" SET "status" = 'ended' WHERE "id" = $1::uuid`, [id]);
+        const userEmp = await client.query<{ employeeId: string | null }>(
+          `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+          [meta.userId],
+        );
+        const sessionEmployeeId = userEmp.rows[0]?.employeeId ?? null;
+        await client.query(
+          `
+          UPDATE "workOrder"
+          SET
+            "status" = 'ended',
+            "doneBy" = COALESCE($2::uuid, "doneBy")
+          WHERE "id" = $1::uuid
+          `,
+          [id, sessionEmployeeId],
+        );
       }
       const { rows } = await client.query<WorkOrderRow>(
         `
@@ -1416,6 +1437,9 @@ router.post("/", async (req: Request, res: Response) => {
           i."responsibleEmployeeId",
           re."key" AS "responsibleEmployeeKey",
           re."name" AS "responsibleEmployeeName",
+          i."doneBy",
+          dbe."key" AS "doneByEmployeeKey",
+          dbe."name" AS "doneByEmployeeName",
           i."workgroupId",
           wg."key" AS "workgroupKey",
           wg."name" AS "workgroupName",
@@ -1432,6 +1456,7 @@ router.post("/", async (req: Request, res: Response) => {
         JOIN "costCenter" c ON c."id" = i."costCenterId"
         LEFT JOIN "classification" cl ON cl."id" = i."classificationId"
         LEFT JOIN "employee" re ON re."id" = i."responsibleEmployeeId"
+        LEFT JOIN "employee" dbe ON dbe."id" = i."doneBy"
         LEFT JOIN "workgroup" wg ON wg."id" = i."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
@@ -1615,6 +1640,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."responsibleEmployeeId",
           re."key" AS "responsibleEmployeeKey",
           re."name" AS "responsibleEmployeeName",
+          u."doneBy",
+          dbe."key" AS "doneByEmployeeKey",
+          dbe."name" AS "doneByEmployeeName",
           u."workgroupId",
           wg."key" AS "workgroupKey",
           wg."name" AS "workgroupName",
@@ -1631,6 +1659,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         JOIN "costCenter" c ON c."id" = u."costCenterId"
         LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
         LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
+        LEFT JOIN "employee" dbe ON dbe."id" = u."doneBy"
         LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"

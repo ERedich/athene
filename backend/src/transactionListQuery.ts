@@ -76,7 +76,7 @@ export type TransactionListExtraResult =
 
 /**
  * Extra WHERE fragments for transaction list (AND …). Params append after existing route params; caller sets $ indices.
- * All conditions reference t, and optionally w (workOrder join).
+ * All conditions reference t, and optionally s (site join) or w (workOrder join).
  */
 export async function buildTransactionListExtraFilters(
   q: Request["query"],
@@ -114,6 +114,10 @@ export async function buildTransactionListExtraFilters(
     pushCond(`(
       position(${p} in lower(COALESCE(t."remark", ''))) > 0
       OR position(${p} in lower(CAST(t."transactionNumber" AS text))) > 0
+      OR position(${p} in lower(COALESCE(s."key", ''))) > 0
+      OR position(${p} in lower(COALESCE(s."name", ''))) > 0
+      OR position(${p} in lower(t."type")) > 0
+      OR position(${p} in lower(CAST(t."quantity" AS text))) > 0
       OR position(${p} in lower(COALESCE(w."name", ''))) > 0
       OR position(${p} in lower(CAST(w."orderNumber" AS text))) > 0
     )`);

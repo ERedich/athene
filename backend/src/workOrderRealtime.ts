@@ -31,6 +31,9 @@ type WorkOrderRealtimePayload = {
   responsibleEmployeeId: string | null;
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
+  doneBy: string | null;
+  doneByEmployeeKey: string | null;
+  doneByEmployeeName: string | null;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;

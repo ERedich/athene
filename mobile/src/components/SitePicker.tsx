@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import type { SiteRow } from "../types/api";
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_ROW, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
+import { HapticPressable } from "./HapticPressable";
 import { SelectModal, type SelectItem } from "./SelectModal";
 
 type Props = {
@@ -47,7 +48,7 @@ export function SitePicker({ sites, value, onChange, disabled, label }: Props) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable
+      <HapticPressable
         disabled={disabled}
         {...androidRippleProps(ripple)}
         onPress={() => setOpen(true)}
@@ -60,7 +61,7 @@ export function SitePicker({ sites, value, onChange, disabled, label }: Props) {
         <Text style={styles.btnText} numberOfLines={1}>
           {summary}
         </Text>
-      </Pressable>
+      </HapticPressable>
       <SelectModal
         visible={open}
         title={label}

@@ -24,7 +24,20 @@
     "navCostCenters": "Cost centers",
     "navAssets": "Assets",
     "navWorkOrders": "Work orders",
+    "navAthene": "Ask Athene",
     "hint": "Open the menu (☰) in the top-left corner to switch between apps."
+  },
+  "assistant": {
+    "title": "Athene AI Assistant",
+    "askAthene": "Ask Athene",
+    "globalContext": "Global context",
+    "empty": "Ask Athene something. Newest messages are shown first.",
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "you": "You",
+    "clearContext": "Clear context",
+    "loadError": "Could not load the conversation.",
+    "sendError": "Athene could not answer right now."
   },
   "home": {
     "title": "Home",

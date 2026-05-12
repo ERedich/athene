@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import {
 import { useAuth } from "../../auth/AuthContext";
 import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
+import { HapticPressable } from "../../components/HapticPressable";
 import { ParentAssetPicker } from "../../components/ParentAssetPicker";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import { SitePicker } from "../../components/SitePicker";
@@ -348,13 +348,13 @@ export function AssetEditor({ assetId }: Props) {
       {siteFieldLocked ? <Text style={styles.hint}>{t("assets.siteLocked")}</Text> : null}
 
       <Text style={styles.label}>{t("assets.type")}</Text>
-      <Pressable
+      <HapticPressable
         {...androidRippleProps(ripple)}
         onPress={() => setTypeModal(true)}
         style={({ pressed }) => [styles.inputLike, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
         <Text style={styles.inputLikeText}>{t(`assets.types.${type}`)}</Text>
-      </Pressable>
+      </HapticPressable>
       <SelectModal
         visible={typeModal}
         title={t("assets.type")}
@@ -418,14 +418,14 @@ export function AssetEditor({ assetId }: Props) {
       <Text style={styles.counter}>{t("assets.remarkCount", { count: remarkLen, max: 2000 })}</Text>
 
       <View style={styles.actions}>
-        <Pressable
+        <HapticPressable
           {...androidRippleProps(ripple)}
           style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => router.back()}
         >
           <Text style={styles.secondaryText}>{t("assets.cancel")}</Text>
-        </Pressable>
-        <Pressable
+        </HapticPressable>
+        <HapticPressable
           {...androidRippleProps(ripple)}
           style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => void onSave()}
@@ -436,17 +436,17 @@ export function AssetEditor({ assetId }: Props) {
           ) : (
             <Text style={styles.primaryText}>{t("assets.save")}</Text>
           )}
-        </Pressable>
+        </HapticPressable>
       </View>
 
       {!isNew ? (
-        <Pressable
+        <HapticPressable
           {...androidRippleProps(ripple)}
           style={({ pressed }) => [styles.danger, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => void onDelete()}
         >
           <Text style={styles.dangerText}>{t("assets.delete")}</Text>
-        </Pressable>
+        </HapticPressable>
       ) : null}
     </ScrollView>
   );

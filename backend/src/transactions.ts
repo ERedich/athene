@@ -1,5 +1,9 @@
-import { Router, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
 
+import { Router, type Request, type Response } from "express";
+import type { QueryResult } from "pg";
+
+import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
 import { buildTransactionListExtraFilters } from "./transactionListQuery.js";
@@ -33,6 +37,31 @@ function parseIntParam(raw: unknown, fallback: number, max: number): number {
   const n = typeof raw === "string" ? Number.parseInt(raw, 10) : Number.NaN;
   if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(n, max);
+}
+
+function sendPgError(res: Response, err: unknown) {
+  const e = err as { code?: string; detail?: string; message?: string };
+  if (e.code === "23503") {
+    res.status(409).json({ error: "foreign_key_violation", message: e.detail ?? e.message });
+    return;
+  }
+  console.error(err);
+  res.status(500).json({ error: "internal_error" });
+}
+
+function auditMeta(req: Request) {
+  const userId = req.session.userId;
+  if (!userId) {
+    throw new Error("missing_session_user");
+  }
+  return {
+    userId,
+    requestId: randomUUID(),
+    reason: typeof req.body?.reason === "string" ? req.body.reason : undefined,
+    source: "api",
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent") ?? "",
+  };
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -106,6 +135,7 @@ router.get("/", async (req: Request, res: Response) => {
     const countSql = `
       SELECT count(*)::bigint AS c
       FROM "transaction" t
+      JOIN "site" s ON s."id" = t."siteId"
       LEFT JOIN "workOrder" w ON w."id" = t."workOrderId"
       WHERE ${siteAccessSql('t."siteId"', "$1")}
       ${filterSql}
@@ -141,6 +171,39 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const deleted = await withAuditContext(meta, async (client) => {
+      const result: QueryResult = await client.query(
+        `
+        DELETE FROM "transaction"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      return result.rowCount ?? 0;
+    });
+    if (deleted === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
   }
 });
 

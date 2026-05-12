@@ -3,9 +3,12 @@ import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
 import { usePathname, useRouter } from "expo-router";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 import { useTranslation } from "react-i18next";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
 import {
   androidRippleProps,
@@ -24,6 +27,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const { colors, isDark, toggleScheme } = useAppTheme();
   const navRipple = surfaceRippleColor(isDark);
   const { signOut } = useAuth();
+  const athene = useAtheneAssistant();
   const activeLang = i18n.language.startsWith("de") ? "de" : "en";
 
   const activeHome = pathname === "/home" || pathname.endsWith("/home");
@@ -91,16 +95,16 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <Text style={styles.brandText}>ATHENE</Text>
       </View>
 
-      <Pressable
+      <HapticPressable
         onPress={() => closeAndGo("/home")}
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeHome && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
         <MaterialIcons name="home" size={24} color={activeHome ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeHome ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navStart")}</Text>
-      </Pressable>
+      </HapticPressable>
 
-      <Pressable
+      <HapticPressable
         onPress={() => closeAndGo("/cost-centers")}
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeCc && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
@@ -113,9 +117,9 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <Text style={activeCc ? styles.navLabel : styles.navLabelMuted}>
           {t("drawer.navCostCenters")}
         </Text>
-      </Pressable>
+      </HapticPressable>
 
-      <Pressable
+      <HapticPressable
         onPress={() => closeAndGo("/assets")}
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeAssets && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
@@ -126,9 +130,9 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
           color={activeAssets ? colors.primary : colors.onSurfaceVariant}
         />
         <Text style={activeAssets ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navAssets")}</Text>
-      </Pressable>
+      </HapticPressable>
 
-      <Pressable
+      <HapticPressable
         onPress={() => closeAndGo("/work-orders")}
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [
@@ -145,30 +149,46 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <Text style={activeWorkOrders ? styles.navLabel : styles.navLabelMuted}>
           {t("drawer.navWorkOrders")}
         </Text>
-      </Pressable>
+      </HapticPressable>
+
+      <HapticPressable
+        onPress={() => {
+          athene.open();
+          navigation.closeDrawer();
+        }}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [styles.navItem, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+      >
+        {athene.busy ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <MaterialIcons name="psychology" size={24} color={colors.onSurfaceVariant} />
+        )}
+        <Text style={styles.navLabelMuted}>{t("drawer.navAthene")}</Text>
+      </HapticPressable>
 
       <View style={styles.spacer} />
 
       <View style={styles.footer}>
         <Text style={{ fontSize: 12, color: colors.onSurfaceVariant, marginBottom: 4 }}>{t("drawer.hint")}</Text>
         <View style={styles.footerRow}>
-          <Pressable
+          <HapticPressable
             onPress={toggleScheme}
             {...androidRippleProps(navRipple, true)}
             style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             accessibilityLabel={isDark ? t("shell.themeToggleToLight") : t("shell.themeToggleToDark")}
           >
             <MaterialIcons name={isDark ? "light-mode" : "dark-mode"} size={24} color={colors.onSurface} />
-          </Pressable>
-          <Pressable
+          </HapticPressable>
+          <HapticPressable
             onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
             {...androidRippleProps(navRipple, true)}
             style={({ pressed }) => [styles.pill, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           >
             <Text style={styles.pillText}>{activeLang === "de" ? "DE" : "EN"}</Text>
-          </Pressable>
+          </HapticPressable>
         </View>
-        <Pressable
+        <HapticPressable
           onPress={() => {
             void (async () => {
               await signOut();
@@ -180,7 +200,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
           style={({ pressed }) => [pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.signOut}>{t("shell.signOut")}</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     </DrawerContentScrollView>
   );

@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 import { useAssetsQuery, useDeleteAssetMutation } from "../../../src/hooks/queries";
 import {
   androidRippleProps,
@@ -91,14 +91,14 @@ export default function AssetsListScreen() {
       headerRight: () => (
         <ShellHeaderActions
           extra={
-            <Pressable
+            <HapticPressable
               onPress={() => router.push("/assets/new")}
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             >
               <MaterialIcons name="add" size={22} color={colors.primary} />
               <Text style={styles.newBtnText}>{t("assets.new")}</Text>
-            </Pressable>
+            </HapticPressable>
           }
         />
       ),
@@ -129,13 +129,13 @@ export default function AssetsListScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.err}>{t("assets.loadError")}</Text>
-        <Pressable
+        <HapticPressable
           onPress={() => void refetch()}
           {...androidRippleProps(rowRipple, true)}
           style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
         >
           <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
+        </HapticPressable>
       </View>
     );
   }
@@ -160,7 +160,7 @@ export default function AssetsListScreen() {
         ListEmptyComponent={<Text style={styles.empty}>{t("assets.empty")}</Text>}
         contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
         renderItem={({ item }) => (
-          <Pressable
+          <HapticPressable
             {...androidRippleProps(rowRipple)}
             style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
             onPress={() => router.push(`/assets/${item.id}`)}
@@ -190,7 +190,7 @@ export default function AssetsListScreen() {
               ) : null}
             </View>
             <MaterialIcons name="chevron-right" size={22} color={colors.outline} />
-          </Pressable>
+          </HapticPressable>
         )}
       />
     </View>

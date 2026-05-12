@@ -2,7 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Stack, router } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { Pressable } from "react-native";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 
 import { pressedOpacity, PRESSED_OPACITY_CONTROL, androidRippleProps, surfaceRippleColor } from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
@@ -14,7 +14,7 @@ export default function WorkOrdersStackLayout() {
 
   function workOrderBackHeaderLeft(tintColor: string) {
     return (
-      <Pressable
+      <HapticPressable
         accessibilityRole="button"
         {...androidRippleProps(headerRipple, true)}
         onPress={() => {
@@ -28,7 +28,7 @@ export default function WorkOrdersStackLayout() {
         ]}
       >
         <MaterialIcons name="arrow-back" size={24} color={tintColor} />
-      </Pressable>
+      </HapticPressable>
     );
   }
 

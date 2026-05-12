@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+
+import { HapticPressable } from "./HapticPressable";
 
 import { allowedParentTypesFor } from "../types/assetRules";
 import type { AssetRow, AssetType } from "../types/api";
@@ -78,7 +80,7 @@ export function ParentAssetPicker({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable
+      <HapticPressable
         {...androidRippleProps(ripple)}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.btn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
@@ -86,7 +88,7 @@ export function ParentAssetPicker({
         <Text style={styles.btnText} numberOfLines={2}>
           {summary}
         </Text>
-      </Pressable>
+      </HapticPressable>
       <SelectModal
         visible={open}
         title={label}

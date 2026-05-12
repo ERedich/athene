@@ -86,6 +86,7 @@ North star differs by theme but shared principles: **precision / industrial**, *
 - **Tables (row double-click)**: double-clicking a table row must trigger the same behavior as clicking that row's **Edit** action.
 - **Exception — Translations**: the **Translations / Übersetzungen** app ([`frontend/src/pages/TranslationsPage.tsx`](frontend/src/pages/TranslationsPage.tsx)) edits DE/EN inline in row cells without a dialog; binding double-click is **not required** until a discrete edit affordance exists.
 - **Tables (context menu)**: every primary `DataTable`, `TreeTable`, or equivalent main-window list table on the **desktop** app must provide a **right-click context menu** with at least the three CRUD-aligned entries — **New**, **Edit**, and **Delete** — matching the shell header actions and i18n for that screen (Edit must match row double-click). Use the shared helpers in [`frontend/src/lib/useTableContextMenu.tsx`](frontend/src/lib/useTableContextMenu.tsx) (`useTableContextMenu` for flat tables, `useTreeTableContextMenu` for `TreeTable`). **Do not** omit or substitute a different menu for a given app **unless** an explicit product decision says otherwise; when an app is read-only, intentionally menu-free, or needs a custom set of items only, that exception must be **called out in this file** for that app.
+- **Exception — Athene context menu entry**: **Assets**, **Aufträge / Work orders**, and **Monitor / Monitoring** must prepend **Athene fragen / Ask Athene** as the first context-menu item. It opens the single global Athene Assistant instance with the selected row as context; while Athene is busy, the menu item shows an idle/spinner state and is disabled.
 - **Exception — Translations context menu**: the **Translations / Übersetzungen** matrix uses **Copy key** and **Reset row to bundled defaults** (clears DB overrides for that row) instead of New/Edit/Delete, because rows are predefined UI keys—not created or deleted via CRUD.
 - **Tables (status icon)**: check icons that represent active/true/plant states in tables must be green (use global `app-data-table` styling for `i.pi.pi-check`; avoid neutral white/gray checks).
 - **Tables (row count in shell title)**: every desktop **app** that ships a primary `DataTable`, `TreeTable`, or equivalent scrollable list must publish its currently visible row count to the shell header so the page title renders as `Title_ [count]`. Use `setHeaderRowCount` from the `AppShellOutletContext` ([`AppShellLayout.tsx`](frontend/src/layout/AppShellLayout.tsx)) — pass the **filtered/displayed** row count (after the header search filter is applied), and call `setHeaderRowCount(null)` on unmount. The shell formats the number via `Intl.NumberFormat(i18n.language)` (DE thousands separator `.`, EN `,`), keeps the signature `_` accent attached to the title text, and renders the brackets `[ ]` in **bold** with the number itself in **normal** weight (see `app-shell-title__name` rules in [`frontend/src/index.css`](frontend/src/index.css)). For **tabbed list apps** (e.g. App parameters), publish the count of the **active tab's** rows, not the union across tabs. **Mobile** clients are exempt — this header convention applies to the desktop frontend only.
@@ -110,13 +111,15 @@ Use these **background** colors for reference icon buttons (and matching border)
 
 | Reference kind | Meaning | Background (Tailwind token) | CSS class |
 | --- | --- | --- | --- |
-| **Documents** | Attached files (PDF, images, video, etc.) | **`cyan-300`** | `app-ref-button--documents` |
+| **Documents** | For **Assets**: asset has document references. For **Work orders / Monitoring**: the work order itself has at least one document reference (`documentCount > 0`); the referenced asset may additionally have documents (`assetDocumentCount >= 0`). | **`cyan-300`** | `app-ref-button--documents` |
+| **Documents (work order asset-only)** | Work order / monitoring row has **no documents directly on the work order** (`documentCount = 0`) but its referenced **asset has documents** (`assetDocumentCount > 0`). This is a source/type cue, **not** a permission cue. | **`green-300`** | `app-ref-button--documents-asset` |
 | **Documents (inactive)** | Document column when **count = 0**; control stays **disabled**; **transparent** button background and border — only the file icon in a **soft blue** (`sky-300`, see [`frontend/src/index.css`](frontend/src/index.css)); must **not** use primary/orange fill. | — | `app-ref-button--documents-inactive` |
 | **Employees / assignments** | Open planning / assignments for a row; **no numeric badge** — use `pi-user-plus` (plus is in the icon). | **`slate-300`** (neutral gray) | `app-ref-button--employees` |
 | **Material** | Material / stock–related links | **`green-300`** | `app-ref-button--material` |
 | **Purchase (Einkauf)** | Procurement / purchasing links | **`pink-300`** | `app-ref-button--purchase` |
 
 - **Foreground**: keep icon and badge text **high contrast** on these pastel fills (the shared classes use a dark slate foreground; adjust only if documented here).
+- **Document colors are not permission states**: for work orders / monitoring, **green means only asset document references exist** (`documentCount = 0`, `assetDocumentCount > 0`), **cyan/blue means at least one work-order document reference exists** (`documentCount > 0`, regardless of whether asset documents also exist), and transparent/soft-blue means no documents (`documentCount = 0`, `assetDocumentCount = 0`). Current permission checks are enforced by API access rules, not by document icon color.
 - **Disabled / empty (other kinds)**: for **material** and **purchase** (when implemented), use neutral surface styling when there is nothing to open — **do not** use the strong green / pink fills. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill).
 
 ---
@@ -168,10 +171,22 @@ Use these **background** colors for reference icon buttons (and matching border)
 
 ---
 
-## AI / data / documents
+## Athene Assistant
 
-- Heavy **AI** usage; PostgreSQL with **vector** capabilities planned; assistant product name: **Athene**.
-- Documents stored in DB initially; later may move to external file server to avoid DB bloat — design APIs with that migration path in mind.
+- Product name: **Athene**. Athene is implemented with the OpenAI API and Neon/PostgreSQL vector capabilities (`pgvector`) for future retrieval over CMMS data and documents.
+- Athene answers in the currently selected frontend language.
+- Athene formats dates and times according to the currently selected frontend language:
+  - **DE**: `DD.MM.YYYY HH:MM`
+  - **EN**: `MM/DD/YYYY HH:MM`
+- Athene can never delete data. If a user asks Athene to delete records, Athene must always answer with the same refusal and must not call tools: **"Ich bin nicht in der Lage Datensätze zu Löschen"** (localized equivalent allowed only where the active frontend language requires it).
+- Athene knows the current user context: user name, login, working site, accessible sites, linked employee, workgroups / Fachgruppen, and future user context such as roles or permissions when those fields are introduced. Athene must never expose or infer password hashes, passwords, API keys, session secrets, or similar sensitive data, and must never change them.
+- Athene respects site restrictions. A user must not receive answers, vector snippets, documents, or generated work orders for sites they cannot access. Assistant tools and retrieval queries must reuse the same site-access checks as the normal backend APIs.
+- Athene understands UI context. When a record is selected in a supported app, Athene receives that context and can answer questions about the selected work order or asset.
+- Athene must not add, change, or delete records for apps in the **Stammdaten / master-data** category, including sites, users, employees, workgroups, cost centers, classifications, app parameters, translations, table viewer metadata, and search configuration.
+- Athene may create work orders under user guidance. It must collect required fields first and create the order only through backend logic that enforces the same required fields, site rules, workgroup rules, classification rules, and reference validations as a normal user action.
+- Athene knows work orders in detail. It may read all accessible work-order fields and referenced tables needed to answer the user.
+- Athene may read documents for work orders and assets when the API exposes usable content. Binary/PDF text extraction is a separate capability and must be handled explicitly when implemented.
+- Documents are stored in DB initially; later may move to an external file server to avoid DB bloat — design APIs with that migration path in mind.
 
 ---
 

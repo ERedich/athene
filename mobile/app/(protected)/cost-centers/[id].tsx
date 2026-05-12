@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -16,8 +15,9 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../../src/auth/AuthContext";
-import { SitePicker } from "../../../src/components/SitePicker";
+import { HapticPressable } from "../../../src/components/HapticPressable";
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
+import { SitePicker } from "../../../src/components/SitePicker";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../../src/lib/appParameterKeys";
 import { isUuid } from "../../../src/lib/uuid";
 import {
@@ -125,7 +125,7 @@ export default function CostCenterEditScreen() {
       headerRight: () => (
         <ShellHeaderActions
           extra={
-            <Pressable
+            <HapticPressable
               {...androidRippleProps(ripple, true)}
               style={({ pressed }) => [{ paddingHorizontal: 6 }, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => {
@@ -150,7 +150,7 @@ export default function CostCenterEditScreen() {
               }}
             >
               <MaterialIcons name="delete-outline" size={24} color="#b91c1c" />
-            </Pressable>
+            </HapticPressable>
           }
         />
       ),
@@ -225,14 +225,14 @@ export default function CostCenterEditScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable
+        <HapticPressable
           {...androidRippleProps(ripple)}
           style={({ pressed }) => [styles.secondary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => router.back()}
         >
           <Text style={styles.secondaryText}>{t("costCenters.cancel")}</Text>
-        </Pressable>
-        <Pressable
+        </HapticPressable>
+        <HapticPressable
           {...androidRippleProps(ripple)}
           style={({ pressed }) => [styles.primary, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
           onPress={() => void onSave()}
@@ -243,7 +243,7 @@ export default function CostCenterEditScreen() {
           ) : (
             <Text style={styles.primaryText}>{t("costCenters.save")}</Text>
           )}
-        </Pressable>
+        </HapticPressable>
       </View>
     </ScrollView>
   );

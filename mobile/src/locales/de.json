@@ -24,7 +24,20 @@
     "navCostCenters": "Kostenstellen",
     "navAssets": "Assets",
     "navWorkOrders": "Aufträge",
+    "navAthene": "Athene fragen",
     "hint": "Öffnen Sie das Menü (☰) oben links, um zwischen den Apps zu wechseln."
+  },
+  "assistant": {
+    "title": "Athene KI Assistent",
+    "askAthene": "Athene fragen",
+    "globalContext": "Globaler Kontext",
+    "empty": "Frag Athene etwas. Die neuesten Nachrichten stehen oben.",
+    "placeholder": "Nachricht eingeben...",
+    "send": "Senden",
+    "you": "Du",
+    "clearContext": "Kontext lösen",
+    "loadError": "Unterhaltung konnte nicht geladen werden.",
+    "sendError": "Athene konnte gerade nicht antworten."
   },
   "home": {
     "title": "Start",
