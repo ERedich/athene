@@ -8,6 +8,32 @@ import {
   type ChangeEvent,
   type CSSProperties,
 } from "react";
+import {
+  ArrowLeftRight,
+  Calendar as CalendarIcon,
+  Check,
+  ExternalLink,
+  File,
+  FilePenLine,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  Image,
+  MapPin,
+  MessageCircle,
+  Network,
+  Pencil,
+  Plus,
+  Presentation,
+  Trash2,
+  TriangleAlert,
+  Upload,
+  Video,
+  Volume2,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -18,10 +44,12 @@ import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
@@ -50,17 +78,16 @@ function isAssetTypeValue(v: unknown): v is AssetType {
   );
 }
 
-/** PrimeIcons glyph per asset type (industrial hierarchy metaphor). */
-function assetTypePrimeIconClass(type: AssetType): string {
+function assetTypeIconComponent(type: AssetType): LucideIcon {
   switch (type) {
     case "site":
-      return "pi pi-map-marker";
+      return MapPin;
     case "structure":
-      return "pi pi-sitemap";
+      return Network;
     case "line":
-      return "pi pi-arrows-h";
+      return ArrowLeftRight;
     case "maintenanceObject":
-      return "pi pi-wrench";
+      return Wrench;
     default: {
       const _exhaustive: never = type;
       return _exhaustive;
@@ -68,10 +95,23 @@ function assetTypePrimeIconClass(type: AssetType): string {
   }
 }
 
-function assetTypeIconClassNames(type: AssetType): string {
-  return `${assetTypePrimeIconClass(type)} app-asset-type-icon app-asset-type-icon--${type}`;
+function AssetTypeGlyph({
+  type,
+  style,
+}: {
+  type: AssetType;
+  style?: CSSProperties;
+}) {
+  const Ico = assetTypeIconComponent(type);
+  return (
+    <Ico
+      className={`app-asset-type-icon app-asset-type-icon--${type} h-4 w-4 shrink-0`}
+      style={style}
+      strokeWidth={1.75}
+      aria-hidden
+    />
+  );
 }
-
 function assetTypeDisplayLabel(
   type: AssetType,
   cfg: AssetTypeDisplayConfig | null,
@@ -235,23 +275,28 @@ function fileExtension(fileName: string): string {
   return i >= 0 ? fileName.slice(i + 1).toLowerCase() : "";
 }
 
-/** PrimeIcons class for MIME / extension (color hints for scanability). */
-function documentTypeIconClass(mimeType: string, fileName: string): string {
+/** MIME / Extension → Lucide (Farben wie zuvor). */
+function documentTypeMimeIcon(
+  mimeType: string,
+  fileName: string,
+): { Icon: LucideIcon; className: string } {
   const ext = fileExtension(fileName);
   const mt = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
-  if (mt.includes("pdf") || ext === "pdf") return "pi pi-file-pdf text-red-500";
-  if (mt.startsWith("image/")) return "pi pi-image text-sky-500";
-  if (mt.startsWith("video/")) return "pi pi-video text-violet-500";
-  if (mt.startsWith("audio/")) return "pi pi-volume-up text-amber-600";
-  if (mt.includes("zip") || ext === "zip" || ext === "rar" || ext === "7z")
-    return "pi pi-folder-open text-amber-700";
+  if (mt.includes("pdf") || ext === "pdf")
+    return { Icon: FileText, className: "text-red-500" };
+  if (mt.startsWith("image/")) return { Icon: Image, className: "text-sky-500" };
+  if (mt.startsWith("video/")) return { Icon: Video, className: "text-violet-500" };
+  if (mt.startsWith("audio/")) return { Icon: Volume2, className: "text-amber-600" };
+  if (mt.includes("zip") || ext === "zip" || ext === "rar" || ext === "7z") {
+    return { Icon: FolderOpen, className: "text-amber-700" };
+  }
   if (
     mt.includes("wordprocessingml") ||
     mt.includes("msword") ||
     ext === "doc" ||
     ext === "docx"
   )
-    return "pi pi-file-word text-blue-600";
+    return { Icon: FileText, className: "text-blue-600" };
   if (
     mt.includes("spreadsheetml") ||
     mt.includes("ms-excel") ||
@@ -259,14 +304,14 @@ function documentTypeIconClass(mimeType: string, fileName: string): string {
     ext === "xlsx" ||
     ext === "csv"
   )
-    return "pi pi-file-excel text-emerald-600";
+    return { Icon: FileSpreadsheet, className: "text-emerald-600" };
   if (
     mt.includes("presentationml") ||
     mt.includes("powerpoint") ||
     ext === "ppt" ||
     ext === "pptx"
   )
-    return "pi pi-file text-orange-600";
+    return { Icon: Presentation, className: "text-orange-600" };
   if (
     mt.startsWith("text/") ||
     ext === "txt" ||
@@ -274,10 +319,9 @@ function documentTypeIconClass(mimeType: string, fileName: string): string {
     ext === "json" ||
     ext === "xml"
   )
-    return "pi pi-file-edit text-slate-500";
-  return "pi pi-file text-on-surface-variant";
+    return { Icon: FilePenLine, className: "text-slate-500" };
+  return { Icon: File, className: "text-on-surface-variant" };
 }
-
 function documentSearchHaystack(
   displayName: string,
   fileName: string,
@@ -390,7 +434,7 @@ function PendingAutoUploadOpenSlot({
         disabled
         tabIndex={-1}
         className="pointer-events-none shrink-0 !h-9 !min-h-9 !w-9 !min-w-9 !p-0 opacity-100"
-        icon="pi pi-spin pi-spinner"
+        icon={<LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         aria-label={ariaLabelBusy}
         title={ariaLabelBusy}
       />
@@ -506,7 +550,7 @@ function AssetsHeaderActions({
           className={createActionNavItem}
           onClick={onCreate}
         >
-          <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+          <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
           <span>{t("assets.new")}</span>
         </button>
       </li>
@@ -517,7 +561,7 @@ function AssetsHeaderActions({
           disabled={!selectedAsset}
           onClick={onEdit}
         >
-          <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
+          <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
           <span>{t("assets.edit")}</span>
         </button>
       </li>
@@ -528,7 +572,7 @@ function AssetsHeaderActions({
           disabled={!selectedAsset}
           onClick={onDelete}
         >
-          <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+          <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
           <span>{t("assets.delete")}</span>
         </button>
       </li>
@@ -538,7 +582,7 @@ function AssetsHeaderActions({
       />
       <li className="ml-auto">
         <IconField iconPosition="left">
-          <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+          <LucideInputSearchIcon />
           <InputText
             value={searchTermInput}
             onChange={(e) => onSearchTermInputChange(e.target.value)}
@@ -723,10 +767,9 @@ export function AssetsPage() {
   const renderAssetTypeDropdownOption = useCallback(
     (option: { value: AssetType; label: string }) => (
       <span className="flex min-w-0 items-center gap-2">
-        <i
-          className={assetTypeIconClassNames(option.value)}
+        <AssetTypeGlyph
+          type={option.value}
           style={assetTypeIconColorStyle(option.value, appParameterAssetTypes)}
-          aria-hidden
         />
         <span className="truncate">{option.label}</span>
       </span>
@@ -744,11 +787,7 @@ export function AssetsPage() {
       }
       return (
         <span className="flex min-w-0 items-center gap-2">
-          <i
-            className={assetTypeIconClassNames(type)}
-            style={assetTypeIconColorStyle(type, appParameterAssetTypes)}
-            aria-hidden
-          />
+          <AssetTypeGlyph type={type} style={assetTypeIconColorStyle(type, appParameterAssetTypes)} />
           <span className="truncate">
             {assetTypeDisplayLabel(type, appParameterAssetTypes, langDe, t)}
           </span>
@@ -761,11 +800,7 @@ export function AssetsPage() {
   const typeColumnBody = useCallback(
     (row: Asset) => (
       <span className="flex min-w-0 items-center gap-2">
-        <i
-          className={assetTypeIconClassNames(row.type)}
-          style={assetTypeIconColorStyle(row.type, appParameterAssetTypes)}
-          aria-hidden
-        />
+        <AssetTypeGlyph type={row.type} style={assetTypeIconColorStyle(row.type, appParameterAssetTypes)} />
         <span className="truncate">
           {assetTypeDisplayLabel(row.type, appParameterAssetTypes, langDe, t)}
         </span>
@@ -1647,7 +1682,7 @@ export function AssetsPage() {
       confirmDialog({
         message: t("assets.confirmDelete", { name: row.name }),
         header: t("assets.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
         acceptClassName: "p-button-danger",
         acceptLabel: t("assets.yes"),
         rejectLabel: t("assets.no"),
@@ -1661,7 +1696,12 @@ export function AssetsPage() {
     (row: Asset | null) => [
       {
         label: t("assistant.askAthene"),
-        icon: athene.busy ? "pi pi-spinner pi-spin" : "pi pi-comments",
+        className: "app-context-menu-athene",
+        icon: athene.busy ? (
+          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ) : (
+          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ),
         disabled: !row || athene.busy,
         command: () => {
           if (!row) return;
@@ -1993,7 +2033,7 @@ export function AssetsPage() {
       <div className="flex items-center">
         <Button
           type="button"
-          icon="pi pi-file"
+          icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           badge={badgeValue}
           badgeClassName={badgeClassName}
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
@@ -2023,7 +2063,7 @@ export function AssetsPage() {
       <Button
         type="button"
         label={t("assets.save")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving || uploading}
         disabled={uploading}
         onClick={() => void save()}
@@ -2423,8 +2463,9 @@ export function AssetsPage() {
                       className="w-full"
                       appendTo={overlayAppendTo}
                     />
-                    <i
-                      className="pi pi-calendar pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
+                    <CalendarIcon
+                      className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant"
+                      strokeWidth={1.75}
                       aria-hidden
                     />
                   </div>
@@ -2479,7 +2520,7 @@ export function AssetsPage() {
                 <div className="grid grid-cols-[8fr_2fr] items-stretch gap-2">
                   <Button
                     type="button"
-                    icon="pi pi-upload"
+                    icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                     label={t("assets.documentsUpload")}
                     className="w-full min-w-0 justify-center !h-9 min-h-9 max-h-9 py-0"
                     onClick={() => fileInputRef.current?.click()}
@@ -2488,7 +2529,7 @@ export function AssetsPage() {
                     iconPosition="left"
                     className="min-w-0 w-full !h-9 min-h-9 max-h-9"
                   >
-                    <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+                    <LucideInputSearchIcon />
                     <InputText
                       value={documentsSearchTerm}
                       onChange={(e) => setDocumentsSearchTerm(e.target.value)}
@@ -2510,7 +2551,7 @@ export function AssetsPage() {
                     role="status"
                     aria-live="polite"
                   >
-                    <i className="pi pi-spin pi-spinner" aria-hidden />
+                    <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
                     <span>{t("assets.documentsUploading")}</span>
                   </div>
                 ) : null}
@@ -2531,10 +2572,20 @@ export function AssetsPage() {
                             className="app-card-cascade flex items-center gap-3 rounded-sm border border-outline-variant px-3 py-2"
                             style={{ ["--app-cascade-index" as string]: index }}
                           >
-                            <i
-                              className={`${documentTypeIconClass(document.file.type || "application/octet-stream", document.file.name)} shrink-0 text-lg`}
-                              aria-hidden
-                            />
+                            {(() => {
+                              const spec = documentTypeMimeIcon(
+                                document.file.type || "application/octet-stream",
+                                document.file.name,
+                              );
+                              const MimeIco = spec.Icon;
+                              return (
+                                <MimeIco
+                                  className={`${spec.className} h-5 w-5 shrink-0`}
+                                  strokeWidth={1.75}
+                                  aria-hidden
+                                />
+                              );
+                            })()}
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-sm">
                                 {document.displayName}
@@ -2576,7 +2627,7 @@ export function AssetsPage() {
                               text
                               severity="danger"
                               className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                              icon="pi pi-times"
+                              icon={<X className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                               aria-label={t("assets.documentsRemovePending")}
                               title={t("assets.documentsRemovePending")}
                               onClick={() =>
@@ -2600,7 +2651,7 @@ export function AssetsPage() {
                         role="status"
                         aria-live="polite"
                       >
-                        <i className="pi pi-spin pi-spinner" aria-hidden />
+                        <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
                         <span>{t("assets.documentsLoading")}</span>
                       </div>
                     ) : documents.length === 0 ? (
@@ -2640,10 +2691,17 @@ export function AssetsPage() {
                               }
                             }}
                           >
-                            <i
-                              className={`${documentTypeIconClass(doc.mimeType, doc.fileName)} shrink-0 text-lg`}
-                              aria-hidden
-                            />
+                            {(() => {
+                              const spec = documentTypeMimeIcon(doc.mimeType, doc.fileName);
+                              const MimeIco = spec.Icon;
+                              return (
+                                <MimeIco
+                                  className={`${spec.className} h-5 w-5 shrink-0`}
+                                  strokeWidth={1.75}
+                                  aria-hidden
+                                />
+                              );
+                            })()}
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-sm">
                                 {doc.displayName || doc.fileName}
@@ -2678,7 +2736,7 @@ export function AssetsPage() {
                               type="button"
                               text
                               className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                              icon="pi pi-external-link"
+                              icon={<ExternalLink className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                               aria-label={t("assets.documentsOpen")}
                               title={t("assets.documentsOpen")}
                               onClick={(e) => {
@@ -2691,7 +2749,7 @@ export function AssetsPage() {
                               text
                               severity="danger"
                               className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                              icon="pi pi-trash"
+                              icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                               aria-label={t("assets.delete")}
                               title={t("assets.delete")}
                               onClick={(e) => {
@@ -2701,7 +2759,7 @@ export function AssetsPage() {
                                     name: doc.displayName || doc.fileName,
                                   }),
                                   header: t("assets.documentsDeleteTitle"),
-                                  icon: "pi pi-exclamation-triangle",
+                                  icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
                                   acceptClassName: "p-button-danger",
                                   acceptLabel: t("assets.yes"),
                                   rejectLabel: t("assets.no"),
@@ -2797,7 +2855,7 @@ export function AssetsPage() {
             <Button
               type="button"
               label={t("assets.documentsMetaApply")}
-              icon="pi pi-check"
+              icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
               onClick={confirmUploadDrafts}
             />
           </div>
@@ -2882,7 +2940,7 @@ export function AssetsPage() {
                 <Button
                   type="button"
                   label={t("assets.save")}
-                  icon="pi pi-check"
+                  icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                   loading={documentEditSaving}
                   disabled={documentEditSaving}
                   onClick={() => void saveDocumentEdit()}

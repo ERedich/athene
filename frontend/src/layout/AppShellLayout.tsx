@@ -1,4 +1,28 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  ArrowLeftRight,
+  Briefcase,
+  ChevronsLeft,
+  ChevronsRight,
+  History,
+  IdCard,
+  Languages,
+  LayoutGrid,
+  LogOut,
+  MapPin,
+  Monitor,
+  Moon,
+  Network,
+  Package,
+  Share2,
+  SlidersHorizontal,
+  Star,
+  Sun,
+  Table,
+  Tags,
+  type LucideIcon,
+  Users,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -9,8 +33,11 @@ import { AtheneWordmark } from "../components/AtheneWordmark";
 import { apiFetch } from "../lib/api";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
+import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "athene.sidebar.collapsed";
+
+const navIconClass = "h-[1.125rem] w-[1.125rem] shrink-0";
 
 const navBtnBase =
   "w-full flex items-center text-left text-sm text-on-surface-variant rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -60,7 +87,7 @@ export type AppShellOutletContext = {
 type NavItem = {
   to: string;
   end?: boolean;
-  icon: string;
+  Icon: LucideIcon;
   labelKey: string;
 };
 
@@ -68,66 +95,66 @@ const navItems: NavItem[] = [
   {
     to: "/dashboard",
     end: true,
-    icon: "pi pi-th-large",
+    Icon: LayoutGrid,
     labelKey: "dashboard.navDashboard",
   },
-  { to: "/assets", icon: "pi pi-box", labelKey: "assets.navAssets" },
+  { to: "/assets", Icon: Package, labelKey: "assets.navAssets" },
   {
     to: "/workorders",
-    icon: "pi pi-briefcase",
+    Icon: Briefcase,
     labelKey: "workOrders.navOrders",
   },
   {
     to: "/monitoring",
-    icon: "pi pi-desktop",
+    Icon: Monitor,
     labelKey: "monitoring.navMonitoring",
   },
   {
     to: "/suchkonfig",
-    icon: "pi pi-share-alt",
+    Icon: Share2,
     labelKey: "suchkonfig.navSuchkonfig",
   },
   {
     to: "/transactions",
-    icon: "pi pi-arrow-right-arrow-left",
+    Icon: ArrowLeftRight,
     labelKey: "transactions.navTransactions",
   },
-  { to: "/sites", icon: "pi pi-map-marker", labelKey: "sites.navSites" },
-  { to: "/users", icon: "pi pi-users", labelKey: "users.navUsers" },
+  { to: "/sites", Icon: MapPin, labelKey: "sites.navSites" },
+  { to: "/users", Icon: Users, labelKey: "users.navUsers" },
   {
     to: "/workgroups",
-    icon: "pi pi-sitemap",
+    Icon: Network,
     labelKey: "workgroups.navWorkgroups",
   },
   {
     to: "/employees",
-    icon: "pi pi-id-card",
+    Icon: IdCard,
     labelKey: "employees.navEmployees",
   },
   {
     to: "/cost-centers",
-    icon: "pi pi-briefcase",
+    Icon: Briefcase,
     labelKey: "costCenters.navCostCenters",
   },
   {
     to: "/classifications",
-    icon: "pi pi-tags",
+    Icon: Tags,
     labelKey: "classifications.navClassifications",
   },
   {
     to: "/app-parameters",
-    icon: "pi pi-sliders-h",
+    Icon: SlidersHorizontal,
     labelKey: "appParameters.navAppParameters",
   },
-  { to: "/audit-log", icon: "pi pi-history", labelKey: "auditLog.navAudit" },
+  { to: "/audit-log", Icon: History, labelKey: "auditLog.navAudit" },
   {
     to: "/table-viewer",
-    icon: "pi pi-table",
+    Icon: Table,
     labelKey: "tableViewer.navTableViewer",
   },
   {
     to: "/translations",
-    icon: "pi pi-language",
+    Icon: Languages,
     labelKey: "translations.navTranslations",
   },
 ];
@@ -229,35 +256,39 @@ export function AppShellLayout() {
             title={collapseLabel}
             onClick={() => setCollapsed((v) => !v)}
           >
-            <i
-              className={`pi text-base ${collapsed ? "pi-angle-double-right" : "pi-angle-double-left"}`}
-              aria-hidden
-            />
+            {collapsed ? (
+              <ChevronsRight className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            ) : (
+              <ChevronsLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            )}
           </button>
         </div>
         <nav
           className={`shrink-0 space-y-1 ${collapsed ? "p-2" : "p-3"}`}
           aria-label={t("dashboard.navAria")}
         >
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              title={collapsed ? t(item.labelKey) : undefined}
-              aria-label={collapsed ? t(item.labelKey) : undefined}
-              className={({ isActive }) =>
-                `${navBtnBase} ${collapsed ? navBtnCollapsed : navBtnExpanded} ${
-                  isActive ? activeNavBtn : ""
-                }`
-              }
-            >
-              <i className={item.icon} aria-hidden />
-              {collapsed ? null : (
-                <span className="truncate">{t(item.labelKey)}</span>
-              )}
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            const { Icon } = item;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                title={collapsed ? t(item.labelKey) : undefined}
+                aria-label={collapsed ? t(item.labelKey) : undefined}
+                className={({ isActive }) =>
+                  `${navBtnBase} ${collapsed ? navBtnCollapsed : navBtnExpanded} ${
+                    isActive ? activeNavBtn : ""
+                  }`
+                }
+              >
+                <Icon className={navIconClass} strokeWidth={1.75} aria-hidden />
+                {collapsed ? null : (
+                  <span className="truncate">{t(item.labelKey)}</span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
         <div
           className={`mt-auto shrink-0 border-t border-white/5 ${collapsed ? "p-2" : "p-3"}`}
@@ -281,10 +312,11 @@ export function AppShellLayout() {
               title={dark ? t("login.themeLight") : t("login.themeDark")}
               onClick={toggleTheme}
             >
-              <i
-                className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`}
-                aria-hidden
-              />
+              {dark ? (
+                <Sun className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Moon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+              )}
             </button>
             <button
               type="button"
@@ -305,14 +337,14 @@ export function AppShellLayout() {
               onClick={athene.open}
             >
               {athene.busy ? (
-                <i className="pi pi-spinner pi-spin text-lg" aria-hidden />
+                <LucideSpinner className="h-5 w-5" strokeWidth={1.75} />
               ) : (
-                <i className="pi pi-star text-lg" aria-hidden />
+                <Star className="h-5 w-5" strokeWidth={1.75} aria-hidden />
               )}
             </button>
             <Button
               type="button"
-              icon="pi pi-sign-out"
+              icon={<LogOut className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
               aria-label={t("dashboard.signOut")}
               title={t("dashboard.signOut")}
               outlined

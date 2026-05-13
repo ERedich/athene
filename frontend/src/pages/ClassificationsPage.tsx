@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -9,9 +10,11 @@ import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
@@ -323,7 +326,9 @@ export function ClassificationsPage() {
       confirmDialog({
         message: t("classifications.confirmDelete", { name: row.name }),
         header: t("classifications.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: (
+          <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />
+        ),
         acceptClassName: "p-button-danger",
         acceptLabel: t("classifications.yes"),
         rejectLabel: t("classifications.no"),
@@ -355,7 +360,7 @@ export function ClassificationsPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("classifications.new")}</span>
           </button>
         </li>
@@ -368,7 +373,7 @@ export function ClassificationsPage() {
               if (selectedClassification) openEdit(selectedClassification);
             }}
           >
-            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("classifications.edit")}</span>
           </button>
         </li>
@@ -381,13 +386,13 @@ export function ClassificationsPage() {
               if (selectedClassification) confirmDelete(selectedClassification);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("classifications.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -405,7 +410,7 @@ export function ClassificationsPage() {
 
   const flagBody = (on: boolean, label: string) =>
     on ? (
-      <i className="pi pi-check text-on-surface" aria-label={label} />
+      <Check className="h-4 w-4 text-on-surface" strokeWidth={1.75} aria-label={label} />
     ) : (
       <span className="text-on-surface-variant">—</span>
     );
@@ -434,7 +439,7 @@ export function ClassificationsPage() {
       <Button
         type="button"
         label={t("classifications.save")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving}
         onClick={() => void save()}
       />

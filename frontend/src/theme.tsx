@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { LucideSpinner } from "./icons/lucide";
 import laraDark from "primereact/resources/themes/lara-dark-blue/theme.css?url";
 import laraLight from "primereact/resources/themes/lara-light-blue/theme.css?url";
 
@@ -206,7 +207,7 @@ export function ThemeLoadingOverlay({ visible }: ThemeLoadingOverlayProps) {
   return (
     <div className="theme-swap-overlay" role="status" aria-live="polite" aria-label="Loading theme">
       <div className="theme-swap-overlay__glass">
-        <i className="pi pi-spin pi-spinner theme-swap-overlay__spinner" aria-hidden />
+        <LucideSpinner className="theme-swap-overlay__spinner h-6 w-6" strokeWidth={1.75} />
       </div>
     </div>
   );

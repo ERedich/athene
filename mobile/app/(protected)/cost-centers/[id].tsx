@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { Trash2 } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useLayoutEffect, useMemo, useState } from "react";
@@ -149,7 +149,7 @@ export default function CostCenterEditScreen() {
                 ]);
               }}
             >
-              <MaterialIcons name="delete-outline" size={24} color="#b91c1c" />
+              <Trash2 size={24} color="#b91c1c" />
             </HapticPressable>
           }
         />

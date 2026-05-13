@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import {
+  Check,
+  CircleX,
+  File,
+  FileText,
+  Filter,
+  Image,
+  MessageCircle,
+  Pencil,
+  Plus,
+  Send,
+  Trash2,
+  TriangleAlert,
+  Upload,
+  UserPlus,
+  Video,
+  X,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
+import { Badge } from "primereact/badge";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
 import { Calendar } from "primereact/calendar";
@@ -11,7 +32,6 @@ import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { MultiSelect } from "primereact/multiselect";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
@@ -45,6 +65,14 @@ import {
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../constants/assetDocumentCategory";
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import {
+  AppPauseIcon,
+  AppPlayStartIcon,
+  AppSquareStopIcon,
+  LucideSpinner,
+  lucidePrimeBtnIcon,
+} from "../icons/lucide";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
 type WorkOrderStatus =
@@ -238,13 +266,17 @@ function fileExtension(fileName: string): string {
   return i >= 0 ? fileName.slice(i + 1).toLowerCase() : "";
 }
 
-function documentTypeIconClass(mimeType: string, fileName: string): string {
+function documentTypeMimeIcon(
+  mimeType: string,
+  fileName: string,
+): { Icon: LucideIcon; className: string } {
   const ext = fileExtension(fileName);
   const mt = mimeType.toLowerCase().split(";")[0]?.trim() ?? "";
-  if (mt.includes("pdf") || ext === "pdf") return "pi pi-file-pdf text-red-500";
-  if (mt.startsWith("image/")) return "pi pi-image text-sky-500";
-  if (mt.startsWith("video/")) return "pi pi-video text-violet-500";
-  return "pi pi-file text-on-surface-variant";
+  if (mt.includes("pdf") || ext === "pdf")
+    return { Icon: FileText, className: "text-red-500" };
+  if (mt.startsWith("image/")) return { Icon: Image, className: "text-sky-500" };
+  if (mt.startsWith("video/")) return { Icon: Video, className: "text-violet-500" };
+  return { Icon: File, className: "text-on-surface-variant" };
 }
 
 function addHours(d: Date, hours: number): Date {
@@ -1309,7 +1341,7 @@ export function WorkOrdersPage() {
     });
   }, []);
 
-  const showSaveError = async (res: Response) => {
+  const showSaveError = useCallback(async (res: Response) => {
     let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string };
@@ -1333,7 +1365,7 @@ export function WorkOrdersPage() {
       detail = t("workOrders.assignmentsIncompatibleWithWorkgroup");
     }
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
-  };
+  }, [t]);
 
   const createDummyWorkOrder = useCallback(async () => {
     if (loading || dummyOrderInFlightRef.current) return;
@@ -1564,7 +1596,7 @@ export function WorkOrdersPage() {
       confirmDialog({
         message: t("workOrders.confirmDelete", { name: row.name }),
         header: t("workOrders.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
         acceptClassName: "p-button-danger",
         acceptLabel: t("workOrders.yes"),
         rejectLabel: t("workOrders.no"),
@@ -1579,7 +1611,7 @@ export function WorkOrdersPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.new")}</span>
           </button>
         </li>
@@ -1590,7 +1622,7 @@ export function WorkOrdersPage() {
             disabled={loading || dummyCreating}
             onClick={() => void createDummyWorkOrder()}
           >
-            <i className={`pi pi-bolt ${primaryActionIcon}`} aria-hidden />
+            <Zap className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.dummyOrder")}</span>
           </button>
         </li>
@@ -1603,7 +1635,7 @@ export function WorkOrdersPage() {
               if (selectedOrder) openEdit(selectedOrder);
             }}
           >
-            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.edit")}</span>
           </button>
         </li>
@@ -1616,7 +1648,7 @@ export function WorkOrdersPage() {
               if (selectedOrder) confirmDelete(selectedOrder);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.delete")}</span>
           </button>
         </li>
@@ -1629,7 +1661,7 @@ export function WorkOrdersPage() {
               setSearchPanelVisible(true);
             }}
           >
-            <i className={`pi pi-filter ${primaryActionIcon}`} aria-hidden />
+            <Filter className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.searchPanel.open")}</span>
           </button>
           {searchPresets.length > 0 ? (
@@ -1648,7 +1680,7 @@ export function WorkOrdersPage() {
             />
           ) : null}
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1766,7 +1798,7 @@ export function WorkOrdersPage() {
       <div className="flex items-center gap-1">
         <Button
           type="button"
-          icon="pi pi-file"
+          icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           badge={badgeValue}
           badgeClassName={badgeClassName}
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
@@ -1782,7 +1814,7 @@ export function WorkOrdersPage() {
         />
         <Button
           type="button"
-          icon="pi pi-user-plus"
+          icon={<UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           badge={assignmentsBadge}
           badgeClassName={assignmentsBadgeClassName}
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
@@ -1870,7 +1902,7 @@ export function WorkOrdersPage() {
       confirmDialog({
         message: t("workOrders.confirmCancel", { name: row.name }),
         header: t("workOrders.confirmCancelTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
         acceptClassName: "p-button-danger",
         acceptLabel: t("workOrders.yes"),
         rejectLabel: t("workOrders.no"),
@@ -1943,19 +1975,19 @@ export function WorkOrdersPage() {
       return [
         {
           label: t("workOrders.contextMenuAssignEmployees"),
-          icon: "pi pi-user-plus",
+          icon: <UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           disabled: row.status === "ended" || row.status === "done" || row.status === "cancelled",
           command: () => openPlanningTab(row),
         },
         {
           label: t("workOrders.contextMenuCreateFeedback"),
-          icon: "pi pi-send",
+          icon: <Send className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           disabled: !canOpenFeedbackTab,
           command: () => openFeedbackTab(row),
         },
         {
           label: t("workOrders.contextMenuCancelOrder"),
-          icon: "pi pi-times-circle",
+          icon: <CircleX className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           disabled: !canCancel,
           command: () => confirmCancelWorkOrder(row),
         },
@@ -1968,7 +2000,12 @@ export function WorkOrdersPage() {
     (row: WorkOrder | null) => [
       {
         label: t("assistant.askAthene"),
-        icon: athene.busy ? "pi pi-spinner pi-spin" : "pi pi-comments",
+        className: "app-context-menu-athene",
+        icon: athene.busy ? (
+          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ) : (
+          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ),
         disabled: !row || athene.busy,
         command: () => {
           if (!row) return;
@@ -2030,7 +2067,7 @@ export function WorkOrdersPage() {
             type="button"
             text
             className="app-wo-start-action !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
-            icon="pi pi-play"
+            icon={<AppPlayStartIcon />}
             title={t("workOrders.start")}
             aria-label={t("workOrders.start")}
             onClick={() => void startOrder(row)}
@@ -2043,8 +2080,8 @@ export function WorkOrdersPage() {
             <Button
               type="button"
               text
-              className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
-              icon="pi pi-stop"
+              className="app-wo-stop-action !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
+              icon={<AppSquareStopIcon />}
               title={t("workOrders.stop")}
               aria-label={t("workOrders.stop")}
               onClick={() => openFeedbackTab(row)}
@@ -2053,25 +2090,12 @@ export function WorkOrdersPage() {
               type="button"
               text
               className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
-              icon="pi pi-pause"
+              icon={<AppPauseIcon />}
               title={t("workOrders.pause")}
               aria-label={t("workOrders.pause")}
               onClick={() => void pauseOrder(row)}
             />
           </div>
-        );
-      }
-      if (row.status === "ended") {
-        return (
-          <Button
-            type="button"
-            text
-            className="!h-7 !min-h-7 !w-7 !min-w-7 !p-0"
-            icon="pi pi-stop"
-            title={t("workOrders.stop")}
-            aria-label={t("workOrders.stop")}
-            onClick={() => openFeedbackTab(row)}
-          />
         );
       }
       return null;
@@ -2090,7 +2114,7 @@ export function WorkOrdersPage() {
             text
             rounded
             className="app-wo-start-action !h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon="pi pi-play"
+            icon={<AppPlayStartIcon />}
             title={t("workOrders.start")}
             aria-label={t("workOrders.start")}
             onClick={() => void startOrder(row)}
@@ -2105,8 +2129,8 @@ export function WorkOrdersPage() {
             type="button"
             text
             rounded
-            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon="pi pi-stop"
+            className="app-wo-stop-action !h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+            icon={<AppSquareStopIcon />}
             title={t("workOrders.stop")}
             aria-label={t("workOrders.stop")}
             onClick={() => openFeedbackTab(row)}
@@ -2116,42 +2140,10 @@ export function WorkOrdersPage() {
             text
             rounded
             className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon="pi pi-pause"
+            icon={<AppPauseIcon />}
             title={t("workOrders.pause")}
             aria-label={t("workOrders.pause")}
             onClick={() => void pauseOrder(row)}
-          />
-        </div>
-      );
-    }
-    if (row.status === "ended") {
-      return (
-        <div className="mr-1 flex items-center gap-1">
-          <Button
-            type="button"
-            text
-            rounded
-            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon="pi pi-stop"
-            title={t("workOrders.stop")}
-            aria-label={t("workOrders.stop")}
-            onClick={() => openFeedbackTab(row)}
-          />
-        </div>
-      );
-    }
-    if (row.status === "done") {
-      return (
-        <div className="mr-1 flex items-center gap-1">
-          <Button
-            type="button"
-            text
-            rounded
-            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon="pi pi-send"
-            title={t("workOrders.tabFeedback")}
-            aria-label={t("workOrders.tabFeedback")}
-            onClick={() => openFeedbackTab(row)}
           />
         </div>
       );
@@ -2178,7 +2170,7 @@ export function WorkOrdersPage() {
         <Button
           type="button"
           label={isFeedbackTab ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
-          icon="pi pi-check"
+          icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           loading={isFeedbackTab ? feedbackSaving : saving}
           disabled={
             isFeedbackTab
@@ -2347,7 +2339,7 @@ export function WorkOrdersPage() {
             columnKey="startStop"
             header={t("workOrders.startStop")}
             body={startStopBody}
-            style={{ width: "6rem", minWidth: "6rem" }}
+            style={{ width: "7.5rem", minWidth: "7.5rem" }}
           />
         </DataTable>
       </div>
@@ -2543,7 +2535,14 @@ export function WorkOrdersPage() {
           </div>
         </div>
             </TabPanel>
-            <TabPanel header={`${t("workOrders.tabPlandaten")} [${assignmentsTabCount}]`}>
+            <TabPanel
+              header={
+                <span className="inline-flex items-center gap-2">
+                  <span>{t("workOrders.tabPlandaten")}</span>
+                  {assignmentsTabCount > 0 ? <Badge value={assignmentsTabCount} /> : null}
+                </span>
+              }
+            >
               <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2" style={{ margin: 0, display: "grid" }}>
                 <div
                   className="grid w-full max-w-full grid-cols-1 gap-4 overflow-hidden md:col-span-2 md:grid-cols-3"
@@ -2665,7 +2664,7 @@ export function WorkOrdersPage() {
                     />
                     <Button
                       type="button"
-                      icon="pi pi-user-plus"
+                      icon={<UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                       label={t("workOrders.assignmentsAdd")}
                       loading={assignmentAdding}
                       onClick={() => void addAssignments()}
@@ -2701,7 +2700,7 @@ export function WorkOrdersPage() {
                             text
                             severity="danger"
                             className="!h-5 !min-h-5 !w-5 !min-w-5 !p-0"
-                            icon="pi pi-times"
+                            icon={<X className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                             onClick={() => void removeAssignment(item.employeeId)}
                             disabled={
                               editingOrder?.status === "ended" ||
@@ -2720,18 +2719,25 @@ export function WorkOrdersPage() {
                 </div>
               </div>
             </TabPanel>
-            <TabPanel header={`${t("workOrders.tabDocuments")} [${documentsTabCount}]`}>
+            <TabPanel
+              header={
+                <span className="inline-flex items-center gap-2">
+                  <span>{t("workOrders.tabDocuments")}</span>
+                  {documentsTabCount > 0 ? <Badge value={documentsTabCount} /> : null}
+                </span>
+              }
+            >
               <div className="space-y-4 pt-1">
                 <div className="grid grid-cols-[8fr_2fr] items-stretch gap-2">
                   <Button
                     type="button"
-                    icon="pi pi-upload"
+                    icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                     label={t("workOrders.documentsUpload")}
                     className="w-full min-w-0 justify-center !h-9 min-h-9 max-h-9 py-0"
                     onClick={() => fileInputRef.current?.click()}
                   />
                   <IconField iconPosition="left" className="min-w-0 w-full !h-9 min-h-9 max-h-9">
-                    <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+                    <LucideInputSearchIcon />
                     <InputText
                       value={documentsSearchTerm}
                       onChange={(e) => setDocumentsSearchTerm(e.target.value)}
@@ -2743,7 +2749,7 @@ export function WorkOrdersPage() {
                 <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handlePickFiles} />
                 {uploading ? (
                   <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                    <i className="pi pi-spin pi-spinner" aria-hidden />
+                    <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
                     <span>{t("workOrders.documentsUploading")}</span>
                   </div>
                 ) : null}
@@ -2758,7 +2764,20 @@ export function WorkOrdersPage() {
                           className="app-card-cascade flex items-center gap-3 rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2"
                           style={{ ["--app-cascade-index" as string]: index }}
                         >
-                          <i className={`${documentTypeIconClass(doc.file.type || "application/octet-stream", doc.file.name)} shrink-0 text-lg`} aria-hidden />
+                          {(() => {
+                            const spec = documentTypeMimeIcon(
+                              doc.file.type || "application/octet-stream",
+                              doc.file.name,
+                            );
+                            const MimeIco = spec.Icon;
+                            return (
+                              <MimeIco
+                                className={`${spec.className} h-5 w-5 shrink-0`}
+                                strokeWidth={1.75}
+                                aria-hidden
+                              />
+                            );
+                          })()}
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm">{doc.displayName}</div>
                             <div className="text-xs text-on-surface-variant">
@@ -2770,14 +2789,25 @@ export function WorkOrdersPage() {
                             </div>
                           </div>
                           <Button type="button" text disabled className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0 opacity-100">
-                            {Boolean(pendingRowUploading[doc.localId]) ? <i className="pi pi-spin pi-spinner" /> : <span className="text-xs">{Math.max(0, Math.ceil((PENDING_AUTO_UPLOAD_MS - (Date.now() - doc.addedAt) + pendingUiTick * 0) / 1000))}</span>}
+                            {Boolean(pendingRowUploading[doc.localId]) ? (
+                              <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
+                            ) : (
+                              <span className="text-xs">
+                                {Math.max(
+                                  0,
+                                  Math.ceil(
+                                    (PENDING_AUTO_UPLOAD_MS - (Date.now() - doc.addedAt) + pendingUiTick * 0) / 1000,
+                                  ),
+                                )}
+                              </span>
+                            )}
                           </Button>
                           <Button
                             type="button"
                             text
                             severity="danger"
                             className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                            icon="pi pi-times"
+                            icon={<X className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                             aria-label={t("workOrders.documentsRemovePending")}
                             title={t("workOrders.documentsRemovePending")}
                             onClick={() => removePendingFileByLocalId(doc.localId)}
@@ -2793,7 +2823,7 @@ export function WorkOrdersPage() {
                     <div className="text-sm text-on-surface-variant">{t("workOrders.documentsExisting")}</div>
                     {documentsLoading ? (
                       <div className="flex items-center gap-2 text-sm text-on-surface-variant">
-                        <i className="pi pi-spin pi-spinner" aria-hidden />
+                        <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
                         <span>{t("workOrders.documentsLoading")}</span>
                       </div>
                     ) : documents.length === 0 ? (
@@ -2807,7 +2837,17 @@ export function WorkOrdersPage() {
                             style={{ ["--app-cascade-index" as string]: index }}
                             onClick={() => void openDocumentContent(doc)}
                           >
-                            <i className={`${documentTypeIconClass(doc.mimeType, doc.fileName)} shrink-0 text-lg`} aria-hidden />
+                          {(() => {
+                            const spec = documentTypeMimeIcon(doc.mimeType, doc.fileName);
+                            const MimeIco = spec.Icon;
+                            return (
+                              <MimeIco
+                                className={`${spec.className} h-5 w-5 shrink-0`}
+                                strokeWidth={1.75}
+                                aria-hidden
+                              />
+                            );
+                          })()}
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-sm">{doc.displayName || doc.fileName}</div>
                               <div className="text-xs text-on-surface-variant">
@@ -2834,7 +2874,7 @@ export function WorkOrdersPage() {
                               type="button"
                               text
                               className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                              icon="pi pi-pencil"
+                              icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDocumentEdit(doc);
@@ -2848,7 +2888,7 @@ export function WorkOrdersPage() {
                                 text
                                 severity="danger"
                                 className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0"
-                                icon="pi pi-trash"
+                                icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   void deleteDocument(doc.workOrderId!, doc.id);
@@ -2868,7 +2908,12 @@ export function WorkOrdersPage() {
               </div>
             </TabPanel>
             <TabPanel
-              header={`${t("workOrders.tabFeedback")} [${feedbackTabCount}]`}
+              header={
+                <span className="inline-flex items-center gap-2">
+                  <span>{t("workOrders.tabFeedback")}</span>
+                  {feedbackTabCount > 0 ? <Badge value={feedbackTabCount} /> : null}
+                </span>
+              }
               disabled={!editingId || !workOrderStatusAllowsFeedbackTab(editingOrder?.status)}
             >
               <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6">
@@ -2992,7 +3037,14 @@ export function WorkOrdersPage() {
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" label={t("workOrders.cancel")} severity="secondary" outlined disabled={documentEditSaving} onClick={() => setDocumentEdit(null)} />
-            <Button type="button" label={t("workOrders.save")} icon="pi pi-check" loading={documentEditSaving} disabled={documentEditSaving} onClick={() => void saveDocumentEdit()} />
+            <Button
+              type="button"
+              label={t("workOrders.save")}
+              icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+              loading={documentEditSaving}
+              disabled={documentEditSaving}
+              onClick={() => void saveDocumentEdit()}
+            />
           </div>
         </div>
       </Dialog>

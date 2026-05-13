@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Router, type Request, type Response } from "express";
-import OpenAI from "openai";
+import { OpenAI } from "openai";
 import type { QueryResult, QueryResultRow } from "pg";
 
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
@@ -48,6 +48,16 @@ type UserProfile = {
   employeeName: string | null;
   siteIds: string[];
   sites: Array<{ id: string; key: string; name: string }>;
+  /** Buchungskreise (cost centers) on sites the user may access — same scope as the cost-centers API. */
+  costCenters: Array<{
+    id: string;
+    key: string;
+    name: string;
+    siteId: string;
+    siteKey: string;
+    siteName: string;
+    isActive: boolean;
+  }>;
   workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
 };
 
@@ -512,6 +522,10 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: statusEvents from auditLog identify who changed a work order to each status and when. Use them for questions like who started, paused, continued, ended, completed, cancelled, or assigned an order. Prefer employeeName/employeeKey from the linked user employee; otherwise use changedByName or changedByLogin.",
     "Program logic: workOrder.doneBy/doneByEmployeeKey/doneByEmployeeName identify the employee stored as completion attribution. For status Beendet/ended, combine doneByEmployeeName with endedAt when present. For status Erledigt/done, combine doneByEmployeeName with doneAt when present. If statusEvents and doneBy conflict, mention both instead of inventing certainty.",
     "Program logic: Athene has read access to transactions through tools and context facts. For work-order feedback hours, transaction type IN with workOrderId stores captured hours in quantity. If the user says 'ich', 'meine', or asks what they personally captured, use currentUserTransactions; otherwise use all work-order transactions. Present transaction lists and summaries as Markdown tables when useful.",
+    "Program logic: User profile `sites` are **Standorte (sites)** — each has `key` (short code, e.g. EY) and `name` (location/site name, e.g. Eystrup). This is not the same as Buchungskreise.",
+    "Program logic: User profile `costCenters` are **Buchungskreise (cost centers)** the user may use on allowed sites. Each entry has `key` and `name` of the cost center, plus `siteKey` and `siteName` of the site that cost center belongs to. Never swap site key/name with cost center key/name. Never label a site as a Buchungskreis unless it is literally an entry in `costCenters`.",
+    "Program logic: User profile `workgroups` are **Fachgruppen (workgroups)** — assignment groups, not Buchungskreise. Do not list workgroup names as cost centers.",
+    "When the user asks which Buchungskreise/cost centers they have access to, list **only** objects from `costCenters` (with siteKey/siteName for context). If `costCenters` is empty, say there are none in the system for their accessible sites — do not invent rows.",
     "All answers and tool requests must respect the user's site restrictions.",
     "Use UI context when a row is selected. If context is missing or ambiguous, ask a short clarifying question.",
     `Known user context: ${JSON.stringify(profile)}`,
@@ -576,6 +590,7 @@ async function loadUserProfile(userId: string): Promise<UserProfile | null> {
       employeeName: string | null;
       siteIds: string[];
       sites: UserProfile["sites"];
+      costCenters: UserProfile["costCenters"];
       workgroups: UserProfile["workgroups"];
     }
   >(
@@ -590,6 +605,7 @@ async function loadUserProfile(userId: string): Promise<UserProfile | null> {
       emp."name" AS "employeeName",
       COALESCE(site_access."siteIds", ARRAY[]::uuid[])::text[] AS "siteIds",
       COALESCE(site_access."sites", '[]'::json) AS "sites",
+      COALESCE(cost_centers."costCenters", '[]'::json) AS "costCenters",
       COALESCE(workgroups."workgroups", '[]'::json) AS "workgroups"
     FROM "users" u
     LEFT JOIN "employee" emp ON emp."id" = u."employeeId"
@@ -608,6 +624,26 @@ async function loadUserProfile(userId: string): Promise<UserProfile | null> {
         WHERE us."userId" = u."id"
       ) site_all
     ) site_access ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(
+        json_agg(
+          jsonb_build_object(
+            'id', c."id",
+            'key', c."key",
+            'name', c."name",
+            'siteId', c."siteId",
+            'siteKey', s."key",
+            'siteName', s."name",
+            'isActive', c."isActive"
+          )
+          ORDER BY s."key" ASC, c."key" ASC
+        ),
+        '[]'::json
+      ) AS "costCenters"
+      FROM "costCenter" c
+      JOIN "site" s ON s."id" = c."siteId"
+      WHERE ${siteAccessSql('c."siteId"', 'u."id"')}
+    ) cost_centers ON true
     LEFT JOIN LATERAL (
       SELECT json_agg(jsonb_build_object('id', wg."id", 'key', wg."key", 'name', wg."name", 'siteId', wg."siteId")) AS "workgroups"
       FROM "workgroupUser" wgu
@@ -631,6 +667,7 @@ async function loadUserProfile(userId: string): Promise<UserProfile | null> {
     employeeName: row.employeeName,
     siteIds: row.siteIds,
     sites: row.sites ?? [],
+    costCenters: (row.costCenters ?? []) as UserProfile["costCenters"],
     workgroups: row.workgroups ?? [],
   };
 }

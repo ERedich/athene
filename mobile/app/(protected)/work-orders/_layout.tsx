@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { ArrowLeft } from "lucide-react-native";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Stack, router } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -27,7 +27,7 @@ export default function WorkOrdersStackLayout() {
           pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
         ]}
       >
-        <MaterialIcons name="arrow-back" size={24} color={tintColor} />
+        <ArrowLeft size={24} color={tintColor} />
       </HapticPressable>
     );
   }

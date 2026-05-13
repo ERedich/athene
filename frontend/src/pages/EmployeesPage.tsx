@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -9,9 +10,11 @@ import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
@@ -302,7 +305,9 @@ export function EmployeesPage() {
       confirmDialog({
         message: t("employees.confirmDelete", { name: row.name }),
         header: t("employees.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: (
+          <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />
+        ),
         acceptClassName: "p-button-danger",
         acceptLabel: t("employees.yes"),
         rejectLabel: t("employees.no"),
@@ -330,7 +335,7 @@ export function EmployeesPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("employees.new")}</span>
           </button>
         </li>
@@ -343,7 +348,7 @@ export function EmployeesPage() {
               if (selectedEmployee) openEdit(selectedEmployee);
             }}
           >
-            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("employees.edit")}</span>
           </button>
         </li>
@@ -356,13 +361,13 @@ export function EmployeesPage() {
               if (selectedEmployee) confirmDelete(selectedEmployee);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("employees.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -380,7 +385,11 @@ export function EmployeesPage() {
 
   const activeBody = (row: Employee) =>
     row.isActive ? (
-      <i className="pi pi-check text-on-surface" aria-label={t("employees.active")} />
+      <Check
+        className="h-4 w-4 text-on-surface"
+        strokeWidth={1.75}
+        aria-label={t("employees.active")}
+      />
     ) : (
       <span className="text-on-surface-variant">{t("employees.inactive")}</span>
     );
@@ -409,7 +418,7 @@ export function EmployeesPage() {
       <Button
         type="button"
         label={t("employees.save")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving}
         onClick={() => void save()}
       />

@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { Sparkles } from "lucide-react-native";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
@@ -108,7 +108,7 @@ export function WorkOrderActionsSheet({
             {atheneBusy ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <MaterialIcons name="psychology" size={20} color={colors.primary} />
+              <Sparkles size={20} color={colors.primary} />
             )}
             <Text style={styles.rowText}>{t("assistant.askAthene")}</Text>
           </HapticPressable>

@@ -4,7 +4,7 @@ import { useOutletContext } from "react-router-dom";
 import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
@@ -170,7 +170,7 @@ export function TableViewerPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

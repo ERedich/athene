@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -7,10 +8,12 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch, apiUrl } from "../lib/api";
@@ -142,7 +145,9 @@ export function TransactionsPage() {
       confirmDialog({
         message: t("transactions.confirmDelete", { transactionNumber: row.transactionNumber }),
         header: t("transactions.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: (
+          <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />
+        ),
         acceptClassName: "p-button-danger",
         acceptLabel: t("transactions.yes"),
         rejectLabel: t("transactions.no"),
@@ -164,13 +169,13 @@ export function TransactionsPage() {
               if (selectedRow) confirmDelete(selectedRow);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("transactions.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

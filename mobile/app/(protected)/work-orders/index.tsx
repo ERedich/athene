@@ -1,4 +1,12 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import {
+  ChevronRight,
+  FileText,
+  MoreVertical,
+  MoveHorizontal,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
 import { useNavigation, useRouter } from "expo-router";
@@ -109,7 +117,7 @@ function WorkOrdersAllTabPage({
       keyExtractor={(item) => item.id}
       ListHeaderComponent={
         <View style={styles.searchWrap}>
-          <MaterialIcons name="search" size={20} color={colors.onSurfaceVariant} />
+          <Search size={20} color={colors.onSurfaceVariant} />
           <TextInput
             value={q}
             onChangeText={setQ}
@@ -150,11 +158,7 @@ function WorkOrdersAllTabPage({
                         total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
                       ]}
                     >
-                      <MaterialIcons
-                        name="description"
-                        size={13}
-                        color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"}
-                      />
+                      <FileText size={13} color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"} />
                       {total > 0 ? <Text style={styles.docChipText}>{total}</Text> : null}
                     </View>
                   );
@@ -178,14 +182,14 @@ function WorkOrdersAllTabPage({
               style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => openActions(item)}
             >
-              <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
+              <MoreVertical size={20} color={colors.onSurfaceVariant} />
             </HapticPressable>
             <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
             >
-              <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+              <ChevronRight size={22} color={colors.onSurfaceVariant} />
             </HapticPressable>
           </View>
         </View>
@@ -277,7 +281,7 @@ function WorkOrdersPresetPage({
       extraData={isFetching}
       ListHeaderComponent={
         <View style={styles.searchWrap}>
-          <MaterialIcons name="search" size={20} color={colors.onSurfaceVariant} />
+          <Search size={20} color={colors.onSurfaceVariant} />
           <TextInput
             value={q}
             onChangeText={setQ}
@@ -318,11 +322,7 @@ function WorkOrdersPresetPage({
                         total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
                       ]}
                     >
-                      <MaterialIcons
-                        name="description"
-                        size={13}
-                        color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"}
-                      />
+                      <FileText size={13} color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"} />
                       {total > 0 ? <Text style={styles.docChipText}>{total}</Text> : null}
                     </View>
                   );
@@ -346,14 +346,14 @@ function WorkOrdersPresetPage({
               style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => openActions(item)}
             >
-              <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
+              <MoreVertical size={20} color={colors.onSurfaceVariant} />
             </HapticPressable>
             <HapticPressable
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
             >
-              <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+              <ChevronRight size={22} color={colors.onSurfaceVariant} />
             </HapticPressable>
           </View>
         </View>
@@ -638,7 +638,7 @@ export default function WorkOrdersListScreen() {
                 {headerRefreshPending ? (
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <MaterialIcons name="refresh" size={20} color={colors.primary} />
+                  <RefreshCw size={20} color={colors.primary} />
                 )}
               </HapticPressable>
               <HapticPressable
@@ -646,7 +646,7 @@ export default function WorkOrdersListScreen() {
                 {...androidRippleProps(rowRipple, true)}
                 style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               >
-                <MaterialIcons name="add" size={22} color={colors.primary} />
+                <Plus size={22} color={colors.primary} />
                 <Text style={styles.newBtnText}>{t("workOrders.new")}</Text>
               </HapticPressable>
             </View>
@@ -830,7 +830,7 @@ export default function WorkOrdersListScreen() {
             accessible
             accessibilityLabel={t("workOrders.swipeSearchConfigsHint")}
           >
-            <MaterialIcons name="swipe" size={20} color={colors.primary} importantForAccessibility="no" />
+            <MoveHorizontal size={20} color={colors.primary} importantForAccessibility="no" />
             <Text style={styles.swipeHintText} importantForAccessibility="no">
               {t("workOrders.swipeSearchConfigsHint")}
             </Text>
@@ -871,7 +871,7 @@ export default function WorkOrdersListScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.searchWrap}>
-              <MaterialIcons name="search" size={20} color={colors.onSurfaceVariant} />
+              <Search size={20} color={colors.onSurfaceVariant} />
               <TextInput
                 value={q}
                 onChangeText={setQ}
@@ -912,8 +912,7 @@ export default function WorkOrdersListScreen() {
                             total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
                           ]}
                         >
-                          <MaterialIcons
-                            name="description"
+                          <FileText
                             size={13}
                             color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"}
                           />
@@ -940,14 +939,14 @@ export default function WorkOrdersListScreen() {
                   style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => openActions(item)}
                 >
-                  <MaterialIcons name="more-vert" size={20} color={colors.onSurfaceVariant} />
+                  <MoreVertical size={20} color={colors.onSurfaceVariant} />
                 </HapticPressable>
                 <HapticPressable
                   {...androidRippleProps(rowRipple, true)}
                   style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                   onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
                 >
-                  <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+                  <ChevronRight size={22} color={colors.onSurfaceVariant} />
                 </HapticPressable>
               </View>
             </View>

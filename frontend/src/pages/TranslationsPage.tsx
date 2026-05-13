@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Column } from "primereact/column";
 import { ContextMenu } from "primereact/contextmenu";
 import { DataTable } from "primereact/datatable";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import type { MenuItem } from "primereact/menuitem";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { applyUiTranslationOverrides, getBuiltInFlattenedBundles } from "../lib/applyUiTranslationOverrides";
@@ -137,7 +140,7 @@ export function TranslationsPage() {
     () => [
       {
         label: t("translations.ctxCopyKey"),
-        icon: "pi pi-copy",
+        icon: <Copy className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !ctxRow,
         command: () => {
           if (!ctxRow) return;
@@ -146,7 +149,7 @@ export function TranslationsPage() {
       },
       {
         label: t("translations.ctxResetRow"),
-        icon: "pi pi-undo",
+        icon: <Undo2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !ctxRow,
         command: () => void resetRowFromCtx(),
       },
@@ -214,13 +217,13 @@ export function TranslationsPage() {
             disabled={saving || loading}
             onClick={() => void save()}
           >
-            <i className={`pi pi-check ${primaryActionIcon}`} aria-hidden />
+            <Check className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{saving ? t("translations.saving") : t("translations.save")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

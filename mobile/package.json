@@ -30,6 +30,7 @@
     "expo-router": "~6.0.23",
     "expo-status-bar": "~3.0.9",
     "i18next": "^24.2.0",
+    "lucide-react-native": "^1.14.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-i18next": "^15.2.0",

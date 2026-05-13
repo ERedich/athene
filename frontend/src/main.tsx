@@ -1,5 +1,4 @@
 import { PrimeReactProvider } from "primereact/api";
-import "primeicons/primeicons.css";
 import "primeflex/primeflex.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

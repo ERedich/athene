@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -8,11 +9,13 @@ import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
 import { Password } from "primereact/password";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
@@ -80,6 +83,7 @@ const actionNavItem =
 const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
 const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
 const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
+const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 const createActionIcon = "text-green-500/70";
 const deleteActionIcon = "text-red-500";
 
@@ -332,7 +336,9 @@ export function UsersPage() {
       confirmDialog({
         message: t("users.confirmDelete", { name: row.name }),
         header: t("users.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: (
+          <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />
+        ),
         acceptClassName: "p-button-danger",
         acceptLabel: t("users.yes"),
         rejectLabel: t("users.no"),
@@ -360,7 +366,7 @@ export function UsersPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("users.new")}</span>
           </button>
         </li>
@@ -373,7 +379,7 @@ export function UsersPage() {
               if (selectedUser) openEdit(selectedUser);
             }}
           >
-            <i className="pi pi-pencil" aria-hidden />
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("users.edit")}</span>
           </button>
         </li>
@@ -386,13 +392,13 @@ export function UsersPage() {
               if (selectedUser) confirmDelete(selectedUser);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("users.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -468,7 +474,13 @@ export function UsersPage() {
   const employeeActiveBody = (row: User) => {
     if (!row.employeeId) return <span className="text-on-surface-variant">—</span>;
     if (row.employeeIsActive === true) {
-      return <i className="pi pi-check text-green-500" aria-label={t("employees.active")} title={t("employees.active")} />;
+      return (
+        <Check
+          className="h-4 w-4 text-green-500"
+          strokeWidth={1.75}
+          aria-label={t("employees.active")}
+        />
+      );
     }
     if (row.employeeIsActive === false) {
       return <span className="text-on-surface-variant">{t("employees.inactive")}</span>;
@@ -590,7 +602,7 @@ export function UsersPage() {
       <Button
         type="button"
         label={t("users.save")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving}
         onClick={() => void save()}
       />

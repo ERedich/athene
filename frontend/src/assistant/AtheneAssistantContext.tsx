@@ -8,9 +8,12 @@ import {
   useState,
   type FormEvent,
   type ReactNode,
+  type TransitionEvent,
 } from "react";
+import { Send, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { LucideSpinner } from "../icons/lucide";
 import { apiFetch } from "../lib/api";
 
 export type AtheneUiContext = {
@@ -134,9 +137,15 @@ function renderMessageContent(content: string) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
+const ASSISTANT_DRAWER_MS = 280;
+
 export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const [visible, setVisible] = useState(false);
+  const [panelMounted, setPanelMounted] = useState(false);
+  const [panelIn, setPanelIn] = useState(false);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<AtheneMessage[]>([]);
@@ -179,6 +188,24 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     loadedRef.current = true;
     void loadConversation();
   }, [loadConversation]);
+
+  useEffect(() => {
+    if (visible) {
+      setPanelMounted(true);
+      const id = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setPanelIn(true));
+      });
+      return () => window.cancelAnimationFrame(id);
+    }
+    setPanelIn(false);
+  }, [visible]);
+
+  const onPanelTransitionEnd = useCallback((event: TransitionEvent<HTMLElement>) => {
+    if (event.propertyName !== "transform") return;
+    if (!visibleRef.current) {
+      setPanelMounted(false);
+    }
+  }, []);
 
   const open = useCallback(() => {
     setVisible(true);
@@ -271,18 +298,24 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   return (
     <AtheneAssistantContext.Provider value={value}>
       {children}
-      {visible ? (
-        <div
-          className="fixed inset-0 z-[1000] flex justify-end bg-black/35"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) close();
-          }}
-        >
+      {panelMounted ? (
+        <div className="fixed inset-0 z-[1000] flex justify-end" role="presentation">
+          <div
+            className={`absolute inset-0 bg-black/35 transition-opacity ease-out ${
+              panelIn ? "opacity-100" : "opacity-0"
+            }`}
+            style={{ transitionDuration: `${ASSISTANT_DRAWER_MS}ms` }}
+            aria-hidden
+            onMouseDown={() => close()}
+          />
           <section
-            className="flex h-full w-[60vw] max-w-[60vw] flex-col bg-surface-container-low shadow-2xl"
+            className={`relative z-10 ml-auto flex h-full w-[60vw] max-w-[60vw] shrink-0 flex-col bg-surface-container-low shadow-2xl transition-transform ease-out ${
+              panelIn ? "translate-x-0" : "translate-x-full"
+            }`}
+            style={{ transitionDuration: `${ASSISTANT_DRAWER_MS}ms` }}
             aria-label={t("assistant.title")}
             onMouseDown={(event) => event.stopPropagation()}
+            onTransitionEnd={onPanelTransitionEnd}
           >
             <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -307,7 +340,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 title={t("assistant.close")}
                 onClick={close}
               >
-                <i className="pi pi-times" aria-hidden />
+                <X className="h-4 w-4" strokeWidth={1.75} aria-hidden />
               </button>
             </header>
 
@@ -325,7 +358,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
               <div className="flex flex-col gap-3">
                 {busy ? (
                   <div className="mr-8 flex items-center gap-2 rounded-sm bg-surface-container-highest px-3 py-2 text-sm text-on-surface">
-                    <i className="pi pi-spinner pi-spin text-[var(--color-primary)]" aria-hidden />
+                    <LucideSpinner className="h-4 w-4 text-[var(--color-primary)]" strokeWidth={1.75} />
                     <span>{t("assistant.thinking")}</span>
                   </div>
                 ) : null}
@@ -381,7 +414,11 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                   className="inline-flex h-9 items-center gap-2 rounded-sm bg-[var(--color-primary)] px-3 text-sm font-semibold text-white disabled:opacity-50"
                   disabled={busy || !input.trim()}
                 >
-                  {busy ? <i className="pi pi-spinner pi-spin" aria-hidden /> : <i className="pi pi-send" aria-hidden />}
+                  {busy ? (
+                    <LucideSpinner className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  ) : (
+                    <Send className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                  )}
                   <span>{t("assistant.send")}</span>
                 </button>
               </div>

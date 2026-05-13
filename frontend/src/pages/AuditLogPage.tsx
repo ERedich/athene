@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -7,10 +8,12 @@ import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch, apiUrl } from "../lib/api";
@@ -140,7 +143,7 @@ export function AuditLogPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -276,7 +279,7 @@ export function AuditLogPage() {
         </div>
         <Button
           type="button"
-          icon="pi pi-refresh"
+          icon={<RefreshCw className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           label={t("auditLog.apply")}
           outlined
           size="small"

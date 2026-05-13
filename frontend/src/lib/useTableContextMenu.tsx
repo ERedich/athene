@@ -8,10 +8,12 @@ import {
   type SyntheticEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ContextMenu } from "primereact/contextmenu";
 import type { DataTableContextMenuSingleSelectionChangeEvent, DataTableRowEvent } from "primereact/datatable";
 import type { MenuItem } from "primereact/menuitem";
 
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 import { overlayAppendTo } from "./overlayAppendTo";
 
 export type CrudHandlers<T> = {
@@ -55,12 +57,12 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
     const base: MenuItem[] = [
       {
         label: labels.new,
-        icon: "pi pi-plus",
+        icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         command: () => handlers.onCreate?.(),
       },
       {
         label: labels.edit,
-        icon: "pi pi-pencil",
+        icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !hasRow,
         command: () => {
           if (selection != null) handlers.onEdit?.(selection);
@@ -68,7 +70,7 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
       },
       {
         label: labels.delete,
-        icon: "pi pi-trash",
+        icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !hasRow,
         command: () => {
           if (selection != null) handlers.onDelete?.(selection);
@@ -78,7 +80,9 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
     const extra = extraItems?.(selection) ?? [];
     return [
       ...leading,
-      ...(leading.length > 0 ? [{ separator: true }] : []),
+      ...(leading.length > 0
+        ? [{ separator: true as const, className: "app-context-menu-after-athene-sep" }]
+        : []),
       ...base,
       ...(extra.length > 0 ? [{ separator: true }, ...extra] : []),
     ];

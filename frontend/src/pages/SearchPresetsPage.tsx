@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
+import { Check, Filter, Pencil, Trash2, TriangleAlert, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -32,6 +33,7 @@ import {
   type WorkOrderSearchPresetListItem,
 } from "../lib/workOrderSearchPresetApi";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 type UserDirectoryRow = { id: string; loginName: string; name: string };
 
@@ -171,7 +173,7 @@ export function SearchPresetsPage() {
       confirmDialog({
         message: t("suchkonfig.confirmDelete", { name: preset.name }),
         header: t("suchkonfig.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
         acceptClassName: "p-button-danger",
         acceptLabel: t("workOrders.yes"),
         rejectLabel: t("workOrders.no"),
@@ -333,7 +335,7 @@ export function SearchPresetsPage() {
       <Button
         type="button"
         label={t("suchkonfig.shareApply")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={shareSaving}
         disabled={shareLoading || !dialogPreset}
         onClick={() => void saveShares()}
@@ -406,21 +408,21 @@ export function SearchPresetsPage() {
     <div className="flex flex-wrap gap-1">
       <Button
         type="button"
-        icon="pi pi-pencil"
+        icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         className="p-button-text p-button-sm"
         label={t("suchkonfig.edit")}
         onClick={() => void openEdit(preset)}
       />
       <Button
         type="button"
-        icon="pi pi-users"
+        icon={<Users className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         className="p-button-text p-button-sm"
         label={t("suchkonfig.assignments")}
         onClick={() => openShareDialog(preset)}
       />
       <Button
         type="button"
-        icon="pi pi-trash"
+        icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         className="p-button-text p-button-sm p-button-danger"
         label={t("suchkonfig.delete")}
         onClick={() => confirmDelete(preset)}
@@ -525,7 +527,7 @@ export function SearchPresetsPage() {
             <Button
               type="button"
               label={t("suchkonfig.editSave")}
-              icon="pi pi-check"
+              icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
               loading={editSaving}
               disabled={editLoading || refData.loading}
               onClick={() => void saveEdit()}
@@ -558,7 +560,7 @@ export function SearchPresetsPage() {
             <Button
               type="button"
               label={t("suchkonfig.editOpenFilters")}
-              icon="pi pi-filter"
+              icon={<Filter className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
               className="p-button-outlined w-fit"
               onClick={() => setFilterSidebarVisible(true)}
             />

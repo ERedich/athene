@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { ChevronRight, Plus, Search } from "lucide-react-native";
 import { useNavigation, useRouter } from "expo-router";
 import { useLayoutEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -96,7 +96,7 @@ export default function AssetsListScreen() {
               {...androidRippleProps(rowRipple, true)}
               style={({ pressed }) => [styles.newBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             >
-              <MaterialIcons name="add" size={22} color={colors.primary} />
+              <Plus size={22} color={colors.primary} />
               <Text style={styles.newBtnText}>{t("assets.new")}</Text>
             </HapticPressable>
           }
@@ -147,7 +147,7 @@ export default function AssetsListScreen() {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.searchWrap}>
-            <MaterialIcons name="search" size={20} color={colors.outline} />
+            <Search size={20} color={colors.outline} />
             <TextInput
               value={q}
               onChangeText={setQ}
@@ -189,7 +189,7 @@ export default function AssetsListScreen() {
                 </Text>
               ) : null}
             </View>
-            <MaterialIcons name="chevron-right" size={22} color={colors.outline} />
+            <ChevronRight size={22} color={colors.outline} />
           </HapticPressable>
         )}
       />

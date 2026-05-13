@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -9,9 +10,11 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { Dialog } from "primereact/dialog";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
@@ -239,7 +242,9 @@ export function SitesPage() {
       confirmDialog({
         message: t("sites.confirmDelete", { name: row.name }),
         header: t("sites.confirmDeleteTitle"),
-        icon: "pi pi-exclamation-triangle",
+        icon: (
+          <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />
+        ),
         acceptClassName: "p-button-danger",
         acceptLabel: t("sites.yes"),
         rejectLabel: t("sites.no"),
@@ -267,7 +272,7 @@ export function SitesPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
           <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <i className={`pi pi-plus ${createActionIcon}`} aria-hidden />
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("sites.new")}</span>
           </button>
         </li>
@@ -280,7 +285,7 @@ export function SitesPage() {
               if (selectedSite) openEdit(selectedSite);
             }}
           >
-            <i className={`pi pi-pencil ${primaryActionIcon}`} aria-hidden />
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("sites.edit")}</span>
           </button>
         </li>
@@ -293,13 +298,13 @@ export function SitesPage() {
               if (selectedSite) confirmDelete(selectedSite);
             }}
           >
-            <i className={`pi pi-trash ${deleteActionIcon}`} aria-hidden />
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("sites.delete")}</span>
           </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -317,7 +322,11 @@ export function SitesPage() {
 
   const plantBody = (row: Site) =>
     row.isPlant ? (
-      <i className="pi pi-check text-on-surface" aria-label={t("sites.werk")} />
+      <Check
+        className="h-4 w-4 text-on-surface"
+        strokeWidth={1.75}
+        aria-label={t("sites.werk")}
+      />
     ) : (
       <span className="text-on-surface-variant">—</span>
     );
@@ -355,7 +364,7 @@ export function SitesPage() {
       <Button
         type="button"
         label={t("sites.save")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving}
         onClick={() => void save()}
       />

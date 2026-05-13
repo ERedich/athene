@@ -1,5 +1,5 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Send, X } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -200,7 +200,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 style={({ pressed }) => [styles.iconButton, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
                 onPress={() => setVisible(false)}
               >
-                <MaterialIcons name="close" size={24} color={colors.onSurfaceVariant} />
+                <X size={24} color={colors.onSurfaceVariant} />
               </HapticPressable>
             </View>
             <ScrollView style={styles.content}>
@@ -248,7 +248,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                   {busy ? (
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
-                    <MaterialIcons name="send" size={18} color="#ffffff" />
+                    <Send size={18} color="#ffffff" />
                   )}
                   <Text style={styles.sendText}>{t("assistant.send")}</Text>
                 </HapticPressable>

@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { Check, Pencil, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -16,10 +17,12 @@ import { ColorPicker } from "primereact/colorpicker";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
-import { InputIcon } from "primereact/inputicon";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
+
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
@@ -231,7 +234,7 @@ export function AppParametersPage() {
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li className="ml-auto">
           <IconField iconPosition="left">
-            <InputIcon className="pi pi-search text-xs text-on-surface-variant" />
+            <LucideInputSearchIcon />
             <InputText
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -517,7 +520,7 @@ export function AppParametersPage() {
                   <Button
                     type="button"
                     label={t("appParameters.editAssetTypes")}
-                    icon="pi pi-pencil"
+                    icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                     className="p-button-sm w-fit"
                     disabled={savingAll}
                     onClick={() => openAssetTypesDialog(row)}
@@ -599,7 +602,7 @@ export function AppParametersPage() {
       <Button
         type="button"
         label={t("appParameters.apply")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         disabled={savingAll}
         onClick={() => applyAssetTypesDialogToDraft()}
       />
@@ -700,7 +703,7 @@ export function AppParametersPage() {
         <Button
           type="button"
           label={t("appParameters.save")}
-          icon="pi pi-save"
+          icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
           loading={savingAll}
           disabled={!hasUnsavedChanges || savingAll}
           onClick={() => void saveAll()}

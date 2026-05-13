@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Lucide (SVG) alongside PrimeReact icon slots — stroke follows `color`. */
+.p-button-icon svg:not([class*="!h-"]):not([class*="!w-"]),
+.p-menuitem-icon svg:not([class*="!h-"]):not([class*="!w-"]),
+.p-confirm-dialog-icon svg:not([class*="!h-"]):not([class*="!w-"]) {
+  width: 1rem;
+  height: 1rem;
+}
+
 :root[data-theme="dark"] {
   --color-background: #12161b;
   --color-surface: #12161b;
@@ -87,8 +95,6 @@
 /* Asset type (Standort / Struktur / Linie / IO): icon colors from theme tokens only. */
 .app-asset-type-icon {
   flex-shrink: 0;
-  font-size: 0.95rem;
-  line-height: 1;
 }
 
 .app-asset-type-icon--site {
@@ -818,22 +824,61 @@ html.theme-crossfade-fallback #root {
   -webkit-text-fill-color: rgb(22 163 74);
 }
 
-/* Work-order start: text button; play icon = Tailwind green-500 */
+/* Work-order start: text button – keine transparente color (Lucide Play nutzt currentColor/fill; sonst unsichtbar). */
 .app-wo-start-action.p-button.p-button-text {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  color: transparent !important;
+  color: rgb(34 197 94) !important; /* green-500 */
 }
 
 .app-wo-start-action.p-button.p-button-text .p-button-icon,
-.app-wo-start-action.p-button.p-button-text .p-button-icon .pi {
-  color: rgb(34 197 94) !important; /* green-500 */
+.app-wo-start-action.p-button.p-button-text .p-button-icon .pi,
+.app-wo-start-action.p-button.p-button-text .p-button-icon svg {
+  color: inherit !important;
+}
+
+/* Lucide glyphen sind Outline; WO-Transport: Flächen füllen (path hat sonst fill none + stroke 0). */
+.app-wo-fill-lucide :is(path, polygon, circle, rect, line, polyline) {
+  fill: currentColor !important;
+  stroke: none !important;
+}
+
+/* Fallback: Play auf Start-Button garantiert sichtbar (inherits color war transparent). */
+.app-wo-fill-lucide:is(svg.lucide-play),
+.app-wo-fill-lucide:is(svg.lucide-play) :is(path, polygon) {
+  fill: rgb(34 197 94) !important;
+  stroke: none !important;
 }
 
 .app-wo-start-action.p-button.p-button-text:hover {
   background: color-mix(in srgb, rgb(34 197 94) 14%, transparent) !important;
   border-color: transparent !important;
+}
+
+/* Work-order stop (Quadrat): danger / rot */
+.app-wo-stop-action.p-button.p-button-text {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--color-danger) !important;
+}
+
+.app-wo-stop-action.p-button.p-button-text .p-button-icon,
+.app-wo-stop-action.p-button.p-button-text .p-button-icon .pi,
+.app-wo-stop-action.p-button.p-button-text .p-button-icon svg {
+  color: inherit !important;
+}
+
+.app-wo-stop-action.p-button.p-button-text:hover {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent) !important;
+  border-color: transparent !important;
+}
+
+.app-wo-stop-action .app-wo-fill-lucide:is(svg.lucide-square),
+.app-wo-stop-action .app-wo-fill-lucide:is(svg.lucide-square) :is(path, polygon, rect, line) {
+  fill: var(--color-danger) !important;
+  stroke: none !important;
 }
 
 .app-ref-button--material.p-button:not(:disabled),
@@ -1102,6 +1147,13 @@ html.theme-crossfade-fallback #root {
   border-radius: 0 !important;
 }
 
+/* Gleiche Zeilenhöhe für alle Tabs (z. B. mit vs. ohne Badge): verhindert doppelte
+   Unterstriche, weil Link-Rand und Nav-Baseline sonst auseinanderfallen. */
+.app-sticky-tabs .p-tabview-nav li {
+  display: flex;
+  align-items: stretch;
+}
+
 .app-sticky-tabs .p-tabview-nav {
   position: relative;
   border-bottom: 2px solid
@@ -1109,6 +1161,9 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
   border-bottom: 2px solid
     color-mix(in srgb, var(--color-on-surface) 18%, transparent) !important;
   margin-bottom: -2px;
@@ -1116,6 +1171,8 @@ html.theme-crossfade-fallback #root {
 
 .app-sticky-tabs .p-tabview-nav li.p-highlight .p-tabview-nav-link {
   color: var(--color-primary);
+  /* Aktiver Tab: nur Ink-Leiste (--app-ink), kein zweiter grauer Rand unter dem Text */
+  border-bottom-color: transparent !important;
 }
 
 .app-sticky-tabs .p-tabview-nav::after {
@@ -1570,8 +1627,9 @@ html.theme-crossfade-fallback #root {
 }
 
 /* Global table status check icon: use green accent instead of neutral text color. */
-.app-data-table i.pi.pi-check {
+.app-data-table svg.lucide-check {
   color: #22c55e !important;
+  stroke: #22c55e !important;
 }
 
 /* App parameters: no horizontal table growth — wrap cell text, rows grow in height */
@@ -1689,7 +1747,6 @@ html.theme-crossfade-fallback #root {
 }
 
 .theme-swap-overlay__spinner {
-  font-size: 1.25rem;
   color: var(--color-primary);
 }
 
@@ -1720,4 +1777,25 @@ html.theme-crossfade-fallback #root {
 
 .app-table-context-menu .p-menuitem-separator {
   margin: 0.125rem 0.25rem;
+}
+
+/* Athene row + divider under it (table context menu). */
+.app-table-context-menu li.app-context-menu-athene .p-menuitem-text {
+  color: rgb(21 94 117); /* Tailwind cyan-800 */
+}
+
+.app-table-context-menu li.app-context-menu-athene .p-menuitem-icon {
+  color: rgb(21 94 117); /* Tailwind cyan-800 */
+}
+
+.app-table-context-menu li.app-context-menu-athene.p-disabled .p-menuitem-text,
+.app-table-context-menu li.app-context-menu-athene.p-disabled .p-menuitem-icon {
+  color: var(--color-on-surface-variant);
+}
+
+.app-table-context-menu .app-context-menu-after-athene-sep.p-menuitem-separator,
+.app-table-context-menu li.app-context-menu-athene + li.p-menuitem-separator {
+  margin: 0.375rem 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-on-surface) 16%, transparent);
+  padding-top: 0.25rem;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Key, Moon, Sun, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -83,7 +84,11 @@ export function LoginPage() {
               title={dark ? t("login.themeLight") : t("login.themeDark")}
               onClick={toggleTheme}
             >
-              <i className={`pi text-lg ${dark ? "pi-sun" : "pi-moon"}`} aria-hidden />
+              {dark ? (
+                <Sun className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Moon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+              )}
             </button>
             <button
               type="button"
@@ -223,14 +228,14 @@ export function LoginPage() {
                     className={`text-[11px] font-headline text-outline tracking-wide uppercase flex items-center gap-2 rounded-sm ${textLinkInteractive}`}
                     href="#"
                   >
-                    <i className="pi pi-user-plus text-sm" />
+                    <UserPlus className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
                     {t("login.requestAccess")}
                   </a>
                   <a
                     className={`text-[11px] font-headline text-outline tracking-wide uppercase flex items-center gap-2 rounded-sm ${textLinkInteractive}`}
                     href="#"
                   >
-                    <i className="pi pi-key text-sm" />
+                    <Key className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
                     {t("login.recovery")}
                   </a>
                 </div>

@@ -1,6 +1,14 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Check,
+  ChevronRight,
+  Moon,
+  Shield,
+  Sun,
+} from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -84,7 +92,7 @@ export function LoginScreen() {
               style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
               accessibilityLabel={isLight ? t("login.themeDark") : t("login.themeLight")}
             >
-              <MaterialIcons name={isLight ? "dark-mode" : "light-mode"} size={22} color={onSurface} />
+              {isLight ? <Moon size={22} color={onSurface} /> : <Sun size={22} color={onSurface} />}
             </HapticPressable>
             <HapticPressable
               onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}
@@ -138,7 +146,7 @@ export function LoginScreen() {
             <View style={styles.cardInner}>
               {!isLight ? (
                 <View style={styles.protocolRow}>
-                  <MaterialIcons name="shield" size={16} color={tokens.colors.atheneOrange} />
+                  <Shield size={16} color={tokens.colors.atheneOrange} />
                   <Text style={[styles.protocol, { color: tokens.colors.onSurfaceVariant, fontFamily: tokens.fonts.label }]}>
                     Protocol 01
                   </Text>
@@ -207,7 +215,7 @@ export function LoginScreen() {
                     },
                   ]}
                 >
-                  {remember ? <MaterialIcons name="check" size={16} color={isLight ? "#ffffff" : "#000000"} /> : null}
+                  {remember ? <Check size={16} color={isLight ? "#ffffff" : "#000000"} /> : null}
                 </View>
                 <Text style={{ color: outline, fontFamily: tokens.fonts.label, fontSize: 11, opacity: 0.85 }}>
                   {t("login.remember")}
@@ -239,7 +247,7 @@ export function LoginScreen() {
                         <Text style={[styles.ctaText, { color: tokens.colors.onPrimary, fontFamily: tokens.fonts.displayBold }]}>
                           {t("login.submit")}
                         </Text>
-                        <MaterialIcons name="arrow-forward" size={20} color={tokens.colors.onPrimary} />
+                        <ArrowRight size={20} color={tokens.colors.onPrimary} />
                       </>
                     )}
                   </LinearGradient>
@@ -261,7 +269,7 @@ export function LoginScreen() {
                       <Text style={[styles.ctaText, { color: "#000", fontFamily: tokens.fonts.displayBold }]}>
                         {t("login.submit")}
                       </Text>
-                      <MaterialIcons name="arrow-forward-ios" size={18} color="#000" />
+                      <ChevronRight size={18} color="#000" />
                     </>
                   )}
                 </HapticPressable>
@@ -283,7 +291,7 @@ export function LoginScreen() {
             <Text style={[styles.footerMeta, { color: `${outline}88`, fontFamily: tokens.fonts.label }]}>{t("login.footerTls")}</Text>
           </View>
           <View style={styles.footerRight}>
-            <MaterialIcons name="verified-user" size={18} color={isLight ? tokens.colors.tertiary : tokens.colors.onSurfaceVariant} />
+            <BadgeCheck size={18} color={isLight ? tokens.colors.tertiary : tokens.colors.onSurfaceVariant} />
             <Text style={[styles.footerMeta, { color: outline, fontFamily: tokens.fonts.label }]}>{t("login.secureCore")}</Text>
           </View>
         </View>

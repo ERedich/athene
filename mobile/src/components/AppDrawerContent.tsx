@@ -1,6 +1,6 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
+import { ClipboardList, Factory, Home, Landmark, Moon, Sparkles, Sun } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
@@ -100,7 +100,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeHome && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
-        <MaterialIcons name="home" size={24} color={activeHome ? colors.primary : colors.onSurfaceVariant} />
+        <Home size={24} color={activeHome ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeHome ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navStart")}</Text>
       </HapticPressable>
 
@@ -109,11 +109,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeCc && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
-        <MaterialIcons
-          name="account-balance"
-          size={24}
-          color={activeCc ? colors.primary : colors.onSurfaceVariant}
-        />
+        <Landmark size={24} color={activeCc ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeCc ? styles.navLabel : styles.navLabelMuted}>
           {t("drawer.navCostCenters")}
         </Text>
@@ -124,11 +120,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         {...androidRippleProps(navRipple)}
         style={({ pressed }) => [styles.navItem, activeAssets && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
       >
-        <MaterialIcons
-          name="precision-manufacturing"
-          size={24}
-          color={activeAssets ? colors.primary : colors.onSurfaceVariant}
-        />
+        <Factory size={24} color={activeAssets ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeAssets ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navAssets")}</Text>
       </HapticPressable>
 
@@ -141,11 +133,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
           pressedOpacity(pressed, PRESSED_OPACITY_ROW),
         ]}
       >
-        <MaterialIcons
-          name="assignment"
-          size={24}
-          color={activeWorkOrders ? colors.primary : colors.onSurfaceVariant}
-        />
+        <ClipboardList size={24} color={activeWorkOrders ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeWorkOrders ? styles.navLabel : styles.navLabelMuted}>
           {t("drawer.navWorkOrders")}
         </Text>
@@ -162,7 +150,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         {athene.busy ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
-          <MaterialIcons name="psychology" size={24} color={colors.onSurfaceVariant} />
+          <Sparkles size={24} color={colors.onSurfaceVariant} />
         )}
         <Text style={styles.navLabelMuted}>{t("drawer.navAthene")}</Text>
       </HapticPressable>
@@ -178,7 +166,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
             style={({ pressed }) => [styles.iconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
             accessibilityLabel={isDark ? t("shell.themeToggleToLight") : t("shell.themeToggleToDark")}
           >
-            <MaterialIcons name={isDark ? "light-mode" : "dark-mode"} size={24} color={colors.onSurface} />
+            {isDark ? <Sun size={24} color={colors.onSurface} /> : <Moon size={24} color={colors.onSurface} />}
           </HapticPressable>
           <HapticPressable
             onPress={() => void i18n.changeLanguage(activeLang === "de" ? "en" : "de")}

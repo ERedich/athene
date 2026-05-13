@@ -1,6 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { MaterialIcons } from "@expo/vector-icons";
+import { ClipboardCheck, Pause, Play } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -285,7 +285,7 @@ export function WorkOrderEditor({ orderId }: Props) {
               },
             ]}
           >
-            <MaterialIcons name="play-arrow" size={22} color={colors.primary} />
+            <Play size={22} color={colors.primary} />
           </HapticPressable>
           <HapticPressable
             onPress={() => void pauseOrder()}
@@ -302,7 +302,7 @@ export function WorkOrderEditor({ orderId }: Props) {
               },
             ]}
           >
-            <MaterialIcons name="pause" size={20} color={colors.primary} />
+            <Pause size={20} color={colors.primary} />
           </HapticPressable>
           <HapticPressable
             onPress={() => setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"))}
@@ -319,7 +319,7 @@ export function WorkOrderEditor({ orderId }: Props) {
               },
             ]}
           >
-            <MaterialIcons name="assignment-turned-in" size={20} color={colors.primary} />
+            <ClipboardCheck size={20} color={colors.primary} />
           </HapticPressable>
         </View>
       ),

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Check, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
@@ -19,6 +20,7 @@ import {
   buildWorkOrderSearchPresetPayload,
   type WorkOrderSearchPresetPayloadV1,
 } from "../../lib/workOrderSearchPresetApi";
+import { lucidePrimeBtnIcon } from "../../icons/lucide";
 
 export const WORK_ORDER_STATUS_ORDER = [
   "open",
@@ -220,7 +222,7 @@ export function WorkOrderSearchPanel({
       <Button
         type="button"
         label={t("workOrders.searchPresets.saveConfirm")}
-        icon="pi pi-check"
+        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saveBusy}
         disabled={!saveName.trim()}
         onClick={() => {
@@ -557,7 +559,7 @@ export function WorkOrderSearchPanel({
             <Button
               type="button"
               label={t("workOrders.searchPresets.save")}
-              icon="pi pi-save"
+              icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
               className="p-button-outlined"
               title={t("workOrders.searchPresets.saveHint")}
               onClick={() => {
@@ -567,7 +569,11 @@ export function WorkOrderSearchPanel({
               }}
             />
           ) : null}
-          <Button type="submit" label={t("workOrders.searchPanel.apply")} icon="pi pi-check" />
+          <Button
+            type="submit"
+            label={t("workOrders.searchPanel.apply")}
+            icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+          />
         </div>
       </form>
     </Sidebar>
