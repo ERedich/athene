@@ -2,7 +2,7 @@ import type { QueryResult, QueryResultRow } from "pg";
 
 import { siteAccessSql } from "./siteAccess.js";
 
-export type ClassificationScope = "asset" | "work_order";
+export type ClassificationScope = "asset" | "work_order" | "material";
 
 type PgClient = {
   query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>>;
@@ -18,7 +18,11 @@ export async function assertClassificationForSiteAndScope(
 ): Promise<void> {
   if (classificationId === null) return;
   const appliesClause =
-    scope === "asset" ? `cl."appliesToAsset" = true` : `cl."appliesToWorkOrder" = true`;
+    scope === "asset"
+      ? `cl."appliesToAsset" = true`
+      : scope === "work_order"
+        ? `cl."appliesToWorkOrder" = true`
+        : `cl."appliesToMaterial" = true`;
   const { rows } = await client.query<{ id: string }>(
     `
     SELECT cl."id"

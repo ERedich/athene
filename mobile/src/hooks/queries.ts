@@ -54,9 +54,13 @@ export class WorkOrderActionError extends Error {
   }
 }
 
-type WorkOrderFeedbackBody = {
+export type WorkOrderFeedbackBody = {
   hours: number;
   remark?: string | null;
+  statusAction?: "none" | "pause" | "end";
+  pauseRemark?: string | null;
+  additionalHours?: { employeeId: string; hours: number }[];
+  /** @deprecated use statusAction: "end" */
   completeOrder?: boolean;
 };
 
@@ -434,7 +438,9 @@ export async function postWorkOrderFeedback(orderId: string, body: WorkOrderFeed
     body: JSON.stringify({
       hours: body.hours,
       remark: body.remark ?? null,
-      completeOrder: Boolean(body.completeOrder),
+      statusAction: body.statusAction ?? (body.completeOrder ? "end" : "none"),
+      pauseRemark: body.pauseRemark ?? null,
+      additionalHours: body.additionalHours ?? [],
     }),
   });
   if (!r.ok) {

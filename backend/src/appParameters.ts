@@ -21,6 +21,9 @@ export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG";
 /** Allgemein: Asset-Schlüssel-Pfad in Listen anzeigen (JSON). */
 export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP";
 
+/** Material: Lagerdaten in der Ersatzteil-App nachträglich bearbeiten. */
+export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD";
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
 
 export type AssetKeyGenerationMode = "manual" | "auto_incremental";
@@ -136,6 +139,18 @@ export async function getAllowSiteChange(client: DbQueryable): Promise<boolean> 
     return rows[0]?.boolValue ?? false;
   } catch {
     return false;
+  }
+}
+
+export async function getAllowChangeStockdata(client: DbQueryable): Promise<boolean> {
+  try {
+    const { rows } = await client.query<{ boolValue: boolean }>(
+      `SELECT "boolValue" FROM "appParameter" WHERE "key" = $1 LIMIT 1`,
+      [APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA],
+    );
+    return rows[0]?.boolValue ?? true;
+  } catch {
+    return true;
   }
 }
 

@@ -1,6 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { ClipboardCheck, Pause, Play } from "lucide-react-native";
+import { ClipboardCheck, Pause, Play, Square } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -35,8 +35,8 @@ import {
   fetchAssetDocumentBlob,
   fetchWorkOrderDocumentBlob,
   postWorkOrderFeedback,
-  postWorkOrderPause,
   postWorkOrderStart,
+  type WorkOrderFeedbackBody,
   patchAssetDocument,
   patchWorkOrderDocument,
   postWorkOrder,
@@ -55,6 +55,12 @@ import {
 } from "../../hooks/queries";
 import type { TransactionRow, WorkOrderAssignmentRow, WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../../lib/workOrderLifecycle";
+import {
+  computeSegmentHours,
+  feedbackStatusActionForEntryMode,
+  type FeedbackEntryMode,
+  type FeedbackStatusAction,
+} from "../../lib/workOrderFeedback";
 import {
   androidRippleProps,
   pressedOpacity,
@@ -173,7 +179,9 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [effectiveOrderId, setEffectiveOrderId] = useState<string | null>(orderId ?? null);
   const [feedbackHours, setFeedbackHours] = useState("");
   const [feedbackRemark, setFeedbackRemark] = useState("");
-  const [feedbackCompleteOrder, setFeedbackCompleteOrder] = useState(false);
+  const [feedbackPauseRemark, setFeedbackPauseRemark] = useState("");
+  const [feedbackStatusAction, setFeedbackStatusAction] = useState<FeedbackStatusAction>("none");
+  const [feedbackEntryMode, setFeedbackEntryMode] = useState<FeedbackEntryMode>("create");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [showRequiredHints, setShowRequiredHints] = useState(false);
 
@@ -187,7 +195,14 @@ export function WorkOrderEditor({ orderId }: Props) {
   );
   const documentsTabCount = documents.length + pendingFiles.length;
   const assignmentsTabCount = assignments.length;
-  const feedbackTabCount = Number(Boolean(feedbackHours.trim() || feedbackRemark.trim() || feedbackCompleteOrder));
+  const feedbackTabCount = Number(
+    Boolean(
+      feedbackHours.trim() ||
+        feedbackRemark.trim() ||
+        feedbackPauseRemark.trim() ||
+        feedbackStatusAction !== "none",
+    ),
+  );
   const tabRoutes = useMemo<TabRoute[]>(
     () => [
       { key: "general", title: t("workOrders.tabGeneral") },
@@ -210,20 +225,21 @@ export function WorkOrderEditor({ orderId }: Props) {
     }
   }, [currentOrder, qc, t]);
 
-  const pauseOrder = useCallback(async () => {
-    if (!currentOrder || !canPauseWorkOrder(currentOrder.status)) return;
-    try {
-      await postWorkOrderPause(currentOrder.id);
-      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
-    } catch (err) {
-      const code = err instanceof WorkOrderActionError ? err.code : "unknown";
-      const msg = code === "cannot_pause_from_status" ? t("workOrders.cannotPauseFromStatus") : t("workOrders.pauseError");
-      Alert.alert("", msg);
-    }
-  }, [currentOrder, qc, t]);
+  const openFeedbackWithMode = useCallback(
+    (mode: FeedbackEntryMode) => {
+      if (!currentOrder || !canFeedbackWorkOrder(currentOrder.status)) return;
+      setFeedbackEntryMode(mode);
+      setFeedbackStatusAction(feedbackStatusActionForEntryMode(mode));
+      setFeedbackPauseRemark("");
+      setFeedbackRemark("");
+      setFeedbackHours(computeSegmentHours(currentOrder.currentSegmentStartedAt));
+      setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"));
+    },
+    [currentOrder, tabRoutes],
+  );
 
   const submitFeedback = useCallback(
-    async (body: { hours: number; remark: string | null; completeOrder: boolean }) => {
+    async (body: WorkOrderFeedbackBody) => {
       const targetOrderId = effectiveOrderId ?? orderId ?? null;
       if (!targetOrderId) {
         Alert.alert("", t("workOrders.assignmentsAfterSave"));
@@ -240,7 +256,7 @@ export function WorkOrderEditor({ orderId }: Props) {
         await qc.refetchQueries({ queryKey: queryKeys.workOrderDocuments(targetOrderId), type: "all" });
         await qc.refetchQueries({ queryKey: queryKeys.workOrderAssignments(targetOrderId), type: "all" });
         await qc.refetchQueries({ queryKey: queryKeys.workOrderFeedback(targetOrderId), type: "all" });
-        if (body.completeOrder) {
+        if (body.statusAction === "end" || body.completeOrder) {
           router.replace("/work-orders");
         }
         Alert.alert("", t("workOrders.feedbackSaved"));
@@ -288,7 +304,24 @@ export function WorkOrderEditor({ orderId }: Props) {
             <Play size={22} color={colors.primary} />
           </HapticPressable>
           <HapticPressable
-            onPress={() => void pauseOrder()}
+            onPress={() => openFeedbackWithMode("stop")}
+            disabled={!canFeedbackWorkOrder(currentOrder.status)}
+            {...androidRippleProps(ripple, true)}
+            style={({ pressed }) => [
+              { padding: 8 },
+              {
+                opacity: !canFeedbackWorkOrder(currentOrder.status)
+                  ? 0.35
+                  : pressed
+                    ? PRESSED_OPACITY_CONTROL
+                    : 1,
+              },
+            ]}
+          >
+            <Square size={20} color={colors.primary} />
+          </HapticPressable>
+          <HapticPressable
+            onPress={() => openFeedbackWithMode("pause")}
             disabled={!canPauseWorkOrder(currentOrder.status)}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
@@ -305,7 +338,7 @@ export function WorkOrderEditor({ orderId }: Props) {
             <Pause size={20} color={colors.primary} />
           </HapticPressable>
           <HapticPressable
-            onPress={() => setTabIndex(tabRoutes.findIndex((r) => r.key === "feedback"))}
+            onPress={() => openFeedbackWithMode("create")}
             disabled={!canFeedbackWorkOrder(currentOrder.status)}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
@@ -325,7 +358,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       ),
     });
     return () => navigation.setOptions({ headerRight: undefined });
-  }, [colors.primary, currentOrder, navigation, pauseOrder, ripple, startOrder, tabRoutes]);
+  }, [colors.primary, currentOrder, navigation, openFeedbackWithMode, ripple, startOrder, tabRoutes]);
 
   useEffect(() => {
     if (isNew || !row || hydrated) return;
@@ -907,16 +940,22 @@ export function WorkOrderEditor({ orderId }: Props) {
       Alert.alert("", t("workOrders.feedbackRemarkTooLong"));
       return;
     }
+    if (feedbackStatusAction === "pause" && !feedbackPauseRemark.trim()) {
+      Alert.alert("", t("workOrders.feedbackPauseRemarkRequired"));
+      return;
+    }
     const ok = await submitFeedback({
       hours,
       remark: feedbackRemark.trim() ? feedbackRemark.trim() : null,
-      completeOrder: feedbackCompleteOrder,
+      statusAction: feedbackStatusAction,
+      pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
     });
     if (!ok) return;
     setFeedbackHours("");
     setFeedbackRemark("");
-    setFeedbackCompleteOrder(false);
-  }, [feedbackCompleteOrder, feedbackHours, feedbackRemark, submitFeedback, t]);
+    setFeedbackPauseRemark("");
+    setFeedbackStatusAction("none");
+  }, [feedbackHours, feedbackPauseRemark, feedbackRemark, feedbackStatusAction, submitFeedback, t]);
 
   const renderTabBar = useCallback(
     (props: SceneRendererProps & { navigationState: { index: number; routes: TabRoute[] } }) => (
@@ -1268,6 +1307,15 @@ export function WorkOrderEditor({ orderId }: Props) {
                 <Text style={styles.assignmentsEmpty}>{t("workOrders.cannotFeedbackFromStatus")}</Text>
               ) : (
                 <View>
+                  <Text style={styles.label}>{t("workOrders.feedbackReportingEmployee")}</Text>
+                  <View style={[styles.input, { justifyContent: "center" }]}>
+                    <Text style={{ color: colors.onSurfaceVariant }}>
+                      {[user.employeeKey, user.employeeName]
+                        .map((x) => (typeof x === "string" ? x.trim() : ""))
+                        .filter(Boolean)
+                        .join(" — ") || t("workOrders.feedbackReportingEmployeeEmpty")}
+                    </Text>
+                  </View>
                   <Text style={styles.label}>{t("workOrders.feedbackHours")}</Text>
                   <TextInput
                     value={feedbackHours}
@@ -1277,6 +1325,18 @@ export function WorkOrderEditor({ orderId }: Props) {
                     keyboardType="decimal-pad"
                     editable={!feedbackSaving}
                   />
+                  {(feedbackEntryMode === "pause" || feedbackStatusAction === "pause") ? (
+                    <>
+                      <Text style={styles.label}>{t("workOrders.feedbackPauseRemark")}</Text>
+                      <TextInput
+                        value={feedbackPauseRemark}
+                        onChangeText={setFeedbackPauseRemark}
+                        style={[styles.input, styles.description]}
+                        multiline
+                        editable={!feedbackSaving}
+                      />
+                    </>
+                  ) : null}
                   <Text style={styles.label}>{t("workOrders.feedbackRemark")}</Text>
                   <TextInput
                     value={feedbackRemark}
@@ -1288,10 +1348,35 @@ export function WorkOrderEditor({ orderId }: Props) {
                   <Text style={styles.counter}>
                     {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
                   </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                    <Text style={{ color: colors.onSurface }}>{t("workOrders.feedbackCompleteOrder")}</Text>
-                    <Switch value={feedbackCompleteOrder} onValueChange={setFeedbackCompleteOrder} disabled={feedbackSaving} />
-                  </View>
+                  <Text style={styles.label}>{t("workOrders.feedbackStatusActionLegend")}</Text>
+                  {(["none", "pause", "end"] as const).map((value) => (
+                    <HapticPressable
+                      key={value}
+                      disabled={feedbackSaving}
+                      onPress={() => setFeedbackStatusAction(value)}
+                      style={({ pressed }) => [
+                        { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
+                        pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+                      ]}
+                    >
+                      <View
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor: colors.primary,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {feedbackStatusAction === value ? (
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />
+                        ) : null}
+                      </View>
+                      <Text style={{ color: colors.onSurface }}>{t(`workOrders.feedbackStatusAction.${value}`)}</Text>
+                    </HapticPressable>
+                  ))}
                   <Text style={styles.label}>{t("workOrders.feedbackExisting")}</Text>
                   {feedbackRowsLoading ? (
                     <ActivityIndicator color={colors.primary} />

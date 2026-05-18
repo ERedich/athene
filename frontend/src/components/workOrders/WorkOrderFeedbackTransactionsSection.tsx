@@ -84,7 +84,7 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
         showGridlines
         scrollable
         scrollHeight="220px"
-        tableStyle={{ minWidth: "42rem" }}
+        tableStyle={{ minWidth: "52rem" }}
         emptyMessage={t("transactions.empty")}
       >
         <Column
@@ -114,6 +114,17 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
           header={t("transactions.colQuantity")}
           body={(r: TransactionRow) => formatQty(r.quantity)}
           className="text-right whitespace-nowrap"
+        />
+        <Column
+          field="employeeKey"
+          header={t("transactions.colEmployee")}
+          body={(r: TransactionRow) => {
+            const parts = [r.employeeKey, r.employeeName]
+              .map((x) => (typeof x === "string" ? x.trim() : ""))
+              .filter(Boolean);
+            return <span className="text-sm">{parts.length ? parts.join(" — ") : "—"}</span>;
+          }}
+          className="whitespace-nowrap"
         />
         <Column
           field="remark"

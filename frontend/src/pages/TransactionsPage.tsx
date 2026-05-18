@@ -30,6 +30,9 @@ export type TransactionRow = {
   workOrderId: string | null;
   workOrderOrderNumber: string | null;
   remark: string | null;
+  employeeId: string | null;
+  employeeKey: string | null;
+  employeeName: string | null;
 };
 
 const typeLabelKey: Record<string, string> = {

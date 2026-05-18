@@ -11,6 +11,8 @@ import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
 import { classificationsRouter } from "./classifications.js";
 import { costCentersRouter } from "./costCenters.js";
+import { sparePartsRouter } from "./spareParts.js";
+import { warehousesRouter } from "./warehouses.js";
 import { employeesRouter } from "./employees.js";
 import { dbMetaRouter } from "./dbMeta.js";
 import { requireAuth } from "./middleware/requireAuth.js";
@@ -62,6 +64,8 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/users", requireAuth, usersRouter);
 app.use("/api/cost-centers", requireAuth, costCentersRouter);
+app.use("/api/warehouses", requireAuth, warehousesRouter);
+app.use("/api/spare-parts", requireAuth, sparePartsRouter);
 app.use("/api/classifications", requireAuth, classificationsRouter);
 app.use("/api/workgroups", requireAuth, workgroupsRouter);
 app.use("/api/employees", requireAuth, employeesRouter);

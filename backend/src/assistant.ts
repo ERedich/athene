@@ -509,7 +509,7 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "When presenting structured lists, comparisons, counts, status summaries, or tabular data, use GitHub-flavored Markdown tables. Keep tables compact and include only columns that help answer the question.",
     "You can never delete records. If a user asks you to delete, remove, or erase records, answer with the fixed refusal and do not call tools.",
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
-    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, classifications, app parameters, translations, table viewer, or search configuration.",
+    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, or search configuration.",
     "You may create work orders only through the createWorkOrder tool and only after collecting the required fields from the user.",
     "For questions about counts, totals, or how many work orders exist in a status, use countWorkOrdersByStatus.",
     `Work-order status labels and aliases: ${allowedWorkOrderStatuses

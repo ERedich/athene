@@ -59,6 +59,8 @@ type WorkOrderRow = {
   doneBy: string | null;
   doneByEmployeeKey: string | null;
   doneByEmployeeName: string | null;
+  pauseRemark: string | null;
+  currentSegmentStartedAt: string | null;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
@@ -69,6 +71,7 @@ type WorkOrderRow = {
   documentCount: number;
   assetDocumentCount: number;
   assignedEmployeeCount: number;
+  transactionCount: number;
 };
 
 type WorkOrderAssignmentRow = {
@@ -167,18 +170,38 @@ function workOrderAssignmentsLocked(status: WorkOrderStatus): boolean {
   return status === "ended" || status === "done" || status === "cancelled";
 }
 
+type FeedbackStatusAction = "none" | "pause" | "end";
+
+type ParsedAdditionalHours = { employeeId: string; hours: number };
+
 type ParsedFeedbackBody = {
   hours: number;
   remark: string | null;
-  completeOrder: boolean;
+  statusAction: FeedbackStatusAction;
+  pauseRemark: string | null;
+  additionalHours: ParsedAdditionalHours[];
 };
 
-function parseFeedbackBody(body: unknown): ParsedFeedbackBody | null {
+function parseFeedbackHours(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  if (value > 99999.9999) return null;
+  return value;
+}
+
+function parsePauseRemark(value: unknown): string | null | "invalid" {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return "invalid";
+  const t = value.trim();
+  if (!t.length) return null;
+  if (t.length > 2000) return "invalid";
+  return t;
+}
+
+function parseFeedbackBody(body: unknown): ParsedFeedbackBody | "pause_remark_required" | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
-  const hoursRaw = o.hours;
-  if (typeof hoursRaw !== "number" || !Number.isFinite(hoursRaw) || hoursRaw <= 0) return null;
-  if (hoursRaw > 99999.9999) return null;
+  const hours = parseFeedbackHours(o.hours);
+  if (hours === null) return null;
 
   let remark: string | null = null;
   if (o.remark !== undefined && o.remark !== null) {
@@ -188,8 +211,43 @@ function parseFeedbackBody(body: unknown): ParsedFeedbackBody | null {
     remark = t.length ? t : null;
   }
 
-  const completeOrder = o.completeOrder === true;
-  return { hours: hoursRaw, remark, completeOrder };
+  let statusAction: FeedbackStatusAction = "none";
+  if (o.statusAction === "none" || o.statusAction === "pause" || o.statusAction === "end") {
+    statusAction = o.statusAction;
+  } else if (o.completeOrder === true) {
+    statusAction = "end";
+  }
+
+  const pauseRemarkParsed = parsePauseRemark(o.pauseRemark);
+  if (pauseRemarkParsed === "invalid") return null;
+  if (statusAction === "pause" && pauseRemarkParsed === null) {
+    return "pause_remark_required";
+  }
+
+  const additionalHours: ParsedAdditionalHours[] = [];
+  if (o.additionalHours !== undefined && o.additionalHours !== null) {
+    if (!Array.isArray(o.additionalHours)) return null;
+    const seenEmployeeIds = new Set<string>();
+    for (const item of o.additionalHours) {
+      if (item === null || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const employeeId = typeof row.employeeId === "string" ? row.employeeId.trim() : "";
+      if (!isUuid(employeeId)) return null;
+      if (seenEmployeeIds.has(employeeId)) return null;
+      seenEmployeeIds.add(employeeId);
+      const rowHours = parseFeedbackHours(row.hours);
+      if (rowHours === null) return null;
+      additionalHours.push({ employeeId, hours: rowHours });
+    }
+  }
+
+  return {
+    hours,
+    remark,
+    statusAction,
+    pauseRemark: pauseRemarkParsed,
+    additionalHours,
+  };
 }
 
 function readTrimmedOptionalString(value: unknown): string | null {
@@ -349,6 +407,15 @@ const selectWorkOrdersSql = `
     w."doneBy",
     dbe."key" AS "doneByEmployeeKey",
     dbe."name" AS "doneByEmployeeName",
+    w."pauseRemark",
+    (
+      SELECT h."occurredAt"
+      FROM "workOrderStatusHistory" h
+      WHERE h."workOrderId" = w."id"
+        AND h."status" IN ('started', 'continued')
+      ORDER BY h."occurredAt" DESC
+      LIMIT 1
+    ) AS "currentSegmentStartedAt",
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
@@ -358,7 +425,8 @@ const selectWorkOrdersSql = `
     COALESCE(updated_by."loginName", w."updatedBy"::text) AS "updatedBy",
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
     COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-    COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount"
+    COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
+    COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
   FROM "workOrder" w
   JOIN "site" s ON s."id" = w."siteId"
   JOIN "asset" a ON a."id" = w."assetId"
@@ -384,6 +452,11 @@ const selectWorkOrdersSql = `
     FROM "workOrderEmployeeAssignment"
     GROUP BY "workOrderId"
   ) assign_counts ON assign_counts."workOrderId" = w."id"
+  LEFT JOIN (
+    SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
+    FROM "transaction"
+    GROUP BY "workOrderId"
+  ) tx_counts ON tx_counts."workOrderId" = w."id"
 `;
 
 async function assertAssetAndCostCenterContext(
@@ -847,6 +920,15 @@ router.post("/:id/pause", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_id" });
     return;
   }
+  const pauseRemarkParsed = parsePauseRemark(
+    req.body !== null && typeof req.body === "object"
+      ? (req.body as Record<string, unknown>).pauseRemark
+      : undefined,
+  );
+  if (pauseRemarkParsed === "invalid" || pauseRemarkParsed === null) {
+    res.status(400).json({ error: "pause_remark_required" });
+    return;
+  }
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
@@ -863,7 +945,10 @@ router.post("/:id/pause", async (req: Request, res: Response) => {
       if (!current) return null;
       if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
       if (!["started", "continued"].includes(current.status)) throw new Error("cannot_pause_from_status");
-      await client.query(`UPDATE "workOrder" SET "status" = 'paused' WHERE "id" = $1::uuid`, [id]);
+      await client.query(
+        `UPDATE "workOrder" SET "status" = 'paused', "pauseRemark" = $2 WHERE "id" = $1::uuid`,
+        [id, pauseRemarkParsed],
+      );
       const { rows } = await client.query<WorkOrderRow>(
         `
         ${selectWorkOrdersSql}
@@ -970,6 +1055,10 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
     return;
   }
   const parsed = parseFeedbackBody(req.body);
+  if (parsed === "pause_remark_required") {
+    res.status(400).json({ error: "pause_remark_required" });
+    return;
+  }
   if (!parsed) {
     res.status(400).json({ error: "invalid_body" });
     return;
@@ -992,20 +1081,66 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
       if (!["started", "continued", "ended"].includes(current.status)) {
         throw new Error("cannot_feedback_from_status");
       }
+
+      const userEmp = await client.query<{ employeeId: string | null }>(
+        `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+        [meta.userId],
+      );
+      const sessionEmployeeId = userEmp.rows[0]?.employeeId ?? null;
+
+      if (sessionEmployeeId) {
+        for (const extra of parsed.additionalHours) {
+          if (extra.employeeId === sessionEmployeeId) {
+            throw new Error("duplicate_feedback_employee");
+          }
+        }
+      }
+
+      for (const extra of parsed.additionalHours) {
+        const emp = await client.query<{ id: string }>(
+          `
+          SELECT e."id"
+          FROM "employee" e
+          WHERE e."id" = $1::uuid
+            AND e."siteId" = $2::uuid
+            AND e."isActive" = true
+          LIMIT 1
+          `,
+          [extra.employeeId, current.siteId],
+        );
+        if (!emp.rows[0]) throw new Error("invalid_additional_hours");
+      }
+
       const qtyRounded = Math.round(parsed.hours * 10_000) / 10_000;
       await client.query(
         `
-        INSERT INTO "transaction" ("siteId", "type", "quantity", "workOrderId", "remark")
-        VALUES ($1::uuid, 'IN', $2::numeric, $3::uuid, $4)
+        INSERT INTO "transaction" ("siteId", "type", "quantity", "workOrderId", "remark", "employeeId")
+        VALUES ($1::uuid, 'IN', $2::numeric, $3::uuid, $4, $5::uuid)
         `,
-        [current.siteId, qtyRounded, id, parsed.remark],
+        [current.siteId, qtyRounded, id, parsed.remark, sessionEmployeeId],
       );
-      if (parsed.completeOrder && current.status !== "ended") {
-        const userEmp = await client.query<{ employeeId: string | null }>(
-          `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
-          [meta.userId],
+
+      for (const extra of parsed.additionalHours) {
+        const extraQty = Math.round(extra.hours * 10_000) / 10_000;
+        await client.query(
+          `
+          INSERT INTO "transaction" ("siteId", "type", "quantity", "workOrderId", "remark", "employeeId")
+          VALUES ($1::uuid, 'IN', $2::numeric, $3::uuid, NULL, $4::uuid)
+          `,
+          [current.siteId, extraQty, id, extra.employeeId],
         );
-        const sessionEmployeeId = userEmp.rows[0]?.employeeId ?? null;
+      }
+
+      if (parsed.statusAction === "pause") {
+        await client.query(
+          `
+          UPDATE "workOrder"
+          SET "status" = 'paused', "pauseRemark" = $2
+          WHERE "id" = $1::uuid
+          `,
+          [id, parsed.pauseRemark],
+        );
+      } else if (parsed.statusAction === "end" && current.status !== "ended") {
         await client.query(
           `
           UPDATE "workOrder"
@@ -1043,6 +1178,14 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
     }
     if (message === "cannot_feedback_from_status") {
       res.status(409).json({ error: "cannot_feedback_from_status" });
+      return;
+    }
+    if (message === "duplicate_feedback_employee") {
+      res.status(400).json({ error: "duplicate_feedback_employee" });
+      return;
+    }
+    if (message === "invalid_additional_hours") {
+      res.status(400).json({ error: "invalid_additional_hours" });
       return;
     }
     sendPgError(res, err);
@@ -1449,7 +1592,8 @@ router.post("/", async (req: Request, res: Response) => {
           COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
           0::int AS "documentCount",
           COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-          0::int AS "assignedEmployeeCount"
+          0::int AS "assignedEmployeeCount",
+          0::int AS "transactionCount"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
         JOIN "asset" a ON a."id" = i."assetId"
@@ -1652,7 +1796,8 @@ router.put("/:id", async (req: Request, res: Response) => {
           COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
           COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
           COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-          COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount"
+          COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
+          COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
         JOIN "asset" a ON a."id" = u."assetId"
@@ -1678,6 +1823,11 @@ router.put("/:id", async (req: Request, res: Response) => {
           FROM "workOrderEmployeeAssignment"
           GROUP BY "workOrderId"
         ) assign_counts ON assign_counts."workOrderId" = u."id"
+        LEFT JOIN (
+          SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
+          FROM "transaction"
+          GROUP BY "workOrderId"
+        ) tx_counts ON tx_counts."workOrderId" = u."id"
         `,
         [
           parsed.name,

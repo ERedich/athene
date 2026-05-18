@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ArrowLeftRight,
+  Box,
   Briefcase,
   ChevronsLeft,
   ChevronsRight,
@@ -22,6 +23,7 @@ import {
   Tags,
   type LucideIcon,
   Users,
+  Warehouse,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -67,6 +69,8 @@ function headerTitleKey(pathname: string): string {
     workgroups: "workgroups.appName",
     employees: "employees.appName",
     "cost-centers": "costCenters.appName",
+    warehouses: "warehouses.appName",
+    "spare-parts": "spareParts.appName",
     "classifications": "classifications.appName",
     "app-parameters": "appParameters.appName",
     "audit-log": "auditLog.appName",
@@ -135,6 +139,16 @@ const navItems: NavItem[] = [
     to: "/cost-centers",
     Icon: Briefcase,
     labelKey: "costCenters.navCostCenters",
+  },
+  {
+    to: "/warehouses",
+    Icon: Warehouse,
+    labelKey: "warehouses.navWarehouses",
+  },
+  {
+    to: "/spare-parts",
+    Icon: Box,
+    labelKey: "spareParts.navSpareParts",
   },
   {
     to: "/classifications",

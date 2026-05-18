@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "chart.js": "^4.5.1",
     "i18next": "^24.2.0",
     "lucide-react": "^1.14.0",
     "primeflex": "^3.3.1",

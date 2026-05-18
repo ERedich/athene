@@ -28,11 +28,12 @@ import { HapticPressable } from "../../../src/components/HapticPressable";
 import { WorkOrderActionsSheet } from "../../../src/components/WorkOrderActionsSheet";
 import { WorkOrderFeedbackModal } from "../../../src/components/WorkOrderFeedbackModal";
 import { useAtheneAssistant } from "../../../src/assistant/AtheneAssistantContext";
+import { useAuth } from "../../../src/auth/AuthContext";
 import {
   WorkOrderActionError,
   postWorkOrderFeedback,
-  postWorkOrderPause,
   postWorkOrderStart,
+  type WorkOrderFeedbackBody,
   queryKeys,
   useWorkOrderSearchPresetsBootstrapQuery,
   useWorkOrdersByPresetQuery,
@@ -464,12 +465,14 @@ export default function WorkOrdersListScreen() {
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
   const athene = useAtheneAssistant();
+  const { user } = useAuth();
   const rowRipple = surfaceRippleColor(isDark);
   const [q, setQ] = useState("");
   const [activePresetIndex, setActivePresetIndex] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrderRow | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackEntryMode, setFeedbackEntryMode] = useState<"create" | "pause" | "stop">("create");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   /** Header refresh icon: only manual tap (not background refetchInterval / focus), avoids stuck spinner. */
   const [headerRefreshPending, setHeaderRefreshPending] = useState(false);
@@ -722,22 +725,8 @@ export default function WorkOrdersListScreen() {
     [load, t],
   );
 
-  const pauseOrder = useCallback(
-    async (row: WorkOrderRow) => {
-      try {
-        await postWorkOrderPause(row.id);
-        await load();
-      } catch (err) {
-        const code = err instanceof WorkOrderActionError ? err.code : "unknown";
-        const msg = code === "cannot_pause_from_status" ? t("workOrders.cannotPauseFromStatus") : t("workOrders.pauseError");
-        Alert.alert("", msg);
-      }
-    },
-    [load, t],
-  );
-
   const submitFeedback = useCallback(
-    async (body: { hours: number; remark: string | null; completeOrder: boolean }) => {
+    async (body: WorkOrderFeedbackBody) => {
       if (!selectedOrder) return false;
       setFeedbackSaving(true);
       try {
@@ -750,9 +739,11 @@ export default function WorkOrdersListScreen() {
         const msg =
           code === "cannot_feedback_from_status"
             ? t("workOrders.cannotFeedbackFromStatus")
-            : code === "invalid_body"
-              ? t("workOrders.feedbackInvalidBody")
-              : t("workOrders.feedbackSaveError");
+            : code === "pause_remark_required"
+              ? t("workOrders.pauseRemarkRequired")
+              : code === "invalid_body"
+                ? t("workOrders.feedbackInvalidBody")
+                : t("workOrders.feedbackSaveError");
         Alert.alert("", msg);
         return false;
       } finally {
@@ -981,16 +972,28 @@ export default function WorkOrdersListScreen() {
         }}
         onPause={() => {
           if (!selectedOrder || !canPauseWorkOrder(selectedOrder.status)) return;
-          void pauseOrder(selectedOrder);
+          setActionsOpen(false);
+          setFeedbackEntryMode("pause");
+          setFeedbackOpen(true);
         }}
         onFeedback={() => {
           if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status)) return;
+          setActionsOpen(false);
+          setFeedbackEntryMode("create");
           setFeedbackOpen(true);
         }}
       />
       <WorkOrderFeedbackModal
         visible={feedbackOpen}
         saving={feedbackSaving}
+        entryMode={feedbackEntryMode}
+        segmentStartedAt={selectedOrder?.currentSegmentStartedAt ?? null}
+        reportingEmployeeLabel={
+          [user.employeeKey, user.employeeName]
+            .map((x) => (typeof x === "string" ? x.trim() : ""))
+            .filter(Boolean)
+            .join(" — ") || t("workOrders.feedbackReportingEmployeeEmpty")
+        }
         onClose={() => setFeedbackOpen(false)}
         onSubmit={submitFeedback}
       />

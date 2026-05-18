@@ -20,6 +20,9 @@ export type TransactionRow = {
   workOrderId: string | null;
   workOrderOrderNumber: string | null;
   remark: string | null;
+  employeeId: string | null;
+  employeeKey: string | null;
+  employeeName: string | null;
 };
 
 const router = Router();
@@ -155,10 +158,14 @@ router.get("/", async (req: Request, res: Response) => {
         t."quantity"::text AS "quantity",
         t."workOrderId",
         w."orderNumber"::text AS "workOrderOrderNumber",
-        t."remark"
+        t."remark",
+        t."employeeId",
+        e."key" AS "employeeKey",
+        e."name" AS "employeeName"
       FROM "transaction" t
       JOIN "site" s ON s."id" = t."siteId"
       LEFT JOIN "workOrder" w ON w."id" = t."workOrderId"
+      LEFT JOIN "employee" e ON e."id" = t."employeeId"
       WHERE ${siteAccessSql('t."siteId"', "$1")}
       ${filterSql}
       ORDER BY t."bookedAt" DESC, t."transactionNumber" DESC

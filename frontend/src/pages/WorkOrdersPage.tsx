@@ -23,7 +23,6 @@ import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Badge } from "primereact/badge";
 import { Button } from "primereact/button";
-import { Checkbox } from "primereact/checkbox";
 import { Calendar } from "primereact/calendar";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -43,8 +42,21 @@ import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import { WorkOrderDialogTitle } from "../components/workOrders/WorkOrderDialogTitle";
+import { WorkOrderFeedbackTabContent } from "../components/workOrders/WorkOrderFeedbackTabContent";
 import { WorkOrderFeedbackTransactionsSection } from "../components/workOrders/WorkOrderFeedbackTransactionsSection";
+import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
+import { useWorkOrderOverviewPanel } from "../hooks/useWorkOrderOverviewPanel";
+import {
+  computeSegmentHours,
+  feedbackStatusActionForEntryMode,
+  orderDialogTabs,
+  type FeedbackAdditionalHoursRow,
+  type FeedbackEntryMode,
+  type FeedbackStatusAction,
+  type OrderDialogTab,
+} from "../lib/workOrderDialog";
 import { mergeWorkOrderIntoAdvancedSearch } from "../lib/workOrderCleverSearch";
 import {
   buildWorkOrderListQueryString,
@@ -113,6 +125,8 @@ type WorkOrder = {
   doneBy: string | null;
   doneByEmployeeKey: string | null;
   doneByEmployeeName: string | null;
+  pauseRemark: string | null;
+  currentSegmentStartedAt: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -120,6 +134,7 @@ type WorkOrder = {
   documentCount: number;
   assetDocumentCount: number;
   assignedEmployeeCount: number;
+  transactionCount: number;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
@@ -228,14 +243,6 @@ type SelectOption = { label: string; value: string };
 const ORDERS_TABLE_VIRTUAL_ROW_PX = 38;
 const PENDING_AUTO_UPLOAD_MS = 5_000;
 
-const orderDialogTabs = {
-  General: 0,
-  Planning: 1,
-  Documents: 2,
-  Feedback: 3,
-} as const;
-type OrderDialogTab = (typeof orderDialogTabs)[keyof typeof orderDialogTabs];
-
 /** Matches POST /api/work-orders/:id/feedback — only started, continued, ended. */
 function workOrderStatusAllowsFeedback(status: WorkOrderStatus | undefined): boolean {
   return status === "started" || status === "continued" || status === "ended";
@@ -327,6 +334,7 @@ export function WorkOrdersPage() {
   const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const overview = useWorkOrderOverviewPanel();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabHostRef = useRef<HTMLDivElement | null>(null);
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -366,10 +374,14 @@ export function WorkOrdersPage() {
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
   const [feedbackHours, setFeedbackHours] = useState("");
   const [feedbackRemark, setFeedbackRemark] = useState("");
-  const [feedbackCompleteOrder, setFeedbackCompleteOrder] = useState(false);
+  const [feedbackPauseRemark, setFeedbackPauseRemark] = useState("");
+  const [feedbackStatusAction, setFeedbackStatusAction] = useState<FeedbackStatusAction>("none");
+  const [feedbackEntryMode, setFeedbackEntryMode] = useState<FeedbackEntryMode>("create");
+  const [feedbackAdditionalHours, setFeedbackAdditionalHours] = useState<FeedbackAdditionalHoursRow[]>([]);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackTransactions, setFeedbackTransactions] = useState<TransactionRow[]>([]);
   const [feedbackTransactionsLoading, setFeedbackTransactionsLoading] = useState(false);
+  const [feedbackTransactionsLoadedOrderId, setFeedbackTransactionsLoadedOrderId] = useState<string | null>(null);
   const [dummyCreating, setDummyCreating] = useState(false);
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
@@ -611,6 +623,8 @@ export function WorkOrdersPage() {
             doneBy: null,
             doneByEmployeeKey: null,
             doneByEmployeeName: null,
+            pauseRemark: null,
+            currentSegmentStartedAt: null,
             workgroupId: null,
             workgroupKey: null,
             workgroupName: null,
@@ -621,12 +635,18 @@ export function WorkOrdersPage() {
             documentCount: 0,
             assetDocumentCount: 0,
             assignedEmployeeCount: 0,
+            transactionCount: 0,
           }))
         : [],
     [loading, orders.length],
   );
 
   const tableRows = preloadRows.length > 0 ? preloadRows : orders;
+
+  const overviewOrder = useMemo(() => {
+    if (!overview.activeOrder) return null;
+    return orders.find((row) => row.id === overview.activeOrder!.id) ?? overview.activeOrder;
+  }, [overview.activeOrder, orders]);
 
   useEffect(() => {
     setHeaderRowCount(orders.length);
@@ -946,22 +966,25 @@ export function WorkOrdersPage() {
       }
       const data = (await res.json()) as { rows: TransactionRow[] };
       setFeedbackTransactions(Array.isArray(data.rows) ? data.rows : []);
+      setFeedbackTransactionsLoadedOrderId(orderId);
     } catch {
       setFeedbackTransactions([]);
+      setFeedbackTransactionsLoadedOrderId(null);
     } finally {
       setFeedbackTransactionsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!dialogVisible || !editingId || activeTabIndex !== orderDialogTabs.Feedback) return;
+    if (!dialogVisible || !editingId) return;
     void loadFeedbackTransactions(editingId);
-  }, [activeTabIndex, dialogVisible, editingId, loadFeedbackTransactions]);
+  }, [dialogVisible, editingId, loadFeedbackTransactions]);
 
   useEffect(() => {
     if (dialogVisible) return;
     setFeedbackTransactions([]);
     setFeedbackTransactionsLoading(false);
+    setFeedbackTransactionsLoadedOrderId(null);
   }, [dialogVisible]);
 
   useEffect(() => {
@@ -1269,7 +1292,10 @@ export function WorkOrdersPage() {
     setActiveTabIndex(orderDialogTabs.General);
     setFeedbackHours("");
     setFeedbackRemark("");
-    setFeedbackCompleteOrder(false);
+    setFeedbackPauseRemark("");
+    setFeedbackStatusAction("none");
+    setFeedbackEntryMode("create");
+    setFeedbackAdditionalHours([]);
     setFeedbackTransactions([]);
     setDialogVisible(true);
   }, []);
@@ -1300,10 +1326,22 @@ export function WorkOrdersPage() {
     setDocumentsSearchTerm("");
     setFeedbackHours("");
     setFeedbackRemark("");
-    setFeedbackCompleteOrder(false);
+    setFeedbackPauseRemark("");
+    setFeedbackStatusAction("none");
+    setFeedbackEntryMode("create");
+    setFeedbackAdditionalHours([]);
     setFeedbackTransactions([]);
     setActiveTabIndex(orderDialogTabs.General);
     setDialogVisible(true);
+  }, []);
+
+  const applyFeedbackEntry = useCallback((row: WorkOrder, mode: FeedbackEntryMode) => {
+    setFeedbackEntryMode(mode);
+    setFeedbackStatusAction(feedbackStatusActionForEntryMode(mode));
+    setFeedbackPauseRemark("");
+    setFeedbackHours(computeSegmentHours(row.currentSegmentStartedAt));
+    setFeedbackRemark("");
+    setFeedbackAdditionalHours([]);
   }, []);
 
   const openPlanningTab = useCallback((row: WorkOrder) => {
@@ -1312,12 +1350,13 @@ export function WorkOrdersPage() {
   }, [openEdit]);
 
   const openFeedbackTab = useCallback(
-    (row: WorkOrder) => {
+    (row: WorkOrder, mode: FeedbackEntryMode = "create") => {
       if (!workOrderStatusAllowsFeedbackTab(row.status)) return;
       openEdit(row);
+      applyFeedbackEntry(row, mode);
       setActiveTabIndex(orderDialogTabs.Feedback);
     },
-    [openEdit],
+    [applyFeedbackEntry, openEdit],
   );
 
   const openDocumentsTab = useCallback(
@@ -1846,28 +1885,6 @@ export function WorkOrdersPage() {
     [loadData, t],
   );
 
-  const pauseOrder = useCallback(
-    async (row: WorkOrder) => {
-      const res = await apiFetch(`/api/work-orders/${row.id}/pause`, { method: "POST" });
-      if (!res.ok) {
-        let code: string | undefined;
-        try {
-          code = ((await res.json()) as { error?: string }).error;
-        } catch {
-          /* ignore */
-        }
-        const msg =
-          code === "cannot_pause_from_status"
-            ? t("workOrders.cannotPauseFromStatus")
-            : t("workOrders.pauseError");
-        toastRef.current?.show({ severity: "warn", summary: msg, life: 4000 });
-        return;
-      }
-      await loadData();
-    },
-    [loadData, t],
-  );
-
   const cancelWorkOrder = useCallback(
     async (row: WorkOrder) => {
       try {
@@ -1925,6 +1942,21 @@ export function WorkOrdersPage() {
       toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackRemarkTooLong"), life: 4000 });
       return;
     }
+    if (feedbackStatusAction === "pause" && !feedbackPauseRemark.trim()) {
+      toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackPauseRemarkRequired"), life: 4000 });
+      return;
+    }
+    const additionalHours: { employeeId: string; hours: number }[] = [];
+    for (const row of feedbackAdditionalHours) {
+      if (!row.employeeId.trim()) continue;
+      const raw = row.hours.trim().replace(",", ".");
+      const value = raw === "" ? NaN : Number(raw);
+      if (!Number.isFinite(value) || value <= 0) {
+        toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackAdditionalHoursInvalid"), life: 4000 });
+        return;
+      }
+      additionalHours.push({ employeeId: row.employeeId, hours: value });
+    }
     setFeedbackSaving(true);
     try {
       const res = await apiFetch(`/api/work-orders/${editingId}/feedback`, {
@@ -1933,7 +1965,9 @@ export function WorkOrdersPage() {
         body: JSON.stringify({
           hours,
           remark: feedbackRemark.trim() || null,
-          completeOrder: feedbackCompleteOrder,
+          statusAction: feedbackStatusAction,
+          pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
+          additionalHours,
         }),
       });
       if (!res.ok) {
@@ -1946,9 +1980,15 @@ export function WorkOrdersPage() {
         const msg =
           code === "cannot_feedback_from_status"
             ? t("workOrders.cannotFeedbackFromStatus")
-            : code === "invalid_body"
-              ? t("workOrders.feedbackInvalidBody")
-              : t("workOrders.feedbackSaveError");
+            : code === "pause_remark_required"
+              ? t("workOrders.pauseRemarkRequired")
+              : code === "duplicate_feedback_employee"
+                ? t("workOrders.duplicateFeedbackEmployee")
+                : code === "invalid_additional_hours"
+                  ? t("workOrders.invalidAdditionalHours")
+                  : code === "invalid_body"
+                    ? t("workOrders.feedbackInvalidBody")
+                    : t("workOrders.feedbackSaveError");
         toastRef.current?.show({ severity: "error", summary: msg, life: 6000 });
         return;
       }
@@ -1957,7 +1997,9 @@ export function WorkOrdersPage() {
       await loadData();
       setFeedbackHours("");
       setFeedbackRemark("");
-      setFeedbackCompleteOrder(false);
+      setFeedbackPauseRemark("");
+      setFeedbackStatusAction("none");
+      setFeedbackAdditionalHours([]);
       setDialogVisible(false);
       toastRef.current?.show({ severity: "success", summary: t("workOrders.feedbackSaved"), life: 3000 });
     } catch {
@@ -1965,7 +2007,16 @@ export function WorkOrdersPage() {
     } finally {
       setFeedbackSaving(false);
     }
-  }, [editingId, feedbackCompleteOrder, feedbackHours, feedbackRemark, loadData, t]);
+  }, [
+    editingId,
+    feedbackAdditionalHours,
+    feedbackHours,
+    feedbackPauseRemark,
+    feedbackRemark,
+    feedbackStatusAction,
+    loadData,
+    t,
+  ]);
 
   const workOrderContextMenuExtraItems = useCallback(
     (row: WorkOrder | null) => {
@@ -1983,7 +2034,7 @@ export function WorkOrdersPage() {
           label: t("workOrders.contextMenuCreateFeedback"),
           icon: <Send className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           disabled: !canOpenFeedbackTab,
-          command: () => openFeedbackTab(row),
+          command: () => openFeedbackTab(row, "create"),
         },
         {
           label: t("workOrders.contextMenuCancelOrder"),
@@ -2084,7 +2135,7 @@ export function WorkOrdersPage() {
               icon={<AppSquareStopIcon />}
               title={t("workOrders.stop")}
               aria-label={t("workOrders.stop")}
-              onClick={() => openFeedbackTab(row)}
+              onClick={() => openFeedbackTab(row, "stop")}
             />
             <Button
               type="button"
@@ -2093,14 +2144,14 @@ export function WorkOrdersPage() {
               icon={<AppPauseIcon />}
               title={t("workOrders.pause")}
               aria-label={t("workOrders.pause")}
-              onClick={() => void pauseOrder(row)}
+              onClick={() => openFeedbackTab(row, "pause")}
             />
           </div>
         );
       }
       return null;
     },
-    [openFeedbackTab, pauseOrder, startOrder, t],
+    [openFeedbackTab, startOrder, t],
   );
 
   const dialogHeaderIcons = useMemo(() => {
@@ -2133,7 +2184,7 @@ export function WorkOrdersPage() {
             icon={<AppSquareStopIcon />}
             title={t("workOrders.stop")}
             aria-label={t("workOrders.stop")}
-            onClick={() => openFeedbackTab(row)}
+            onClick={() => openFeedbackTab(row, "stop")}
           />
           <Button
             type="button"
@@ -2143,18 +2194,42 @@ export function WorkOrdersPage() {
             icon={<AppPauseIcon />}
             title={t("workOrders.pause")}
             aria-label={t("workOrders.pause")}
-            onClick={() => void pauseOrder(row)}
+            onClick={() => openFeedbackTab(row, "pause")}
           />
         </div>
       );
     }
     return null;
-  }, [editingId, editingOrder, openFeedbackTab, pauseOrder, startOrder, t]);
+  }, [editingId, editingOrder, openFeedbackTab, startOrder, t]);
+
+  const reportingEmployeeLabel = useMemo(() => {
+    const parts = [user.employeeKey, user.employeeName]
+      .map((x) => (typeof x === "string" ? x.trim() : ""))
+      .filter(Boolean);
+    return parts.length ? parts.join(" — ") : t("workOrders.feedbackReportingEmployeeEmpty");
+  }, [t, user.employeeKey, user.employeeName]);
+
+  const feedbackAdditionalEmployeeOptions = useMemo(
+    () => employeeOptions.filter((opt) => opt.value !== user.employeeId),
+    [employeeOptions, user.employeeId],
+  );
 
   const isFeedbackTab = activeTabIndex === orderDialogTabs.Feedback;
   const documentsTabCount = (editingId ? documents.length : 0) + pendingFiles.length;
   const assignmentsTabCount = assignments.length + assignmentEmployeeIds.length;
-  const feedbackTabCount = Number(Boolean(feedbackHours.trim() || feedbackRemark.trim() || feedbackCompleteOrder));
+  const feedbackTabCount = Number(
+    Boolean(
+      feedbackHours.trim() ||
+        feedbackRemark.trim() ||
+        feedbackPauseRemark.trim() ||
+        feedbackStatusAction !== "none" ||
+        feedbackAdditionalHours.length > 0,
+    ),
+  );
+  const transactionsTabCount =
+    feedbackTransactionsLoadedOrderId === editingId
+      ? feedbackTransactions.length
+      : (editingOrder?.transactionCount ?? 0);
 
   const dialogFooter = useMemo(
     () => (
@@ -2225,6 +2300,7 @@ export function WorkOrdersPage() {
         }}
       />
       <ConfirmDialog />
+      <WorkOrderOverviewOverlay ref={overview.panelRef} order={overviewOrder} onHide={overview.onHide} />
       {!isPreloadMode ? tableCtx.ContextMenuEl : null}
 
       <div
@@ -2248,6 +2324,10 @@ export function WorkOrdersPage() {
           onRowDoubleClick={(e) => {
             if (isPreloadMode) return;
             openEdit(e.data as WorkOrder);
+          }}
+          onRowClick={(e) => {
+            if (isPreloadMode) return;
+            overview.onRowClick(e);
           }}
           {...(!isPreloadMode ? tableCtx.tableProps : {})}
           selectionMode="single"
@@ -2345,7 +2425,13 @@ export function WorkOrdersPage() {
       </div>
 
       <Dialog
-        header={editingId ? t("workOrders.editTitle") : t("workOrders.createTitle")}
+        header={
+          <WorkOrderDialogTitle
+            orderNumber={editingId ? (editingOrder?.orderNumber ?? form.orderNumber) : null}
+            status={editingOrder?.status}
+            isCreate={!editingId}
+          />
+        }
         icons={dialogHeaderIcons}
         visible={dialogVisible}
         className="app-big-modal-window app-tabbed-modal-window"
@@ -2370,9 +2456,10 @@ export function WorkOrdersPage() {
                 idx === orderDialogTabs.General ||
                 idx === orderDialogTabs.Planning ||
                 idx === orderDialogTabs.Documents ||
-                idx === orderDialogTabs.Feedback
+                idx === orderDialogTabs.Feedback ||
+                idx === orderDialogTabs.Transactions
               ) {
-                setActiveTabIndex(idx);
+                setActiveTabIndex(idx as OrderDialogTab);
               }
             }}
           >
@@ -2916,73 +3003,36 @@ export function WorkOrdersPage() {
               }
               disabled={!editingId || !workOrderStatusAllowsFeedbackTab(editingOrder?.status)}
             >
-              <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6">
-                <div className="space-y-2 md:col-span-6">
-                  <label htmlFor="order-feedback-done-by" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-                    {t("workOrders.feedbackDoneBy")}
-                  </label>
-                  <InputText
-                    id="order-feedback-done-by"
-                    disabled
-                    value={
-                      editingOrder?.doneBy
-                        ? [editingOrder.doneByEmployeeKey, editingOrder.doneByEmployeeName]
-                            .map((x) => (typeof x === "string" ? x.trim() : ""))
-                            .filter(Boolean)
-                            .join(" — ")
-                        : t("workOrders.feedbackDoneByEmpty")
-                    }
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="order-feedback-hours" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-                    {t("workOrders.feedbackHours")}
-                    <span className="app-required-marker" aria-hidden>
-                      *
-                    </span>
-                  </label>
-                  <InputText
-                    id="order-feedback-hours"
-                    value={feedbackHours}
-                    onChange={(e) => setFeedbackHours(e.target.value)}
-                    placeholder={t("workOrders.feedbackHoursPlaceholder")}
-                    className="w-full"
-                    disabled={feedbackSaving || editingOrder?.status === "done"}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-6">
-                  <label htmlFor="order-feedback-remark" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-                    {t("workOrders.feedbackRemark")}
-                  </label>
-                  <textarea
-                    id="order-feedback-remark"
-                    value={feedbackRemark}
-                    maxLength={2000}
-                    onChange={(e) => setFeedbackRemark(e.target.value)}
-                    className="w-full p-inputtext p-component min-h-28 resize-y"
-                    disabled={feedbackSaving || editingOrder?.status === "done"}
-                  />
-                  <div className="text-xs text-on-surface-variant text-right">
-                    {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 md:col-span-6">
-                  <Checkbox
-                    inputId="order-feedback-complete"
-                    checked={feedbackCompleteOrder}
-                    onChange={(e) => setFeedbackCompleteOrder(Boolean(e.checked))}
-                    disabled={feedbackSaving || editingOrder?.status === "done"}
-                  />
-                  <label htmlFor="order-feedback-complete" className="cursor-pointer text-sm">
-                    {t("workOrders.feedbackCompleteOrder")}
-                  </label>
-                </div>
-                <hr className="m-0 border-0 border-t border-solid app-wo-detail-outline-border md:col-span-6" />
-                <div className="min-w-0 md:col-span-6">
-                  <WorkOrderFeedbackTransactionsSection rows={feedbackTransactions} loading={feedbackTransactionsLoading} />
-                </div>
+              <WorkOrderFeedbackTabContent
+                reportingEmployeeLabel={reportingEmployeeLabel}
+                feedbackHours={feedbackHours}
+                onFeedbackHoursChange={setFeedbackHours}
+                feedbackRemark={feedbackRemark}
+                onFeedbackRemarkChange={setFeedbackRemark}
+                feedbackPauseRemark={feedbackPauseRemark}
+                onFeedbackPauseRemarkChange={setFeedbackPauseRemark}
+                feedbackStatusAction={feedbackStatusAction}
+                onFeedbackStatusActionChange={setFeedbackStatusAction}
+                feedbackEntryMode={feedbackEntryMode}
+                additionalHoursRows={feedbackAdditionalHours}
+                onAdditionalHoursRowsChange={setFeedbackAdditionalHours}
+                additionalEmployeeOptions={feedbackAdditionalEmployeeOptions}
+                sessionEmployeeId={user.employeeId}
+                disabled={feedbackSaving}
+                doneOrder={editingOrder?.status === "done"}
+              />
+            </TabPanel>
+            <TabPanel
+              header={
+                <span className="inline-flex items-center gap-2">
+                  <span>{t("workOrders.tabTransactions")}</span>
+                  {transactionsTabCount > 0 ? <Badge value={transactionsTabCount} /> : null}
+                </span>
+              }
+              disabled={!editingId}
+            >
+              <div className="pt-1">
+                <WorkOrderFeedbackTransactionsSection rows={feedbackTransactions} loading={feedbackTransactionsLoading} />
               </div>
             </TabPanel>
           </TabView>

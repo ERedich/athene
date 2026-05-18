@@ -759,11 +759,11 @@ html.theme-crossfade-fallback #root {
   color: rgb(15 23 42) !important;
 }
 
-/* Modal header: status text only (no badge / pill). */
+/* Modal header: status text — same size as title, color only. */
 .app-wo-status-modal {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 .app-wo-status-modal.app-wo-status-open {
   color: rgb(100 116 139);
@@ -1798,4 +1798,63 @@ html.theme-crossfade-fallback #root {
   margin: 0.375rem 0.35rem;
   border-top: 1px solid color-mix(in srgb, var(--color-on-surface) 16%, transparent);
   padding-top: 0.25rem;
+}
+
+/* Work order overview overlay (Ctrl+click tooltip). */
+.app-wo-overview-overlay.p-overlaypanel {
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: 70vh;
+}
+
+.app-wo-overview-overlay.p-overlaypanel .p-overlaypanel-content {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  max-height: calc(70vh - 2.75rem);
+}
+
+.app-wo-overview-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--surface-overlay);
+}
+
+.app-wo-overview-kpi-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-outline);
+}
+
+.app-wo-overview-kpi-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-on-surface);
+}
+
+.app-wo-overview-chart {
+  height: 10rem;
+  position: relative;
+}
+
+.app-wo-overview-chart-skeleton {
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+  animation: app-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes app-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
 }

@@ -131,6 +131,8 @@ export type WorkOrderRow = {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   status: WorkOrderStatus;
+  pauseRemark: string | null;
+  currentSegmentStartedAt: string | null;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
