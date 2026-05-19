@@ -179,6 +179,8 @@ export type TransactionRow = {
   remark: string | null;
 };
 
+export type DocumentReferenceApp = "assets" | "workOrders";
+
 export type WorkOrderDocumentRow = {
   id: string;
   source: WorkOrderDocumentSource;
@@ -189,6 +191,7 @@ export type WorkOrderDocumentRow = {
   category: WorkOrderDocumentCategory;
   mimeType: string;
   fileSize: number;
+  referenceApp?: DocumentReferenceApp;
   createdAt: string;
   createdBy: string;
   updatedAt: string;

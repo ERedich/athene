@@ -13,16 +13,27 @@ import {
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
+import {
+  DOCUMENT_MAX_BYTES,
+  assetDocumentCountSubquery,
+  assetDocumentCountSubqueryOnInsert,
+  assetDocumentCountSubqueryOnUpdate,
+  createDocument,
+  deleteDocumentForEntity,
+  getDocumentContentForAsset,
+  isDocumentCategory,
+  listAssetDocuments,
+  patchDocumentForEntity,
+  type DocumentCategory,
+} from "./documents/index.js";
+import {
+  deleteAssetEmbeddings,
+  reindexAsset,
+  scheduleReindex,
+} from "./assistant/embedding/index.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
-type AssetDocumentCategory =
-  | "general"
-  | "protocols"
-  | "drawings"
-  | "instructions"
-  | "nameplates"
-  | "certificates";
 
 export type AssetRow = {
   id: string;
@@ -56,20 +67,6 @@ export type AssetRow = {
   keyPath: string | null;
 };
 
-type AssetDocumentRow = {
-  id: string;
-  assetId: string;
-  fileName: string;
-  displayName: string;
-  category: AssetDocumentCategory;
-  mimeType: string;
-  fileSize: number;
-  createdAt: string;
-  createdBy: string;
-  updatedAt: string;
-  updatedBy: string;
-};
-
 type ParsedBody = {
   key: string;
   name: string;
@@ -87,9 +84,7 @@ type ParsedBody = {
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: Number(process.env.ASSET_DOCUMENT_MAX_BYTES) || 25 * 1024 * 1024,
-  },
+  limits: { fileSize: DOCUMENT_MAX_BYTES },
 });
 
 const uuidRe =
@@ -102,43 +97,12 @@ const parentTypeRules: Record<AssetType, AssetType[]> = {
   line: ["site", "structure", "line"],
   maintenanceObject: ["site", "structure", "line", "maintenanceObject"],
 };
-const allowedDocumentCategories: AssetDocumentCategory[] = [
-  "general",
-  "protocols",
-  "drawings",
-  "instructions",
-  "nameplates",
-  "certificates",
-];
-
-const assetDocumentSelectJoin = `
-      SELECT
-        d."id",
-        d."assetId",
-        d."fileName",
-        d."displayName",
-        d."category",
-        d."mimeType",
-        d."fileSize",
-        d."createdAt",
-        COALESCE(created_by."loginName", d."createdBy"::text) AS "createdBy",
-        d."updatedAt",
-        COALESCE(updated_by."loginName", d."updatedBy"::text) AS "updatedBy"
-      FROM "assetDocument" d
-      LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
-      LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
-`;
-
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
 
 function isAssetType(value: unknown): value is AssetType {
   return typeof value === "string" && (allowedTypes as string[]).includes(value);
-}
-
-function isAssetDocumentCategory(value: unknown): value is AssetDocumentCategory {
-  return typeof value === "string" && (allowedDocumentCategories as string[]).includes(value);
 }
 
 function readTrimmedOptionalString(value: unknown): string | null {
@@ -262,11 +226,7 @@ const selectAssetsSqlBase = `
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
-  LEFT JOIN (
-    SELECT "assetId", COUNT(*)::int AS "documentCount"
-    FROM "assetDocument"
-    GROUP BY "assetId"
-  ) doc_counts ON doc_counts."assetId" = a."id"
+  ${assetDocumentCountSubquery}
 `;
 
 /** Same as selectAssetsSql but computes keyPath when $2 is the separator character. $1 = site-access user id. */
@@ -324,11 +284,7 @@ const selectAssetsSqlWithKeyPath = `
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
-  LEFT JOIN (
-    SELECT "assetId", COUNT(*)::int AS "documentCount"
-    FROM "assetDocument"
-    GROUP BY "assetId"
-  ) doc_counts ON doc_counts."assetId" = a."id"
+  ${assetDocumentCountSubquery}
 `;
 
 type AssetTypeRow = QueryResultRow & { type: AssetType; id: string; siteId: string };
@@ -490,19 +446,11 @@ router.get("/:id/documents", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const asset = await getAccessibleAsset(userId, id);
-    if (!asset) {
+    const rows = await listAssetDocuments(userId, id);
+    if (rows === null) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const { rows } = await pool.query<AssetDocumentRow>(
-      `
-      ${assetDocumentSelectJoin}
-      WHERE d."assetId" = $1::uuid
-      ORDER BY d."createdAt" DESC
-      `,
-      [asset.id],
-    );
     res.json(rows);
   } catch (err) {
     sendPgError(res, err);
@@ -529,7 +477,7 @@ router.post("/:id/documents", upload.single("file"), async (req: Request, res: R
   const displayNameRaw = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
   const displayName = displayNameRaw || fileName;
   const categoryRaw = typeof req.body?.category === "string" ? req.body.category : "general";
-  if (!isAssetDocumentCategory(categoryRaw)) {
+  if (!isDocumentCategory(categoryRaw)) {
     res.status(400).json({ error: "invalid_document_category" });
     return;
   }
@@ -539,33 +487,16 @@ router.post("/:id/documents", upload.single("file"), async (req: Request, res: R
 
   try {
     const meta = auditMeta(req);
-    const row = await withAuditContext(meta, async (client) => {
-      const asset = await client.query<AssetAccessRow>(
-        `
-        SELECT "id", "siteId"
-        FROM "asset"
-        WHERE "id" = $1::uuid
-          AND ${siteAccessSql('"siteId"', "$2")}
-        `,
-        [id, meta.userId],
-      );
-      if (asset.rowCount === 0) return null;
-      const ins = await client.query<{ id: string }>(
-        `
-        INSERT INTO "assetDocument" ("assetId", "fileName", "displayName", "category", "mimeType", "fileSize", "content")
-        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::bytea)
-        RETURNING "id"
-        `,
-        [id, fileName, displayName, categoryRaw, mimeType, fileSize, content],
-      );
-      const newId = ins.rows[0]?.id;
-      if (!newId) return null;
-      const { rows } = await client.query<AssetDocumentRow>(
-        `${assetDocumentSelectJoin}
-        WHERE d."id" = $1::uuid`,
-        [newId],
-      );
-      return rows[0] ?? null;
+    const row = await createDocument(meta, {
+      fileName,
+      displayName,
+      category: categoryRaw,
+      mimeType,
+      fileSize,
+      content,
+      referenceApp: "assets",
+      entityType: "asset",
+      entityId: id,
     });
     if (!row) {
       res.status(404).json({ error: "not_found" });
@@ -593,23 +524,7 @@ router.get("/:id/documents/:documentId/content", async (req: Request, res: Respo
     return;
   }
   try {
-    const asset = await getAccessibleAsset(userId, id);
-    if (!asset) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-    const result = await pool.query<
-      QueryResultRow & { fileName: string; displayName: string; mimeType: string; fileSize: number; content: Buffer }
-    >(
-      `
-      SELECT "fileName", "displayName", "mimeType", "fileSize", "content"
-      FROM "assetDocument"
-      WHERE "id" = $1::uuid
-        AND "assetId" = $2::uuid
-      `,
-      [documentId, asset.id],
-    );
-    const doc = result.rows[0];
+    const doc = await getDocumentContentForAsset(userId, id, documentId);
     if (!doc) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -637,27 +552,7 @@ router.delete("/:id/documents/:documentId", async (req: Request, res: Response) 
   }
   try {
     const meta = auditMeta(req);
-    const deleted = await withAuditContext(meta, async (client) => {
-      const asset = await client.query<AssetAccessRow>(
-        `
-        SELECT "id", "siteId"
-        FROM "asset"
-        WHERE "id" = $1::uuid
-          AND ${siteAccessSql('"siteId"', "$2")}
-        `,
-        [id, meta.userId],
-      );
-      if (asset.rowCount === 0) return 0;
-      const result: QueryResult = await client.query(
-        `
-        DELETE FROM "assetDocument"
-        WHERE "id" = $1::uuid
-          AND "assetId" = $2::uuid
-        `,
-        [documentId, id],
-      );
-      return result.rowCount ?? 0;
-    });
+    const deleted = await deleteDocumentForEntity(meta, "asset", id, documentId);
     if (deleted === 0) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -695,51 +590,18 @@ router.patch("/:id/documents/:documentId", async (req: Request, res: Response) =
     res.status(400).json({ error: "invalid_display_name" });
     return;
   }
-  if (categoryRaw !== undefined && !isAssetDocumentCategory(categoryRaw)) {
+  if (categoryRaw !== undefined && !isDocumentCategory(categoryRaw)) {
     res.status(400).json({ error: "invalid_document_category" });
     return;
   }
 
-  const sets: string[] = [];
-  const params: unknown[] = [];
-  let i = 1;
-  if (displayNameRaw !== undefined) {
-    sets.push(`"displayName" = $${i++}`);
-    params.push(displayNameRaw);
-  }
-  if (categoryRaw !== undefined) {
-    sets.push(`"category" = $${i++}`);
-    params.push(categoryRaw);
-  }
-  const pDoc = i++;
-  const pAsset = i++;
-  const pUser = i++;
-  params.push(documentId, id, userId);
+  const patch: { displayName?: string; category?: DocumentCategory } = {};
+  if (displayNameRaw !== undefined) patch.displayName = displayNameRaw;
+  if (categoryRaw !== undefined) patch.category = categoryRaw;
 
   try {
     const meta = auditMeta(req);
-    const row = await withAuditContext(meta, async (client) => {
-      const upd = await client.query<{ id: string }>(
-        `
-        UPDATE "assetDocument" d
-        SET ${sets.join(", ")}
-        FROM "asset" a
-        WHERE d."id" = $${pDoc}::uuid
-          AND d."assetId" = $${pAsset}::uuid
-          AND a."id" = d."assetId"
-          AND ${siteAccessSql('a."siteId"', `$${pUser}`)}
-        RETURNING d."id"
-        `,
-        params,
-      );
-      if (upd.rowCount === 0) return null;
-      const { rows } = await client.query<AssetDocumentRow>(
-        `${assetDocumentSelectJoin}
-        WHERE d."id" = $1::uuid`,
-        [documentId],
-      );
-      return rows[0] ?? null;
-    });
+    const row = await patchDocumentForEntity(meta, "asset", id, documentId, patch);
     if (!row) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -845,11 +707,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "asset" parent ON parent."id" = i."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
-        LEFT JOIN (
-          SELECT "assetId", COUNT(*)::int AS "documentCount"
-          FROM "assetDocument"
-          GROUP BY "assetId"
-        ) doc_counts ON doc_counts."assetId" = i."id"
+        ${assetDocumentCountSubqueryOnInsert}
         `,
         [
           resolvedKey,
@@ -872,6 +730,7 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
     res.status(201).json(row);
+    scheduleReindex(`asset ${row.id}`, () => reindexAsset(row.id));
   } catch (err) {
     if ((err as Error).message === "user_not_found") {
       res.status(401).json({ error: "unauthorized" });
@@ -1041,11 +900,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "asset" parent ON parent."id" = u."parentAssetId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
-        LEFT JOIN (
-          SELECT "assetId", COUNT(*)::int AS "documentCount"
-          FROM "assetDocument"
-          GROUP BY "assetId"
-        ) doc_counts ON doc_counts."assetId" = u."id"
+        ${assetDocumentCountSubqueryOnUpdate}
         `,
         [
           keyForUpdate,
@@ -1069,6 +924,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    scheduleReindex(`asset ${row.id}`, () => reindexAsset(row.id));
   } catch (err) {
     const message = (err as Error).message;
     if (message === "user_not_found") {
@@ -1143,6 +999,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.status(204).send();
+    scheduleReindex(`delete asset ${id}`, () => deleteAssetEmbeddings(id));
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });

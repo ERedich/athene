@@ -1,5 +1,6 @@
 /**
- * Dokument-Kategorien (Asset-Anhänge). Muss mit Backend `AssetDocumentCategory` übereinstimmen.
+ * Dokument-Kategorien (alle Apps). Muss mit Backend `DocumentCategory` übereinstimmen.
+ * Prefer importing from `./documentCategory` for new code.
  * Farben sind bewusst hardcoded; später z. B. aus Standort-/Mandanten-Konfiguration oder API.
  */
 export const ASSET_DOCUMENT_CATEGORY_ORDER = [

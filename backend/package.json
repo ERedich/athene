@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "athene:reindex-embeddings": "tsx scripts/athene-reindex-embeddings.ts"
   },
   "dependencies": {
     "@types/multer": "^2.1.0",

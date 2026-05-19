@@ -55,7 +55,7 @@ npm run dev:mobile
 
 ## Phase 2 (not in v1)
 
-- **Asset documents:** upload, categories, content URLs (`/api/assets/:id/documents/...`).
+- **Asset documents (mobile UI):** backend supports `/api/assets/:id/documents/...` (unified `document` table); mobile Asset editor UI not yet implemented.
 - **Asset tree** view (hierarchy table like web).
 - **Native apps without browser cookies:** add a token-based login (e.g. extend `/api/auth/login` to return a bearer token for mobile) — cookies do not apply the same way outside the web runtime.
 

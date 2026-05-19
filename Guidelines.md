@@ -171,9 +171,35 @@ Use these **background** colors for reference icon buttons (and matching border)
 
 ---
 
+## Document management (unified)
+
+All file attachments use a single backend model — not one table per app.
+
+| Layer | Table / field | Meaning |
+| --- | --- | --- |
+| **Storage** | `"document"` | File bytes (`content`), metadata (`fileName`, `displayName`, `category`, `mimeType`, `fileSize`), audit columns |
+| **Upload origin** | `"document"."referenceApp"` | App where the user triggered upload (e.g. `assets`, `workOrders`). Monitoring uploads use `workOrders`. |
+| **Assignment** | `"documentLink"` | Links a document to exactly one entity today (`entityType` + `entityId`). Phase 1: `UNIQUE ("documentId")` on the link. |
+
+**API shape:** Nested routes stay per parent entity (`POST /api/assets/:id/documents`, `POST /api/work-orders/:id/documents`). Routers are thin wrappers around `backend/src/documents/`.
+
+**Work-order list UI:** `source` in JSON = `documentLink.entityType` (`workOrder` \| `asset`). Icon colors use `documentCount` (on the order) vs `assetDocumentCount` (on the linked asset) — not permissions.
+
+**Adding documents to a new app:**
+
+1. Extend `referenceApp` and `entityType` CHECK constraints in a migration + `backend/src/documents/documentTypes.ts`.
+2. Add site/entity resolution in `documentAccess.ts`.
+3. Expose nested routes on the app router calling `documentService`.
+4. Add list `documentCount` subquery via `documentSql.ts` helpers.
+5. Reuse shared categories: `frontend/src/constants/documentCategory.ts` (and i18n keys).
+
+**Size limit:** `DOCUMENT_MAX_BYTES` (default 25 MB). Content may move to external storage later; keep list vs content endpoints separate.
+
+---
+
 ## Athene Assistant
 
-- Product name: **Athene**. Athene is implemented with the OpenAI API and Neon/PostgreSQL vector capabilities (`pgvector`) for future retrieval over CMMS data and documents.
+- Product name: **Athene**. Athene is implemented with the OpenAI API and Neon/PostgreSQL vector capabilities (`pgvector`) for semantic retrieval over CMMS data and documents, combined with SQL-backed assistant tools for authoritative answers.
 - Athene answers in the currently selected frontend language.
 - Athene formats dates and times according to the currently selected frontend language:
   - **DE**: `DD.MM.YYYY HH:MM`
@@ -186,7 +212,9 @@ Use these **background** colors for reference icon buttons (and matching border)
 - Athene may create work orders under user guidance. It must collect required fields first and create the order only through backend logic that enforces the same required fields, site rules, workgroup rules, classification rules, and reference validations as a normal user action.
 - Athene knows work orders in detail. It may read all accessible work-order fields and referenced tables needed to answer the user.
 - Athene may read documents for work orders and assets when the API exposes usable content. Binary/PDF text extraction is a separate capability and must be handled explicitly when implemented.
-- Documents are stored in DB initially; later may move to an external file server to avoid DB bloat — design APIs with that migration path in mind.
+- Documents use the unified `"document"` / `"documentLink"` model (see **Document management** above). Athene tools `listDocuments` and `readDocumentText` go through the same service and site checks as the REST API.
+- **Vector ingest** (`assistantEmbeddingChunk`): embedded entities are **`asset`** (all asset fields), **`workOrder`** (full work-order row and references), and **`workOrderDocument`** (documents on a work order plus asset documents visible on that order’s asset — same scope as work-order document listing). Site id on each chunk enforces the same site access as APIs at retrieval time.
+- Vector snippets are **hints** only; tools remain required for exact lists, IDs, and live data. After deploy or bulk data import, run `npm run athene:reindex` (backend: `athene:reindex-embeddings`) with `OPENAI_API_KEY` and `ATHENE_EMBEDDING_ENABLED=1`. CRUD on assets, work orders, and in-scope documents triggers async re-index when enabled.
 
 ---
 

@@ -9,6 +9,7 @@ import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import type { MenuItem } from "primereact/menuitem";
+import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Toast } from "primereact/toast";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
@@ -31,6 +32,19 @@ const actionNavItem =
 const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
 const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 
+const TRANSLATIONS_TABLE_VIRTUAL_ROW_PX = 72;
+const TRANSLATIONS_PAGE_SIZE_DEFAULT = 50;
+const TRANSLATIONS_PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debouncedValue;
+}
+
 export function TranslationsPage() {
   const { t } = useTranslation();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
@@ -43,7 +57,12 @@ export function TranslationsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(TRANSLATIONS_PAGE_SIZE_DEFAULT);
   const [ctxRow, setCtxRow] = useState<TranslationRow | null>(null);
+
+  const { baselineDeFlat, baselineEnFlat } = useMemo(() => getBuiltInFlattenedBundles(), []);
+  const debouncedSearch = useDebouncedValue(searchTerm, 200);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -61,15 +80,14 @@ export function TranslationsPage() {
       }
       setServerDe(nextDe);
       setServerEn(nextEn);
-      const { baselineDeFlat: bDe, baselineEnFlat: bEn } = getBuiltInFlattenedBundles();
       const keys = Array.from(
-        new Set([...Object.keys(bDe), ...Object.keys(bEn)]),
+        new Set([...Object.keys(baselineDeFlat), ...Object.keys(baselineEnFlat)]),
       ).sort((a, b) => a.localeCompare(b));
       setRows(
         keys.map((messageKey) => ({
           messageKey,
-          de: nextDe[messageKey] ?? bDe[messageKey] ?? "",
-          en: nextEn[messageKey] ?? bEn[messageKey] ?? "",
+          de: nextDe[messageKey] ?? baselineDeFlat[messageKey] ?? "",
+          en: nextEn[messageKey] ?? baselineEnFlat[messageKey] ?? "",
         })),
       );
     } catch {
@@ -81,25 +99,65 @@ export function TranslationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [baselineDeFlat, baselineEnFlat, t]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
   const filteredRows = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) => {
       const blob = `${row.messageKey} ${row.de} ${row.en}`.toLowerCase();
       return blob.includes(q);
     });
-  }, [rows, searchTerm]);
+  }, [rows, debouncedSearch]);
+
+  const paginatedRows = useMemo(() => {
+    const start = page * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page, pageSize]);
+
+  const virtualScrollerOptions = useMemo(
+    () => ({ itemSize: TRANSLATIONS_TABLE_VIRTUAL_ROW_PX, showLoader: true, delay: 0 }),
+    [],
+  );
+
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, pageSize]);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(filteredRows.length / pageSize) - 1);
+    if (page > maxPage) setPage(maxPage);
+  }, [filteredRows.length, page, pageSize]);
 
   useEffect(() => {
     setHeaderRowCount(filteredRows.length);
     return () => setHeaderRowCount(null);
   }, [filteredRows.length, setHeaderRowCount]);
+
+  const onPageChange = useCallback((e: PaginatorPageChangeEvent) => {
+    if (e.rows !== pageSize) {
+      setPageSize(e.rows);
+      setPage(0);
+      return;
+    }
+    setPage(e.page);
+  }, [pageSize]);
+
+  const updateRowField = useCallback((messageKey: string, field: "de" | "en", value: string) => {
+    setRows((prev) => {
+      const idx = prev.findIndex((r) => r.messageKey === messageKey);
+      if (idx === -1) return prev;
+      const cur = prev[idx]!;
+      if (cur[field] === value) return prev;
+      const next = prev.slice();
+      next[idx] = { ...cur, [field]: value };
+      return next;
+    });
+  }, []);
 
   const patchServer = useCallback(
     async (items: { messageKey: string; de?: string | null; en?: string | null }[]) => {
@@ -158,7 +216,8 @@ export function TranslationsPage() {
   );
 
   const save = useCallback(async () => {
-    const { baselineDeFlat: bDe, baselineEnFlat: bEn } = getBuiltInFlattenedBundles();
+    const bDe = baselineDeFlat;
+    const bEn = baselineEnFlat;
     const patchMap = new Map<
       string,
       { messageKey: string; de?: string | null; en?: string | null }
@@ -205,7 +264,7 @@ export function TranslationsPage() {
     } finally {
       setSaving(false);
     }
-  }, [patchServer, rows, serverDe, serverEn, t]);
+  }, [baselineDeFlat, baselineEnFlat, patchServer, rows, serverDe, serverEn, t]);
 
   useEffect(() => {
     setHeaderActions(
@@ -241,34 +300,28 @@ export function TranslationsPage() {
     <span className="font-mono text-xs text-on-surface">{row.messageKey}</span>
   );
 
-  const deBody = (row: TranslationRow) => (
-    <InputTextarea
-      value={row.de}
-      onChange={(e) => {
-        const v = e.target.value;
-        setRows((prev) =>
-          prev.map((r) => (r.messageKey === row.messageKey ? { ...r, de: v } : r)),
-        );
-      }}
-      autoResize
-      rows={2}
-      className="w-full max-w-[min(100%,28rem)] text-sm"
-    />
+  const deBody = useCallback(
+    (row: TranslationRow) => (
+      <InputTextarea
+        value={row.de}
+        onChange={(e) => updateRowField(row.messageKey, "de", e.target.value)}
+        rows={2}
+        className="max-h-14 w-full max-w-[min(100%,28rem)] resize-none overflow-y-auto text-sm"
+      />
+    ),
+    [updateRowField],
   );
 
-  const enBody = (row: TranslationRow) => (
-    <InputTextarea
-      value={row.en}
-      onChange={(e) => {
-        const v = e.target.value;
-        setRows((prev) =>
-          prev.map((r) => (r.messageKey === row.messageKey ? { ...r, en: v } : r)),
-        );
-      }}
-      autoResize
-      rows={2}
-      className="w-full max-w-[min(100%,28rem)] text-sm"
-    />
+  const enBody = useCallback(
+    (row: TranslationRow) => (
+      <InputTextarea
+        value={row.en}
+        onChange={(e) => updateRowField(row.messageKey, "en", e.target.value)}
+        rows={2}
+        className="max-h-14 w-full max-w-[min(100%,28rem)] resize-none overflow-y-auto text-sm"
+      />
+    ),
+    [updateRowField],
   );
 
   return (
@@ -281,15 +334,16 @@ export function TranslationsPage() {
         onHide={() => setCtxRow(null)}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_12%,transparent)] bg-surface-container-low p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_12%,transparent)] bg-surface-container-low p-3">
         <DataTable
-          value={filteredRows}
+          value={paginatedRows}
           loading={loading}
           dataKey="messageKey"
           scrollable
           scrollHeight="flex"
           size="small"
           className="app-data-table min-h-0 w-full flex-1 text-sm"
+          virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={
             filteredRows.length === 0 && !loading ? t("translations.emptyFilter") : undefined
           }
@@ -315,6 +369,14 @@ export function TranslationsPage() {
           <Column field="de" header={t("translations.colDe")} body={deBody} />
           <Column field="en" header={t("translations.colEn")} body={enBody} />
         </DataTable>
+        <Paginator
+          first={page * pageSize}
+          rows={pageSize}
+          totalRecords={filteredRows.length}
+          onPageChange={onPageChange}
+          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+          rowsPerPageOptions={TRANSLATIONS_PAGE_SIZE_OPTIONS}
+        />
       </div>
     </div>
   );

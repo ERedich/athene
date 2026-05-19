@@ -4,10 +4,32 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
 
+import {
+  deleteWorkOrderEmbeddings,
+  reindexWorkOrder,
+  reindexWorkOrderDocumentsForAsset,
+  scheduleReindex,
+} from "./assistant/embedding/index.js";
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
+import {
+  DOCUMENT_MAX_BYTES,
+  createDocument,
+  deleteDocumentForEntity,
+  getDocumentContentForWorkOrder,
+  isDocumentCategory,
+  listWorkOrderDocumentsWithAsset,
+  patchDocumentForEntity,
+  workOrderAssetDocumentCountSubquery,
+  workOrderAssetDocumentCountSubqueryOnInsert,
+  workOrderAssetDocumentCountSubqueryOnUpdate,
+  workOrderDocumentCountSubquery,
+  workOrderDocumentCountSubqueryOnInsert,
+  workOrderDocumentCountSubqueryOnUpdate,
+  type DocumentCategory,
+} from "./documents/index.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
 import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
@@ -22,14 +44,6 @@ type WorkOrderStatus =
   | "ended"
   | "done"
   | "cancelled";
-type WorkOrderDocumentCategory =
-  | "general"
-  | "protocols"
-  | "drawings"
-  | "instructions"
-  | "nameplates"
-  | "certificates";
-
 type WorkOrderRow = {
   id: string;
   orderNumber: number;
@@ -84,24 +98,6 @@ type WorkOrderAssignmentRow = {
   createdBy: string;
 };
 
-type WorkOrderDocumentSource = "workOrder" | "asset";
-
-type WorkOrderDocumentRow = {
-  id: string;
-  source: WorkOrderDocumentSource;
-  workOrderId: string | null;
-  assetId: string | null;
-  fileName: string;
-  displayName: string;
-  category: WorkOrderDocumentCategory;
-  mimeType: string;
-  fileSize: number;
-  createdAt: string;
-  createdBy: string;
-  updatedAt: string;
-  updatedBy: string;
-};
-
 type ParsedBody = {
   name: string;
   description: string | null;
@@ -123,9 +119,7 @@ type WorkOrderAccessRow = QueryResultRow & { id: string; siteId: string };
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: Number(process.env.WORK_ORDER_DOCUMENT_MAX_BYTES) || 25 * 1024 * 1024,
-  },
+  limits: { fileSize: DOCUMENT_MAX_BYTES },
 });
 
 const uuidRe =
@@ -141,25 +135,12 @@ const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "done",
   "cancelled",
 ];
-const allowedDocumentCategories: WorkOrderDocumentCategory[] = [
-  "general",
-  "protocols",
-  "drawings",
-  "instructions",
-  "nameplates",
-  "certificates",
-];
-
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
 
 function isWorkOrderType(value: unknown): value is WorkOrderType {
   return typeof value === "string" && (allowedOrderTypes as string[]).includes(value);
-}
-
-function isWorkOrderDocumentCategory(value: unknown): value is WorkOrderDocumentCategory {
-  return typeof value === "string" && (allowedDocumentCategories as string[]).includes(value);
 }
 
 function isWorkOrderStatus(value: unknown): value is WorkOrderStatus {
@@ -357,26 +338,6 @@ function auditMeta(req: Request) {
   };
 }
 
-const workOrderDocumentSelectJoin = `
-      SELECT
-        d."id",
-        'workOrder'::text AS "source",
-        d."workOrderId",
-        NULL::uuid AS "assetId",
-        d."fileName",
-        d."displayName",
-        d."category",
-        d."mimeType",
-        d."fileSize",
-        d."createdAt",
-        COALESCE(created_by."loginName", d."createdBy"::text) AS "createdBy",
-        d."updatedAt",
-        COALESCE(updated_by."loginName", d."updatedBy"::text) AS "updatedBy"
-      FROM "workOrderDocument" d
-      LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
-      LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
-`;
-
 const selectWorkOrdersSql = `
   SELECT
     w."id",
@@ -437,16 +398,8 @@ const selectWorkOrdersSql = `
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
-  LEFT JOIN (
-    SELECT "workOrderId", COUNT(*)::int AS "documentCount"
-    FROM "workOrderDocument"
-    GROUP BY "workOrderId"
-  ) doc_counts ON doc_counts."workOrderId" = w."id"
-  LEFT JOIN (
-    SELECT "assetId", COUNT(*)::int AS "assetDocumentCount"
-    FROM "assetDocument"
-    GROUP BY "assetId"
-  ) asset_doc_counts ON asset_doc_counts."assetId" = w."assetId"
+  ${workOrderDocumentCountSubquery}
+  ${workOrderAssetDocumentCountSubquery}
   LEFT JOIN (
     SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
     FROM "workOrderEmployeeAssignment"
@@ -1204,54 +1157,11 @@ router.get("/:id/documents", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const workOrder = await getAccessibleWorkOrder(userId, id);
-    if (!workOrder) {
+    const rows = await listWorkOrderDocumentsWithAsset(userId, id);
+    if (rows === null) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const { rows } = await pool.query<WorkOrderDocumentRow>(
-      `
-      SELECT
-        d."id",
-        'workOrder'::text AS "source",
-        d."workOrderId",
-        NULL::uuid AS "assetId",
-        d."fileName",
-        d."displayName",
-        d."category",
-        d."mimeType",
-        d."fileSize",
-        d."createdAt",
-        COALESCE(cu."loginName", d."createdBy"::text) AS "createdBy",
-        d."updatedAt",
-        COALESCE(uu."loginName", d."updatedBy"::text) AS "updatedBy"
-      FROM "workOrderDocument" d
-      LEFT JOIN "users" cu ON cu."id" = d."createdBy"
-      LEFT JOIN "users" uu ON uu."id" = d."updatedBy"
-      WHERE d."workOrderId" = $1::uuid
-      UNION ALL
-      SELECT
-        d."id",
-        'asset'::text AS "source",
-        NULL::uuid AS "workOrderId",
-        d."assetId",
-        d."fileName",
-        d."displayName",
-        d."category",
-        d."mimeType",
-        d."fileSize",
-        d."createdAt",
-        COALESCE(cu."loginName", d."createdBy"::text) AS "createdBy",
-        d."updatedAt",
-        COALESCE(uu."loginName", d."updatedBy"::text) AS "updatedBy"
-      FROM "assetDocument" d
-      JOIN "workOrder" w ON w."id" = $1::uuid AND w."assetId" = d."assetId"
-      LEFT JOIN "users" cu ON cu."id" = d."createdBy"
-      LEFT JOIN "users" uu ON uu."id" = d."updatedBy"
-      ORDER BY "createdAt" DESC
-      `,
-      [workOrder.id],
-    );
     res.json(rows);
   } catch (err) {
     sendPgError(res, err);
@@ -1278,7 +1188,7 @@ router.post("/:id/documents", upload.single("file"), async (req: Request, res: R
   const displayNameRaw = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
   const displayName = displayNameRaw || fileName;
   const categoryRaw = typeof req.body?.category === "string" ? req.body.category : "general";
-  if (!isWorkOrderDocumentCategory(categoryRaw)) {
+  if (!isDocumentCategory(categoryRaw)) {
     res.status(400).json({ error: "invalid_document_category" });
     return;
   }
@@ -1288,34 +1198,16 @@ router.post("/:id/documents", upload.single("file"), async (req: Request, res: R
 
   try {
     const meta = auditMeta(req);
-    const row = await withAuditContext(meta, async (client) => {
-      const workOrder = await client.query<WorkOrderAccessRow>(
-        `
-        SELECT "id", "siteId"
-        FROM "workOrder"
-        WHERE "id" = $1::uuid
-          AND ${siteAccessSql('"siteId"', "$2")}
-        `,
-        [id, meta.userId],
-      );
-      if (workOrder.rowCount === 0) return null;
-
-      const ins = await client.query<{ id: string }>(
-        `
-        INSERT INTO "workOrderDocument" ("workOrderId", "fileName", "displayName", "category", "mimeType", "fileSize", "content")
-        VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::bytea)
-        RETURNING "id"
-        `,
-        [id, fileName, displayName, categoryRaw, mimeType, fileSize, content],
-      );
-      const newId = ins.rows[0]?.id;
-      if (!newId) return null;
-      const { rows } = await client.query<WorkOrderDocumentRow>(
-        `${workOrderDocumentSelectJoin}
-        WHERE d."id" = $1::uuid`,
-        [newId],
-      );
-      return rows[0] ?? null;
+    const row = await createDocument(meta, {
+      fileName,
+      displayName,
+      category: categoryRaw,
+      mimeType,
+      fileSize,
+      content,
+      referenceApp: "workOrders",
+      entityType: "workOrder",
+      entityId: id,
     });
     if (!row) {
       res.status(404).json({ error: "not_found" });
@@ -1344,23 +1236,7 @@ router.get("/:id/documents/:documentId/content", async (req: Request, res: Respo
   }
 
   try {
-    const workOrder = await getAccessibleWorkOrder(userId, id);
-    if (!workOrder) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-    const result = await pool.query<
-      QueryResultRow & { fileName: string; displayName: string; mimeType: string; fileSize: number; content: Buffer }
-    >(
-      `
-      SELECT "fileName", "displayName", "mimeType", "fileSize", "content"
-      FROM "workOrderDocument"
-      WHERE "id" = $1::uuid
-        AND "workOrderId" = $2::uuid
-      `,
-      [documentId, workOrder.id],
-    );
-    const doc = result.rows[0];
+    const doc = await getDocumentContentForWorkOrder(userId, id, documentId);
     if (!doc) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -1398,51 +1274,18 @@ router.patch("/:id/documents/:documentId", async (req: Request, res: Response) =
     res.status(400).json({ error: "invalid_display_name" });
     return;
   }
-  if (categoryRaw !== undefined && !isWorkOrderDocumentCategory(categoryRaw)) {
+  if (categoryRaw !== undefined && !isDocumentCategory(categoryRaw)) {
     res.status(400).json({ error: "invalid_document_category" });
     return;
   }
 
-  const sets: string[] = [];
-  const params: unknown[] = [];
-  let i = 1;
-  if (displayNameRaw !== undefined) {
-    sets.push(`"displayName" = $${i++}`);
-    params.push(displayNameRaw);
-  }
-  if (categoryRaw !== undefined) {
-    sets.push(`"category" = $${i++}`);
-    params.push(categoryRaw);
-  }
-  const pDoc = i++;
-  const pWorkOrder = i++;
-  const pUser = i++;
-  params.push(documentId, id, userId);
+  const patch: { displayName?: string; category?: DocumentCategory } = {};
+  if (displayNameRaw !== undefined) patch.displayName = displayNameRaw;
+  if (categoryRaw !== undefined) patch.category = categoryRaw;
 
   try {
     const meta = auditMeta(req);
-    const row = await withAuditContext(meta, async (client) => {
-      const upd = await client.query<{ id: string }>(
-        `
-        UPDATE "workOrderDocument" d
-        SET ${sets.join(", ")}
-        FROM "workOrder" w
-        WHERE d."id" = $${pDoc}::uuid
-          AND d."workOrderId" = $${pWorkOrder}::uuid
-          AND w."id" = d."workOrderId"
-          AND ${siteAccessSql('w."siteId"', `$${pUser}`)}
-        RETURNING d."id"
-        `,
-        params,
-      );
-      if (upd.rowCount === 0) return null;
-      const { rows } = await client.query<WorkOrderDocumentRow>(
-        `${workOrderDocumentSelectJoin}
-        WHERE d."id" = $1::uuid`,
-        [documentId],
-      );
-      return rows[0] ?? null;
-    });
+    const row = await patchDocumentForEntity(meta, "workOrder", id, documentId, patch);
     if (!row) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -1471,27 +1314,7 @@ router.delete("/:id/documents/:documentId", async (req: Request, res: Response) 
 
   try {
     const meta = auditMeta(req);
-    const deleted = await withAuditContext(meta, async (client) => {
-      const workOrder = await client.query<WorkOrderAccessRow>(
-        `
-        SELECT "id", "siteId"
-        FROM "workOrder"
-        WHERE "id" = $1::uuid
-          AND ${siteAccessSql('"siteId"', "$2")}
-        `,
-        [id, meta.userId],
-      );
-      if (workOrder.rowCount === 0) return 0;
-      const result: QueryResult = await client.query(
-        `
-        DELETE FROM "workOrderDocument"
-        WHERE "id" = $1::uuid
-          AND "workOrderId" = $2::uuid
-        `,
-        [documentId, id],
-      );
-      return result.rowCount ?? 0;
-    });
+    const deleted = await deleteDocumentForEntity(meta, "workOrder", id, documentId);
     if (deleted === 0) {
       res.status(404).json({ error: "not_found" });
       return;
@@ -1604,11 +1427,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "workgroup" wg ON wg."id" = i."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
-        LEFT JOIN (
-          SELECT "assetId", COUNT(*)::int AS "assetDocumentCount"
-          FROM "assetDocument"
-          GROUP BY "assetId"
-        ) asset_doc_counts ON asset_doc_counts."assetId" = i."assetId"
+        ${workOrderAssetDocumentCountSubqueryOnInsert}
         `,
         [
           parsed.name,
@@ -1632,6 +1451,7 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
     res.status(201).json(row);
+    scheduleReindex(`workOrder ${row.id}`, () => reindexWorkOrder(row.id));
     void broadcastWorkOrderCreated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast failed", err);
     });
@@ -1695,6 +1515,17 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   try {
     const meta = auditMeta(req);
+    const previousAsset = await pool.query<{ assetId: string }>(
+      `
+      SELECT "assetId"::text AS "assetId"
+      FROM "workOrder"
+      WHERE "id" = $1::uuid
+      LIMIT 1
+      `,
+      [id],
+    );
+    const previousAssetId = previousAsset.rows[0]?.assetId;
+
     const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<QueryResultRow & { id: string; siteId: string }>(
         `
@@ -1808,16 +1639,8 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
-        LEFT JOIN (
-          SELECT "workOrderId", COUNT(*)::int AS "documentCount"
-          FROM "workOrderDocument"
-          GROUP BY "workOrderId"
-        ) doc_counts ON doc_counts."workOrderId" = u."id"
-        LEFT JOIN (
-          SELECT "assetId", COUNT(*)::int AS "assetDocumentCount"
-          FROM "assetDocument"
-          GROUP BY "assetId"
-        ) asset_doc_counts ON asset_doc_counts."assetId" = u."assetId"
+        ${workOrderDocumentCountSubqueryOnUpdate}
+        ${workOrderAssetDocumentCountSubqueryOnUpdate}
         LEFT JOIN (
           SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
           FROM "workOrderEmployeeAssignment"
@@ -1852,6 +1675,15 @@ router.put("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.json(row);
+    scheduleReindex(`workOrder ${row.id}`, () => reindexWorkOrder(row.id));
+    if (previousAssetId && previousAssetId !== row.assetId) {
+      scheduleReindex(`workOrder asset docs ${previousAssetId}`, () =>
+        reindexWorkOrderDocumentsForAsset(previousAssetId),
+      );
+      scheduleReindex(`workOrder asset docs ${row.assetId}`, () =>
+        reindexWorkOrderDocumentsForAsset(row.assetId),
+      );
+    }
     void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast updated failed", err);
     });
@@ -1929,6 +1761,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
       return;
     }
     res.status(204).send();
+    scheduleReindex(`delete workOrder ${id}`, () => deleteWorkOrderEmbeddings(id));
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });

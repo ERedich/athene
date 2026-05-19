@@ -7,6 +7,13 @@ import type { QueryResult, QueryResultRow } from "pg";
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
+import {
+  assetDocumentCountSubquery,
+  listDocumentsForAssistant,
+  readDocumentTextForAssistant,
+  workOrderAssetDocumentCountSubquery,
+  workOrderDocumentCountSubquery,
+} from "./documents/index.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated } from "./workOrderRealtime.js";
@@ -339,16 +346,8 @@ const selectWorkOrdersSql = `
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
-  LEFT JOIN (
-    SELECT "workOrderId", COUNT(*)::int AS "documentCount"
-    FROM "workOrderDocument"
-    GROUP BY "workOrderId"
-  ) doc_counts ON doc_counts."workOrderId" = w."id"
-  LEFT JOIN (
-    SELECT "assetId", COUNT(*)::int AS "assetDocumentCount"
-    FROM "assetDocument"
-    GROUP BY "assetId"
-  ) asset_doc_counts ON asset_doc_counts."assetId" = w."assetId"
+  ${workOrderDocumentCountSubquery}
+  ${workOrderAssetDocumentCountSubquery}
   LEFT JOIN (
     SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
     FROM "workOrderEmployeeAssignment"
@@ -385,11 +384,7 @@ const selectAssetsSql = `
   LEFT JOIN "asset" parent ON parent."id" = a."parentAssetId"
   LEFT JOIN "costCenter" cc ON cc."id" = a."costCenterId"
   LEFT JOIN "classification" clf ON clf."id" = a."classificationId"
-  LEFT JOIN (
-    SELECT "assetId", COUNT(*)::int AS "documentCount"
-    FROM "assetDocument"
-    GROUP BY "assetId"
-  ) doc_counts ON doc_counts."assetId" = a."id"
+  ${assetDocumentCountSubquery}
 `;
 
 function isUuid(value: unknown): value is string {
@@ -526,6 +521,12 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: User profile `costCenters` are **Buchungskreise (cost centers)** the user may use on allowed sites. Each entry has `key` and `name` of the cost center, plus `siteKey` and `siteName` of the site that cost center belongs to. Never swap site key/name with cost center key/name. Never label a site as a Buchungskreis unless it is literally an entry in `costCenters`.",
     "Program logic: User profile `workgroups` are **Fachgruppen (workgroups)** — assignment groups, not Buchungskreise. Do not list workgroup names as cost centers.",
     "When the user asks which Buchungskreise/cost centers they have access to, list **only** objects from `costCenters` (with siteKey/siteName for context). If `costCenters` is empty, say there are none in the system for their accessible sites — do not invent rows.",
+    "Program logic: Relevant vector snippets come from pgvector search over embedded assets (`sourceKind` asset), work orders (`workOrder`), and work-order-visible documents (`workOrderDocument`). They are discovery hints only — not guaranteed complete or up-to-the-second.",
+    "Program logic: For authoritative answers (exact document lists, full work-order fields, counts, IDs), always use tools even when vector snippets exist. Never treat snippet text alone as a full document list.",
+    "Program logic: For how many documents are on work orders (per order or in total), use listWorkOrderDocumentCounts. It returns workOrderDocuments (on the order), assetDocumentsVisibleOnOrder (from the asset), and totalDocumentsVisibleOnOrder.",
+    "Program logic: To list document files for one order, use listDocuments with sourceKind workOrder and orderNumber (e.g. 100007 or 007) OR id (UUID). Never pass an order number as id.",
+    "Program logic: getWorkOrderDetails, getWorkOrderStatusEvents, getWorkOrderTransactions, listDocuments, and readDocumentText accept orderNumber instead of id when the user cites an Auftragsnummer.",
+    "Program logic: Vector snippet lines use the format [sourceKind:sourceId]. Do not invent or alter sourceKind or sourceId values.",
     "All answers and tool requests must respect the user's site restrictions.",
     "Use UI context when a row is selected. If context is missing or ambiguous, ask a short clarifying question.",
     `Known user context: ${JSON.stringify(profile)}`,
@@ -672,29 +673,44 @@ async function loadUserProfile(userId: string): Promise<UserProfile | null> {
   };
 }
 
-async function retrieveRelevantChunks(userId: string, message: string): Promise<string[]> {
-  if (!openai) return [];
+function formatVectorSnippets(
+  rows: Array<{ content: string; sourceKind: string; sourceId: string }>,
+): string {
+  const grouped = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.sourceKind) ?? [];
+    list.push(`[${row.sourceId}] ${row.content}`);
+    grouped.set(row.sourceKind, list);
+  }
+  return [...grouped.entries()]
+    .map(([kind, items]) => `${kind}:\n${items.join("\n\n")}`)
+    .join("\n\n");
+}
+
+async function retrieveRelevantChunks(userId: string, message: string): Promise<string> {
+  if (!openai) return "";
   try {
     const embedding = await openai.embeddings.create({
       model: embeddingModel,
       input: message,
     });
     const vector = embedding.data[0]?.embedding;
-    if (!vector?.length) return [];
+    if (!vector?.length) return "";
     const { rows } = await pool.query<{ content: string; sourceKind: string; sourceId: string }>(
       `
       SELECT "content", "sourceKind", "sourceId"
       FROM "assistantEmbeddingChunk"
       WHERE "siteId" IS NULL OR ${siteAccessSql('"siteId"', "$2")}
       ORDER BY "embedding" <=> $1::vector
-      LIMIT 6
+      LIMIT 10
       `,
       [`[${vector.join(",")}]`, userId],
     );
-    return rows.map((row) => `[${row.sourceKind}:${row.sourceId}] ${row.content}`);
+    if (rows.length === 0) return "";
+    return formatVectorSnippets(rows);
   } catch (err) {
     console.warn("[athene-assistant] embedding retrieval skipped:", err);
-    return [];
+    return "";
   }
 }
 
@@ -855,6 +871,144 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
   return null;
 }
 
+type WorkOrderResolveResult =
+  | { ok: true; id: string }
+  | {
+      ok: false;
+      error: "invalid_reference" | "not_found" | "ambiguous";
+      matches?: Array<{ id: string; orderNumber: number; name: string }>;
+    };
+
+async function resolveWorkOrderAccess(
+  userId: string,
+  ref: { id?: unknown; orderNumber?: unknown },
+): Promise<WorkOrderResolveResult> {
+  const idRaw = typeof ref.id === "string" ? ref.id.trim() : "";
+  if (idRaw) {
+    if (!isUuid(idRaw)) {
+      return { ok: false, error: "invalid_reference" };
+    }
+    const wo = await getWorkOrderDetails(userId, idRaw);
+    if ((wo as { error?: string }).error === "not_found") {
+      return { ok: false, error: "not_found" };
+    }
+    return { ok: true, id: idRaw };
+  }
+
+  const orderRaw =
+    typeof ref.orderNumber === "number"
+      ? String(ref.orderNumber)
+      : typeof ref.orderNumber === "string"
+        ? ref.orderNumber.trim()
+        : "";
+  if (!orderRaw) {
+    return { ok: false, error: "invalid_reference" };
+  }
+
+  const digitsOnly = orderRaw.replace(/\D/g, "");
+  const { rows } = await pool.query<{ id: string; orderNumber: number; name: string }>(
+    `
+    SELECT w."id", w."orderNumber", w."name"
+    FROM "workOrder" w
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND (
+        w."orderNumber"::text = $2
+        OR ($3 <> '' AND w."orderNumber"::text = $3)
+        OR w."orderNumber"::text LIKE '%' || $2 || '%'
+        OR ($3 <> '' AND w."orderNumber"::text LIKE '%' || $3 || '%')
+      )
+    ORDER BY
+      CASE
+        WHEN w."orderNumber"::text = $2 THEN 0
+        WHEN $3 <> '' AND w."orderNumber"::text = $3 THEN 1
+        ELSE 2
+      END,
+      w."orderNumber" DESC
+    LIMIT 11
+    `,
+    [userId, orderRaw, digitsOnly],
+  );
+
+  if (rows.length === 0) {
+    return { ok: false, error: "not_found" };
+  }
+  const exact = rows.find(
+    (row) => String(row.orderNumber) === orderRaw || (digitsOnly && String(row.orderNumber) === digitsOnly),
+  );
+  if (exact) {
+    return { ok: true, id: exact.id };
+  }
+  if (rows.length === 1) {
+    return { ok: true, id: rows[0].id };
+  }
+  return {
+    ok: false,
+    error: "ambiguous",
+    matches: rows.slice(0, 10).map((row) => ({
+      id: row.id,
+      orderNumber: row.orderNumber,
+      name: row.name,
+    })),
+  };
+}
+
+async function listWorkOrderDocumentCounts(
+  userId: string,
+  query?: unknown,
+  limit?: unknown,
+): Promise<unknown> {
+  const term =
+    query !== undefined && query !== null && String(query).trim()
+      ? readString(String(query), 200)
+      : null;
+  if (query !== undefined && query !== null && String(query).trim() && !term) {
+    throw new Error("invalid_query");
+  }
+  const maxRows =
+    typeof limit === "number" && Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), 100)
+      : 50;
+
+  const params: unknown[] = [userId];
+  let filterSql = "";
+  if (term) {
+    filterSql = `
+      AND (
+        lower(w."name") LIKE '%' || lower($2::text) || '%'
+        OR lower(COALESCE(w."description", '')) LIKE '%' || lower($2::text) || '%'
+        OR w."orderNumber"::text LIKE '%' || $2::text || '%'
+      )`;
+    params.push(term);
+  }
+  params.push(maxRows);
+  const limitParam = `$${params.length}`;
+
+  const { rows } = await pool.query<WorkOrderRow>(
+    `
+    ${selectWorkOrdersSql}
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+    ${filterSql}
+    ORDER BY w."orderNumber" DESC
+    LIMIT ${limitParam}
+    `,
+    params,
+  );
+
+  return {
+    count: rows.length,
+    truncated: rows.length >= maxRows,
+    orders: rows.map((row) => ({
+      id: row.id,
+      orderNumber: row.orderNumber,
+      name: row.name,
+      status: row.status,
+      workOrderDocuments: row.documentCount,
+      assetDocumentsVisibleOnOrder: row.assetDocumentCount,
+      totalDocumentsVisibleOnOrder: row.documentCount + row.assetDocumentCount,
+    })),
+  };
+}
+
 async function searchWorkOrders(userId: string, query: string): Promise<unknown> {
   const term = readString(query, 200);
   if (!term) throw new Error("invalid_query");
@@ -924,37 +1078,29 @@ async function getAssetDetails(userId: string, id: string): Promise<unknown> {
   return rows[0] ?? { error: "not_found" };
 }
 
-async function listDocuments(userId: string, sourceKind: unknown, sourceId: unknown): Promise<unknown> {
-  if (!isUuid(sourceId)) throw new Error("invalid_id");
+async function listDocuments(
+  userId: string,
+  sourceKind: unknown,
+  sourceId: unknown,
+  orderNumber?: unknown,
+): Promise<unknown> {
   if (sourceKind === "workOrder") {
-    await getWorkOrderDetails(userId, sourceId);
-    const { rows } = await pool.query(
-      `
-      SELECT "id", 'workOrder' AS "source", "fileName", "displayName", "category", "mimeType", "fileSize", "createdAt"
-      FROM "workOrderDocument"
-      WHERE "workOrderId" = $1::uuid
-      UNION ALL
-      SELECT d."id", 'asset' AS "source", d."fileName", d."displayName", d."category", d."mimeType", d."fileSize", d."createdAt"
-      FROM "assetDocument" d
-      JOIN "workOrder" w ON w."id" = $1::uuid AND w."assetId" = d."assetId"
-      ORDER BY "createdAt" DESC
-      `,
-      [sourceId],
-    );
-    return rows;
+    const sourceIdStr = typeof sourceId === "string" ? sourceId.trim() : "";
+    const resolved = await resolveWorkOrderAccess(userId, {
+      id: sourceIdStr && isUuid(sourceIdStr) ? sourceIdStr : undefined,
+      orderNumber:
+        orderNumber ?? (sourceIdStr && !isUuid(sourceIdStr) ? sourceIdStr : undefined),
+    });
+    if (!resolved.ok) {
+      return { error: resolved.error, matches: resolved.matches };
+    }
+    return listDocumentsForAssistant(userId, "workOrder", resolved.id);
   }
   if (sourceKind === "asset") {
-    await getAssetDetails(userId, sourceId);
-    const { rows } = await pool.query(
-      `
-      SELECT "id", 'asset' AS "source", "fileName", "displayName", "category", "mimeType", "fileSize", "createdAt"
-      FROM "assetDocument"
-      WHERE "assetId" = $1::uuid
-      ORDER BY "createdAt" DESC
-      `,
-      [sourceId],
-    );
-    return rows;
+    if (!isUuid(sourceId)) throw new Error("invalid_id");
+    const asset = await getAssetDetails(userId, sourceId);
+    if ((asset as { error?: string }).error === "not_found") return asset;
+    return listDocumentsForAssistant(userId, "asset", sourceId);
   }
   throw new Error("invalid_source");
 }
@@ -968,37 +1114,7 @@ async function readDocumentText(
   if (!isUuid(sourceId) || !isUuid(documentId)) throw new Error("invalid_id");
   const source = sourceKind === "workOrder" ? "workOrder" : sourceKind === "asset" ? "asset" : null;
   if (!source) throw new Error("invalid_source");
-  const accessible = source === "workOrder" ? await getWorkOrderDetails(userId, sourceId) : await getAssetDetails(userId, sourceId);
-  if ((accessible as { error?: string }).error === "not_found") return accessible;
-  const table = source === "workOrder" ? `"workOrderDocument"` : `"assetDocument"`;
-  const fk = source === "workOrder" ? `"workOrderId"` : `"assetId"`;
-  const { rows } = await pool.query<QueryResultRow & { displayName: string; mimeType: string; content: Buffer }>(
-    `
-    SELECT "displayName", "mimeType", "content"
-    FROM ${table}
-    WHERE "id" = $1::uuid
-      AND ${fk} = $2::uuid
-    LIMIT 1
-    `,
-    [documentId, sourceId],
-  );
-  const doc = rows[0];
-  if (!doc) return { error: "not_found" };
-  const isText = /^text\//i.test(doc.mimeType) || /json|xml|csv|markdown/i.test(doc.mimeType);
-  if (!isText) {
-    return {
-      displayName: doc.displayName,
-      mimeType: doc.mimeType,
-      textAvailable: false,
-      note: "The document is binary. Text extraction is not available yet.",
-    };
-  }
-  return {
-    displayName: doc.displayName,
-    mimeType: doc.mimeType,
-    textAvailable: true,
-    content: doc.content.toString("utf8").slice(0, 24_000),
-  };
+  return readDocumentTextForAssistant(userId, source, sourceId, documentId);
 }
 
 async function assertAssetAndCostCenterContext(
@@ -1164,11 +1280,40 @@ const tools = [
     type: "function",
     function: {
       name: "getWorkOrderDetails",
-      description: "Get one accessible work order with all visible fields and references.",
+      description:
+        "Get one accessible work order with all visible fields and references. Provide id (UUID) OR orderNumber (e.g. 100007 or 007), not both.",
       parameters: {
         type: "object",
-        properties: { id: { type: "string" } },
-        required: ["id"],
+        properties: {
+          id: { type: ["string", "null"], description: "Work order UUID." },
+          orderNumber: {
+            type: ["string", "null"],
+            description: "Numeric order number or suffix, e.g. 100007 or 007.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listWorkOrderDocumentCounts",
+      description:
+        "List accessible work orders with document counts: workOrderDocuments, assetDocumentsVisibleOnOrder, and totalDocumentsVisibleOnOrder. Use for questions like how many documents are on each order. Optional query filters by order number, name, or description.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: ["string", "null"],
+            description: "Optional filter, e.g. partial order number or name.",
+          },
+          limit: {
+            type: ["integer", "null"],
+            description: "Max rows (default 50, max 100).",
+          },
+        },
+        required: [],
       },
     },
   },
@@ -1176,7 +1321,8 @@ const tools = [
     type: "function",
     function: {
       name: "searchWorkOrders",
-      description: "Search accessible work orders by order number, name, or description.",
+      description:
+        "Search accessible work orders by order number, name, or description. Each row includes documentCount and assetDocumentCount.",
       parameters: {
         type: "object",
         properties: { query: { type: "string" } },
@@ -1205,11 +1351,15 @@ const tools = [
     type: "function",
     function: {
       name: "getWorkOrderStatusEvents",
-      description: "Get audit-log status changes for one accessible work order, including who changed the status and when.",
+      description:
+        "Get audit-log status changes for one accessible work order. Provide id (UUID) OR orderNumber.",
       parameters: {
         type: "object",
-        properties: { id: { type: "string" } },
-        required: ["id"],
+        properties: {
+          id: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
+        },
+        required: [],
       },
     },
   },
@@ -1217,14 +1367,16 @@ const tools = [
     type: "function",
     function: {
       name: "getWorkOrderTransactions",
-      description: "Read accessible transactions for one work order, including feedback hour quantities, creator user/employee, and per-type summaries. Use onlyCurrentUser when the user asks for their own captured hours.",
+      description:
+        "Read accessible transactions for one work order. Provide id (UUID) OR orderNumber. Use onlyCurrentUser when the user asks for their own captured hours.",
       parameters: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
           onlyCurrentUser: { type: "boolean" },
         },
-        required: ["id"],
+        required: [],
       },
     },
   },
@@ -1244,14 +1396,19 @@ const tools = [
     type: "function",
     function: {
       name: "listDocuments",
-      description: "List work-order or asset documents visible to the user.",
+      description:
+        "List work-order or asset documents visible to the user. For work orders provide id (UUID) OR orderNumber (e.g. 100007). Each row includes source (entityType), referenceApp, and metadata.",
       parameters: {
         type: "object",
         properties: {
           sourceKind: { type: "string", enum: ["workOrder", "asset"] },
-          sourceId: { type: "string" },
+          sourceId: { type: ["string", "null"], description: "UUID; required for asset." },
+          orderNumber: {
+            type: ["string", "null"],
+            description: "Work order number when sourceKind is workOrder (alternative to sourceId).",
+          },
         },
-        required: ["sourceKind", "sourceId"],
+        required: ["sourceKind"],
       },
     },
   },
@@ -1259,15 +1416,17 @@ const tools = [
     type: "function",
     function: {
       name: "readDocumentText",
-      description: "Read text content from a text-like work-order or asset document. Binary files return metadata only.",
+      description:
+        "Read text content from a text-like work-order or asset document. For work orders provide id OR orderNumber. Binary files return metadata only.",
       parameters: {
         type: "object",
         properties: {
           sourceKind: { type: "string", enum: ["workOrder", "asset"] },
-          sourceId: { type: "string" },
+          sourceId: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
           documentId: { type: "string" },
         },
-        required: ["sourceKind", "sourceId", "documentId"],
+        required: ["sourceKind", "documentId"],
       },
     },
   },
@@ -1297,18 +1456,60 @@ const tools = [
   },
 ] as const;
 
+async function resolveWorkOrderIdFromToolArgs(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<WorkOrderResolveResult> {
+  return resolveWorkOrderAccess(userId, { id: args.id, orderNumber: args.orderNumber });
+}
+
 async function runTool(userId: string, name: string, rawArgs: string): Promise<unknown> {
   const args = rawArgs ? (JSON.parse(rawArgs) as Record<string, unknown>) : {};
-  if (name === "getWorkOrderDetails") return getWorkOrderDetails(userId, String(args.id ?? ""));
+  if (name === "getWorkOrderDetails") {
+    const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return getWorkOrderDetails(userId, resolved.id);
+  }
+  if (name === "listWorkOrderDocumentCounts") {
+    return listWorkOrderDocumentCounts(userId, args.query, args.limit);
+  }
   if (name === "searchWorkOrders") return searchWorkOrders(userId, String(args.query ?? ""));
   if (name === "countWorkOrdersByStatus") return countWorkOrdersByStatus(userId, args.status);
-  if (name === "getWorkOrderStatusEvents") return getWorkOrderStatusEvents(userId, String(args.id ?? ""));
+  if (name === "getWorkOrderStatusEvents") {
+    const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return getWorkOrderStatusEvents(userId, resolved.id);
+  }
   if (name === "getWorkOrderTransactions") {
-    return getWorkOrderTransactions(userId, String(args.id ?? ""), args.onlyCurrentUser === true);
+    const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return getWorkOrderTransactions(userId, resolved.id, args.onlyCurrentUser === true);
   }
   if (name === "getAssetDetails") return getAssetDetails(userId, String(args.id ?? ""));
-  if (name === "listDocuments") return listDocuments(userId, args.sourceKind, args.sourceId);
-  if (name === "readDocumentText") return readDocumentText(userId, args.sourceKind, args.sourceId, args.documentId);
+  if (name === "listDocuments") {
+    if (args.sourceKind === "workOrder") {
+      const hasId = typeof args.sourceId === "string" && args.sourceId.trim();
+      const hasOrder =
+        args.orderNumber !== undefined &&
+        args.orderNumber !== null &&
+        String(args.orderNumber).trim();
+      if (!hasId && !hasOrder) {
+        return { error: "invalid_reference" };
+      }
+      return listDocuments(userId, args.sourceKind, args.sourceId ?? "", args.orderNumber);
+    }
+    if (!isUuid(args.sourceId)) throw new Error("invalid_id");
+    return listDocuments(userId, args.sourceKind, args.sourceId);
+  }
+  if (name === "readDocumentText") {
+    if (args.sourceKind === "workOrder") {
+      const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);
+      if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+      return readDocumentText(userId, args.sourceKind, resolved.id, args.documentId);
+    }
+    if (!isUuid(args.sourceId)) throw new Error("invalid_id");
+    return readDocumentText(userId, args.sourceKind, args.sourceId, args.documentId);
+  }
   if (name === "createWorkOrder") return createWorkOrder(userId, args);
   return { error: "unknown_tool" };
 }
@@ -1372,11 +1573,11 @@ router.post("/", async (req: Request, res: Response) => {
 
     const history = (await loadMessages(conversationId, 20)).reverse();
     const contextFacts = await loadUiContextFacts(userId, clientContext);
-    const chunks = await retrieveRelevantChunks(userId, message);
+    const vectorSnippets = await retrieveRelevantChunks(userId, message);
     const contextBlock = [
       clientContext ? `Current UI context: ${JSON.stringify(clientContext)}` : "",
       contextFacts ? `Authoritative structured context facts: ${JSON.stringify(contextFacts)}` : "",
-      chunks.length ? `Relevant vector snippets:\n${chunks.join("\n\n")}` : "",
+      vectorSnippets ? `Relevant vector snippets (discovery hints — confirm with tools when needed):\n${vectorSnippets}` : "",
     ]
       .filter(Boolean)
       .join("\n\n");

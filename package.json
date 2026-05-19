@@ -10,7 +10,8 @@
     "dev": "concurrently -n backend,frontend,mobile -c blue,green,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run web -w mobile\"",
     "dev:mobile": "npm run web -w mobile",
     "build": "npm run build -w backend && npm run build -w frontend",
-    "migrate": "npm run migrate -w backend"
+    "migrate": "npm run migrate -w backend",
+    "athene:reindex": "npm run athene:reindex-embeddings -w backend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

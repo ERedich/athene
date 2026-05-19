@@ -1,0 +1,163 @@
+import { extractTextFromBuffer } from "./textExtract.js";
+
+function line(key: string, value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return `${key}: ${String(value)}`;
+}
+
+function joinLines(parts: Array<string | null>): string {
+  return parts.filter((p): p is string => p != null).join("\n");
+}
+
+export type AssetEmbeddingRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  type: string;
+  parentAssetKey: string | null;
+  parentAssetName: string | null;
+  serialNumber: string | null;
+  buildDate: string | null;
+  manufacturer: string | null;
+  remark: string | null;
+  costCenterKey: string | null;
+  costCenterName: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
+  documentCount: number;
+};
+
+export function buildAssetText(row: AssetEmbeddingRow): string {
+  return joinLines([
+    "sourceKind: asset",
+    line("assetId", row.id),
+    line("assetKey", row.key),
+    line("assetName", row.name),
+    line("siteKey", row.siteKey),
+    line("siteName", row.siteName),
+    line("type", row.type),
+    line("parentAssetKey", row.parentAssetKey),
+    line("parentAssetName", row.parentAssetName),
+    line("serialNumber", row.serialNumber),
+    line("buildDate", row.buildDate),
+    line("manufacturer", row.manufacturer),
+    line("remark", row.remark),
+    line("costCenterKey", row.costCenterKey),
+    line("costCenterName", row.costCenterName),
+    line("classificationKey", row.classificationKey),
+    line("classificationName", row.classificationName),
+    line("documentCount", row.documentCount),
+  ]);
+}
+
+export type WorkOrderEmbeddingRow = {
+  id: string;
+  orderNumber: number;
+  name: string;
+  description: string | null;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  assetKey: string;
+  assetName: string;
+  costCenterKey: string;
+  costCenterName: string;
+  classificationKey: string | null;
+  classificationName: string | null;
+  plannedStart: string;
+  plannedEnd: string | null;
+  plannedDurationMinutes: number | null;
+  orderType: string;
+  status: string;
+  responsibleEmployeeKey: string | null;
+  responsibleEmployeeName: string | null;
+  doneByEmployeeKey: string | null;
+  doneByEmployeeName: string | null;
+  doneAt: string | null;
+  endedAt: string | null;
+  workgroupKey: string | null;
+  workgroupName: string | null;
+  documentCount: number;
+  assetDocumentCount: number;
+  assignedEmployeeCount: number;
+};
+
+export function buildWorkOrderText(row: WorkOrderEmbeddingRow): string {
+  return joinLines([
+    "sourceKind: workOrder",
+    line("workOrderId", row.id),
+    line("orderNumber", row.orderNumber),
+    line("Auftragsnummer", row.orderNumber),
+    line("name", row.name),
+    line("description", row.description),
+    line("siteKey", row.siteKey),
+    line("siteName", row.siteName),
+    line("assetKey", row.assetKey),
+    line("assetName", row.assetName),
+    line("costCenterKey", row.costCenterKey),
+    line("costCenterName", row.costCenterName),
+    line("classificationKey", row.classificationKey),
+    line("classificationName", row.classificationName),
+    line("plannedStart", row.plannedStart),
+    line("plannedEnd", row.plannedEnd),
+    line("plannedDurationMinutes", row.plannedDurationMinutes),
+    line("orderType", row.orderType),
+    line("status", row.status),
+    line("responsibleEmployeeKey", row.responsibleEmployeeKey),
+    line("responsibleEmployeeName", row.responsibleEmployeeName),
+    line("doneByEmployeeKey", row.doneByEmployeeKey),
+    line("doneByEmployeeName", row.doneByEmployeeName),
+    line("doneAt", row.doneAt),
+    line("endedAt", row.endedAt),
+    line("workgroupKey", row.workgroupKey),
+    line("workgroupName", row.workgroupName),
+    line("documentCount", row.documentCount),
+    line("assetDocumentCount", row.assetDocumentCount),
+    line("assignedEmployeeCount", row.assignedEmployeeCount),
+  ]);
+}
+
+export type WorkOrderDocumentEmbeddingRow = {
+  id: string;
+  fileName: string;
+  displayName: string;
+  category: string;
+  mimeType: string;
+  fileSize: number;
+  referenceApp: string;
+  linkEntityType: string;
+  linkEntityId: string;
+  content: Buffer;
+  siteId: string;
+  workOrderNumbers: number[];
+  workOrderIds: string[];
+};
+
+export function buildWorkOrderDocumentText(row: WorkOrderDocumentEmbeddingRow): string {
+  const textBody = extractTextFromBuffer(row.mimeType, row.content);
+  const orderList =
+    row.workOrderNumbers.length > 0
+      ? row.workOrderNumbers.join(", ")
+      : null;
+
+  return joinLines([
+    "sourceKind: workOrderDocument",
+    line("documentId", row.id),
+    line("fileName", row.fileName),
+    line("displayName", row.displayName),
+    line("category", row.category),
+    line("mimeType", row.mimeType),
+    line("fileSize", row.fileSize),
+    line("referenceApp", row.referenceApp),
+    line("linkEntityType", row.linkEntityType),
+    line("linkEntityId", row.linkEntityId),
+    line("relatedOrderNumbers", orderList),
+    line("relatedWorkOrderIds", row.workOrderIds.join(", ") || null),
+    textBody
+      ? `documentText:\n${textBody}`
+      : "documentText: [binary or non-text; metadata only]",
+  ]);
+}

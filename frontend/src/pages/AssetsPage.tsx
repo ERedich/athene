@@ -229,6 +229,7 @@ type AssetDocument = {
   category: AssetDocumentCategory;
   mimeType: string;
   fileSize: number;
+  referenceApp?: "assets" | "workOrders";
   createdAt: string;
   createdBy: string;
   updatedAt: string;
