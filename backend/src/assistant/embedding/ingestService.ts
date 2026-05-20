@@ -3,9 +3,13 @@ import type { QueryResultRow } from "pg";
 import { pool } from "../../db.js";
 import {
   buildAssetText,
+  buildSparePartText,
+  buildWarehouseText,
   buildWorkOrderDocumentText,
   buildWorkOrderText,
   type AssetEmbeddingRow,
+  type SparePartEmbeddingRow,
+  type WarehouseEmbeddingRow,
   type WorkOrderDocumentEmbeddingRow,
   type WorkOrderEmbeddingRow,
 } from "./buildEmbeddingText.js";
@@ -18,6 +22,8 @@ import {
 } from "./embeddingTypes.js";
 import {
   selectAssetsForEmbeddingSql,
+  selectSparePartsForEmbeddingSql,
+  selectWarehousesForEmbeddingSql,
   selectWorkOrderDocumentIdsSql,
   selectWorkOrdersForEmbeddingSql,
 } from "./ingestQueries.js";
@@ -248,6 +254,154 @@ export async function deleteWorkOrderDocumentEmbeddings(documentId: string): Pro
   await deleteChunks(EMBEDDING_SOURCE_KIND.workOrderDocument, documentId);
 }
 
+async function loadSparePartStockLines(sparePartId: string): Promise<SparePartEmbeddingRow["stockLines"]> {
+  const { rows } = await pool.query<{
+    warehouseKey: string;
+    warehouseName: string;
+    storageLocation: string;
+    quantity: string;
+  }>(
+    `
+    SELECT
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      sc."storageLocation",
+      sc."quantity"::text AS "quantity"
+    FROM "stockControl" sc
+    JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    WHERE sc."sparePartId" = $1::uuid
+    ORDER BY wh."key" ASC, sc."storageLocation" ASC
+    `,
+    [sparePartId],
+  );
+  return rows;
+}
+
+async function loadSparePartRow(sparePartId: string): Promise<SparePartEmbeddingRow | null> {
+  const { rows } = await pool.query<Omit<SparePartEmbeddingRow, "stockLines" | "totalQuantity">>(
+    `
+    ${selectSparePartsForEmbeddingSql}
+    WHERE sp."id" = $1::uuid
+    LIMIT 1
+    `,
+    [sparePartId],
+  );
+  const base = rows[0];
+  if (!base) return null;
+  const stockLines = await loadSparePartStockLines(sparePartId);
+  const totalQuantity = stockLines
+    .reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+    .toFixed(4);
+  return { ...base, stockLines, totalQuantity };
+}
+
+async function loadWarehouseStockLines(
+  warehouseId: string,
+): Promise<WarehouseEmbeddingRow["stockLines"]> {
+  const { rows } = await pool.query<{
+    sparePartKey: string;
+    sparePartName: string;
+    articleNumber: string | null;
+    storageLocation: string;
+    quantity: string;
+  }>(
+    `
+    SELECT
+      sp."key" AS "sparePartKey",
+      sp."name" AS "sparePartName",
+      sp."articleNumber",
+      sc."storageLocation",
+      sc."quantity"::text AS "quantity"
+    FROM "stockControl" sc
+    JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    WHERE sc."warehouseId" = $1::uuid
+    ORDER BY sp."key" ASC, sc."storageLocation" ASC
+    `,
+    [warehouseId],
+  );
+  return rows;
+}
+
+async function loadWarehouseRow(warehouseId: string): Promise<WarehouseEmbeddingRow | null> {
+  const { rows } = await pool.query<
+    Omit<WarehouseEmbeddingRow, "stockLines" | "totalQuantity" | "distinctSparePartCount">
+  >(
+    `
+    ${selectWarehousesForEmbeddingSql}
+    WHERE w."id" = $1::uuid
+    LIMIT 1
+    `,
+    [warehouseId],
+  );
+  const base = rows[0];
+  if (!base) return null;
+  const stockLines = await loadWarehouseStockLines(warehouseId);
+  const totalQuantity = stockLines
+    .reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+    .toFixed(4);
+  return {
+    ...base,
+    stockLines,
+    totalQuantity,
+    distinctSparePartCount: new Set(stockLines.map((line) => line.sparePartKey)).size,
+  };
+}
+
+export async function reindexSparePart(sparePartId: string): Promise<void> {
+  if (!isEmbeddingIngestEnabled() || !isUuid(sparePartId)) return;
+  const row = await loadSparePartRow(sparePartId);
+  if (!row) {
+    await deleteChunks(EMBEDDING_SOURCE_KIND.sparePart, sparePartId);
+    return;
+  }
+  await upsertEntityChunks(
+    EMBEDDING_SOURCE_KIND.sparePart,
+    row.id,
+    row.siteId,
+    buildSparePartText(row),
+  );
+}
+
+export async function deleteSparePartEmbeddings(sparePartId: string): Promise<void> {
+  if (!isUuid(sparePartId)) return;
+  await deleteChunks(EMBEDDING_SOURCE_KIND.sparePart, sparePartId);
+}
+
+export async function reindexWarehouse(warehouseId: string): Promise<void> {
+  if (!isEmbeddingIngestEnabled() || !isUuid(warehouseId)) return;
+  const row = await loadWarehouseRow(warehouseId);
+  if (!row) {
+    await deleteChunks(EMBEDDING_SOURCE_KIND.warehouse, warehouseId);
+    return;
+  }
+  await upsertEntityChunks(
+    EMBEDDING_SOURCE_KIND.warehouse,
+    row.id,
+    row.siteId,
+    buildWarehouseText(row),
+  );
+}
+
+export async function deleteWarehouseEmbeddings(warehouseId: string): Promise<void> {
+  if (!isUuid(warehouseId)) return;
+  await deleteChunks(EMBEDDING_SOURCE_KIND.warehouse, warehouseId);
+}
+
+export async function reindexWarehousesForSparePart(sparePartId: string): Promise<void> {
+  if (!isEmbeddingIngestEnabled() || !isUuid(sparePartId)) return;
+  const { rows } = await pool.query<{ warehouseId: string }>(
+    `
+    SELECT DISTINCT sc."warehouseId"::text AS "warehouseId"
+    FROM "stockControl" sc
+    WHERE sc."sparePartId" = $1::uuid
+    `,
+    [sparePartId],
+  );
+  for (const row of rows) {
+    await reindexWarehouse(row.warehouseId);
+  }
+}
+
 /** Reindex asset-linked documents that appear on at least one work order. */
 export async function reindexWorkOrderDocumentsForAsset(assetId: string): Promise<void> {
   if (!isEmbeddingIngestEnabled() || !isUuid(assetId)) return;
@@ -278,13 +432,20 @@ export async function shouldIngestDocumentForEntity(
   return assetHasWorkOrder(entityId);
 }
 
-export type ReindexScope = "assets" | "workOrders" | "documents" | "all";
+export type ReindexScope = "assets" | "workOrders" | "documents" | "spareParts" | "warehouses" | "all";
 
 export async function reindexAll(options?: {
   only?: ReindexScope;
   limit?: number;
   onProgress?: (message: string) => void;
-}): Promise<{ assets: number; workOrders: number; documents: number; errors: number }> {
+}): Promise<{
+  assets: number;
+  workOrders: number;
+  documents: number;
+  spareParts: number;
+  warehouses: number;
+  errors: number;
+}> {
   if (!isEmbeddingIngestEnabled()) {
     throw new Error("embedding_not_configured");
   }
@@ -296,10 +457,14 @@ export async function reindexAll(options?: {
   let assets = 0;
   let workOrders = 0;
   let documents = 0;
+  let spareParts = 0;
+  let warehouses = 0;
 
   const runAsset = only === "all" || only === "assets";
   const runWo = only === "all" || only === "workOrders";
   const runDoc = only === "all" || only === "documents";
+  const runSp = only === "all" || only === "spareParts";
+  const runWh = only === "all" || only === "warehouses";
 
   if (runAsset) {
     const { rows } = await pool.query<{ id: string }>(
@@ -356,5 +521,39 @@ export async function reindexAll(options?: {
     }
   }
 
-  return { assets, workOrders, documents, errors };
+  if (runSp) {
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT sp."id" FROM "sparePart" sp ORDER BY sp."key" ASC ${limit ? "LIMIT $1" : ""}`,
+      limit ? [limit] : [],
+    );
+    for (const row of rows) {
+      try {
+        await reindexSparePart(row.id);
+        spareParts += 1;
+        log(`sparePart ${row.id}`);
+      } catch (err) {
+        errors += 1;
+        console.warn(`[athene-embedding] sparePart ${row.id}:`, err);
+      }
+    }
+  }
+
+  if (runWh) {
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT w."id" FROM "warehouse" w ORDER BY w."key" ASC ${limit ? "LIMIT $1" : ""}`,
+      limit ? [limit] : [],
+    );
+    for (const row of rows) {
+      try {
+        await reindexWarehouse(row.id);
+        warehouses += 1;
+        log(`warehouse ${row.id}`);
+      } catch (err) {
+        errors += 1;
+        console.warn(`[athene-embedding] warehouse ${row.id}:`, err);
+      }
+    }
+  }
+
+  return { assets, workOrders, documents, spareParts, warehouses, errors };
 }

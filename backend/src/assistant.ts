@@ -4,7 +4,7 @@ import { Router, type Request, type Response } from "express";
 import { OpenAI } from "openai";
 import type { QueryResult, QueryResultRow } from "pg";
 
-import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
+import { getAllowSiteChange, getAllowChangeStockdata, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import {
@@ -30,7 +30,7 @@ type WorkOrderStatus =
   | "done"
   | "cancelled";
 type UiContext = {
-  type: "workOrder" | "asset" | "monitoring" | "app" | "unknown";
+  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
   id?: string;
   label?: string;
   data?: unknown;
@@ -135,6 +135,66 @@ type AssetRow = QueryResultRow & {
   classificationName: string | null;
   documentCount: number;
 };
+
+type StockControlLineRow = {
+  id: string;
+  warehouseId: string;
+  warehouseKey: string;
+  warehouseName: string;
+  storageLocation: string;
+  quantity: string;
+};
+
+type SparePartRow = QueryResultRow & {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  siteColorHex: string;
+  isActive: boolean;
+  serialNumber: string | null;
+  classificationId: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
+  manufacturer: string | null;
+  articleNumber: string | null;
+  alternativeDesignation: string | null;
+};
+
+type WarehouseRow = QueryResultRow & {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  siteColorHex: string;
+  isActive: boolean;
+};
+
+type WarehouseStockLineRow = {
+  sparePartId: string;
+  sparePartKey: string;
+  sparePartName: string;
+  articleNumber: string | null;
+  storageLocation: string;
+  quantity: string;
+};
+
+type SparePartSearchRow = SparePartRow & {
+  stockLineCount: number;
+  totalQuantity: string;
+};
+
+type EntityResolveResult =
+  | { ok: true; id: string }
+  | {
+      ok: false;
+      error: "invalid_reference" | "not_found" | "ambiguous";
+      matches?: Array<{ id: string; key: string; name: string }>;
+    };
 
 type ParsedCreateWorkOrder = {
   name: string;
@@ -387,6 +447,42 @@ const selectAssetsSql = `
   ${assetDocumentCountSubquery}
 `;
 
+const selectSparePartsSql = `
+  SELECT
+    sp."id",
+    sp."key",
+    sp."name",
+    sp."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
+    sp."isActive",
+    sp."serialNumber",
+    sp."classificationId",
+    clf."key" AS "classificationKey",
+    clf."name" AS "classificationName",
+    sp."manufacturer",
+    sp."articleNumber",
+    sp."alternativeDesignation"
+  FROM "sparePart" sp
+  JOIN "site" s ON s."id" = sp."siteId"
+  LEFT JOIN "classification" clf ON clf."id" = sp."classificationId"
+`;
+
+const selectWarehousesSql = `
+  SELECT
+    w."id",
+    w."key",
+    w."name",
+    w."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
+    w."isActive"
+  FROM "warehouse" w
+  JOIN "site" s ON s."id" = w."siteId"
+`;
+
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
@@ -521,12 +617,16 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: User profile `costCenters` are **Buchungskreise (cost centers)** the user may use on allowed sites. Each entry has `key` and `name` of the cost center, plus `siteKey` and `siteName` of the site that cost center belongs to. Never swap site key/name with cost center key/name. Never label a site as a Buchungskreis unless it is literally an entry in `costCenters`.",
     "Program logic: User profile `workgroups` are **Fachgruppen (workgroups)** — assignment groups, not Buchungskreise. Do not list workgroup names as cost centers.",
     "When the user asks which Buchungskreise/cost centers they have access to, list **only** objects from `costCenters` (with siteKey/siteName for context). If `costCenters` is empty, say there are none in the system for their accessible sites — do not invent rows.",
-    "Program logic: Relevant vector snippets come from pgvector search over embedded assets (`sourceKind` asset), work orders (`workOrder`), and work-order-visible documents (`workOrderDocument`). They are discovery hints only — not guaranteed complete or up-to-the-second.",
+    "Program logic: Relevant vector snippets come from pgvector search over embedded assets (`sourceKind` asset), work orders (`workOrder`), work-order-visible documents (`workOrderDocument`), spare parts / materials (`sparePart`), and warehouses (`warehouse`). They are discovery hints only — not guaranteed complete or up-to-the-second.",
     "Program logic: For authoritative answers (exact document lists, full work-order fields, counts, IDs), always use tools even when vector snippets exist. Never treat snippet text alone as a full document list.",
     "Program logic: For how many documents are on work orders (per order or in total), use listWorkOrderDocumentCounts. It returns workOrderDocuments (on the order), assetDocumentsVisibleOnOrder (from the asset), and totalDocumentsVisibleOnOrder.",
     "Program logic: To list document files for one order, use listDocuments with sourceKind workOrder and orderNumber (e.g. 100007 or 007) OR id (UUID). Never pass an order number as id.",
     "Program logic: getWorkOrderDetails, getWorkOrderStatusEvents, getWorkOrderTransactions, listDocuments, and readDocumentText accept orderNumber instead of id when the user cites an Auftragsnummer.",
     "Program logic: Vector snippet lines use the format [sourceKind:sourceId]. Do not invent or alter sourceKind or sourceId values.",
+    "Program logic: Spare parts (Ersatzteil / Material) are master-data records with optional stock lines in `stockControl` (Lagerdaten): each line has warehouseKey/warehouseName, storageLocation, and quantity. Use getSparePartDetails, searchSpareParts, listWarehouseStock, and searchStock for authoritative stock answers.",
+    "Program logic: Warehouses (Lager) belong to a site. listWarehouseStock lists all materials and quantities stored in one warehouse. searchStock finds stock rows across warehouses and materials.",
+    "Program logic: App parameter MT-ACSD (allowChangeStockdata) controls whether existing stock rows are editable in the spare-parts UI. When false (N), existing warehouse/storageLocation/quantity rows are read-only; new stock rows may still be added. Balance changes to existing rows happen only via transactions (RM/RT not fully implemented yet).",
+    "Program logic: You have read-only access to spare parts and warehouses. Never create, update, or delete materials, warehouses, or stock lines.",
     "All answers and tool requests must respect the user's site restrictions.",
     "Use UI context when a row is selected. If context is missing or ambiguous, ask a short clarifying question.",
     `Known user context: ${JSON.stringify(profile)}`,
@@ -868,6 +968,43 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
       ],
     };
   }
+  if (context.type === "sparePart") {
+    const sparePart = await getSparePartDetails(userId, context.id);
+    if ((sparePart as { error?: string }).error === "not_found") return { error: "context_not_accessible" };
+    const allowChangeStockdata = await getAllowChangeStockdata(pool);
+    return {
+      contextType: "sparePart",
+      sparePart,
+      allowChangeStockdata,
+      semanticNotes: [
+        "The sparePart object is the current selected row's authoritative structured data including stockControlLines (Lagerdaten).",
+        "totalQuantity is the sum of quantity across all stockControlLines.",
+        "allowChangeStockdata reflects app parameter MT-ACSD: when false, existing stock rows are read-only in the UI.",
+        "Use stockControlLines to answer where this material is stored and how much is on hand per warehouse and storage location.",
+      ],
+    };
+  }
+  if (context.type === "warehouse") {
+    const warehouse = await getWarehouseDetails(userId, context.id);
+    if ((warehouse as { error?: string }).error === "not_found") return { error: "context_not_accessible" };
+    const stockResult = await listWarehouseStock(userId, context.id);
+    if ((stockResult as { error?: string }).error) return { error: "context_not_accessible" };
+    const stockLines = (stockResult as { stockLines: WarehouseStockLineRow[] }).stockLines;
+    const totalQuantity = stockLines.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const distinctSparePartCount = new Set(stockLines.map((row) => row.sparePartId)).size;
+    return {
+      contextType: "warehouse",
+      warehouse,
+      stockLines,
+      totalQuantity,
+      distinctSparePartCount,
+      semanticNotes: [
+        "The warehouse object is the current selected row's authoritative structured data.",
+        "stockLines lists all materials stored in this warehouse with storageLocation and quantity.",
+        "Use distinctSparePartCount and totalQuantity for summary questions about this warehouse.",
+      ],
+    };
+  }
   return null;
 }
 
@@ -1076,6 +1213,286 @@ async function getAssetDetails(userId: string, id: string): Promise<unknown> {
     [id, userId],
   );
   return rows[0] ?? { error: "not_found" };
+}
+
+async function fetchStockControlLinesForSparePart(
+  userId: string,
+  sparePartId: string,
+): Promise<StockControlLineRow[]> {
+  const { rows } = await pool.query<StockControlLineRow>(
+    `
+    SELECT
+      sc."id",
+      sc."warehouseId",
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      sc."storageLocation",
+      sc."quantity"::text AS "quantity"
+    FROM "stockControl" sc
+    JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    WHERE sc."sparePartId" = $1::uuid
+      AND ${siteAccessSql('sp."siteId"', "$2")}
+    ORDER BY wh."key" ASC, sc."storageLocation" ASC
+    `,
+    [sparePartId, userId],
+  );
+  return rows;
+}
+
+async function getSparePartDetails(userId: string, id: string): Promise<unknown> {
+  if (!isUuid(id)) throw new Error("invalid_id");
+  const { rows } = await pool.query<SparePartRow>(
+    `
+    ${selectSparePartsSql}
+    WHERE sp."id" = $1::uuid
+      AND ${siteAccessSql('sp."siteId"', "$2")}
+    LIMIT 1
+    `,
+    [id, userId],
+  );
+  const sparePart = rows[0];
+  if (!sparePart) return { error: "not_found" };
+  const stockControlLines = await fetchStockControlLinesForSparePart(userId, id);
+  const totalQuantity = stockControlLines.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  return { ...sparePart, stockControlLines, totalQuantity };
+}
+
+async function getWarehouseDetails(userId: string, id: string): Promise<unknown> {
+  if (!isUuid(id)) throw new Error("invalid_id");
+  const { rows } = await pool.query<WarehouseRow>(
+    `
+    ${selectWarehousesSql}
+    WHERE w."id" = $1::uuid
+      AND ${siteAccessSql('w."siteId"', "$2")}
+    LIMIT 1
+    `,
+    [id, userId],
+  );
+  return rows[0] ?? { error: "not_found" };
+}
+
+async function listWarehouseStock(
+  userId: string,
+  warehouseId: string,
+  query?: unknown,
+): Promise<unknown> {
+  if (!isUuid(warehouseId)) throw new Error("invalid_id");
+  const warehouse = await getWarehouseDetails(userId, warehouseId);
+  if ((warehouse as { error?: string }).error === "not_found") return warehouse;
+  const term = query === undefined || query === null ? null : readString(query, 200);
+  const params: unknown[] = [warehouseId, userId];
+  let filterSql = "";
+  if (term) {
+    params.push(term);
+    filterSql = `
+      AND (
+        lower(sp."key") LIKE '%' || lower($3::text) || '%'
+        OR lower(sp."name") LIKE '%' || lower($3::text) || '%'
+        OR lower(COALESCE(sp."articleNumber", '')) LIKE '%' || lower($3::text) || '%'
+        OR lower(sc."storageLocation") LIKE '%' || lower($3::text) || '%'
+      )
+    `;
+  }
+  const { rows } = await pool.query<WarehouseStockLineRow>(
+    `
+    SELECT
+      sp."id" AS "sparePartId",
+      sp."key" AS "sparePartKey",
+      sp."name" AS "sparePartName",
+      sp."articleNumber",
+      sc."storageLocation",
+      sc."quantity"::text AS "quantity"
+    FROM "stockControl" sc
+    JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    WHERE sc."warehouseId" = $1::uuid
+      AND ${siteAccessSql('sp."siteId"', "$2")}
+      ${filterSql}
+    ORDER BY sp."key" ASC, sc."storageLocation" ASC
+    LIMIT 100
+    `,
+    params,
+  );
+  const totalQuantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  return {
+    warehouseId,
+    warehouse,
+    stockLines: rows,
+    totalQuantity,
+    distinctSparePartCount: new Set(rows.map((row) => row.sparePartId)).size,
+  };
+}
+
+async function searchSpareParts(userId: string, query: string): Promise<unknown> {
+  const term = readString(query, 200);
+  if (!term) throw new Error("invalid_query");
+  const { rows } = await pool.query<SparePartSearchRow>(
+    `
+    SELECT
+      sp."id",
+      sp."key",
+      sp."name",
+      sp."siteId",
+      s."key" AS "siteKey",
+      s."name" AS "siteName",
+      s."colorHex" AS "siteColorHex",
+      sp."isActive",
+      sp."serialNumber",
+      sp."classificationId",
+      clf."key" AS "classificationKey",
+      clf."name" AS "classificationName",
+      sp."manufacturer",
+      sp."articleNumber",
+      sp."alternativeDesignation",
+      COALESCE(stock_stats."stockLineCount", 0)::int AS "stockLineCount",
+      COALESCE(stock_stats."totalQuantity", 0)::text AS "totalQuantity"
+    FROM "sparePart" sp
+    JOIN "site" s ON s."id" = sp."siteId"
+    LEFT JOIN "classification" clf ON clf."id" = sp."classificationId"
+    LEFT JOIN (
+      SELECT
+        sc."sparePartId",
+        COUNT(*)::int AS "stockLineCount",
+        SUM(sc."quantity") AS "totalQuantity"
+      FROM "stockControl" sc
+      GROUP BY sc."sparePartId"
+    ) stock_stats ON stock_stats."sparePartId" = sp."id"
+    WHERE ${siteAccessSql('sp."siteId"', "$1")}
+      AND (
+        lower(sp."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(sp."name") LIKE '%' || lower($2::text) || '%'
+        OR lower(COALESCE(sp."articleNumber", '')) LIKE '%' || lower($2::text) || '%'
+        OR lower(COALESCE(sp."manufacturer", '')) LIKE '%' || lower($2::text) || '%'
+        OR lower(COALESCE(sp."alternativeDesignation", '')) LIKE '%' || lower($2::text) || '%'
+      )
+    ORDER BY sp."key" ASC
+    LIMIT 20
+    `,
+    [userId, term],
+  );
+  return rows;
+}
+
+async function searchStock(userId: string, query: string): Promise<unknown> {
+  const term = readString(query, 200);
+  if (!term) throw new Error("invalid_query");
+  const { rows } = await pool.query<
+    WarehouseStockLineRow & {
+      warehouseId: string;
+      warehouseKey: string;
+      warehouseName: string;
+      siteKey: string;
+      siteName: string;
+    }
+  >(
+    `
+    SELECT
+      sp."id" AS "sparePartId",
+      sp."key" AS "sparePartKey",
+      sp."name" AS "sparePartName",
+      sp."articleNumber",
+      wh."id" AS "warehouseId",
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      s."key" AS "siteKey",
+      s."name" AS "siteName",
+      sc."storageLocation",
+      sc."quantity"::text AS "quantity"
+    FROM "stockControl" sc
+    JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "site" s ON s."id" = sp."siteId"
+    WHERE ${siteAccessSql('sp."siteId"', "$1")}
+      AND (
+        lower(sp."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(sp."name") LIKE '%' || lower($2::text) || '%'
+        OR lower(COALESCE(sp."articleNumber", '')) LIKE '%' || lower($2::text) || '%'
+        OR lower(wh."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(wh."name") LIKE '%' || lower($2::text) || '%'
+        OR lower(sc."storageLocation") LIKE '%' || lower($2::text) || '%'
+      )
+    ORDER BY wh."key" ASC, sp."key" ASC, sc."storageLocation" ASC
+    LIMIT 50
+    `,
+    [userId, term],
+  );
+  return rows;
+}
+
+async function resolveSparePartAccess(
+  userId: string,
+  ref: { id?: unknown; key?: unknown },
+): Promise<EntityResolveResult> {
+  const idRaw = typeof ref.id === "string" ? ref.id.trim() : "";
+  if (idRaw) {
+    if (!isUuid(idRaw)) return { ok: false, error: "invalid_reference" };
+    const sparePart = await getSparePartDetails(userId, idRaw);
+    if ((sparePart as { error?: string }).error === "not_found") {
+      return { ok: false, error: "not_found" };
+    }
+    return { ok: true, id: idRaw };
+  }
+  const keyRaw = typeof ref.key === "string" ? ref.key.trim() : "";
+  if (!keyRaw) return { ok: false, error: "invalid_reference" };
+  const { rows } = await pool.query<{ id: string; key: string; name: string }>(
+    `
+    SELECT sp."id", sp."key", sp."name"
+    FROM "sparePart" sp
+    WHERE ${siteAccessSql('sp."siteId"', "$1")}
+      AND lower(sp."key") = lower($2::text)
+    ORDER BY sp."key" ASC
+    LIMIT 11
+    `,
+    [userId, keyRaw],
+  );
+  if (rows.length === 0) return { ok: false, error: "not_found" };
+  if (rows.length > 1) return { ok: false, error: "ambiguous", matches: rows };
+  return { ok: true, id: rows[0]!.id };
+}
+
+async function resolveWarehouseAccess(
+  userId: string,
+  ref: { id?: unknown; key?: unknown },
+): Promise<EntityResolveResult> {
+  const idRaw = typeof ref.id === "string" ? ref.id.trim() : "";
+  if (idRaw) {
+    if (!isUuid(idRaw)) return { ok: false, error: "invalid_reference" };
+    const warehouse = await getWarehouseDetails(userId, idRaw);
+    if ((warehouse as { error?: string }).error === "not_found") {
+      return { ok: false, error: "not_found" };
+    }
+    return { ok: true, id: idRaw };
+  }
+  const keyRaw = typeof ref.key === "string" ? ref.key.trim() : "";
+  if (!keyRaw) return { ok: false, error: "invalid_reference" };
+  const { rows } = await pool.query<{ id: string; key: string; name: string }>(
+    `
+    SELECT w."id", w."key", w."name"
+    FROM "warehouse" w
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND lower(w."key") = lower($2::text)
+    ORDER BY w."key" ASC
+    LIMIT 11
+    `,
+    [userId, keyRaw],
+  );
+  if (rows.length === 0) return { ok: false, error: "not_found" };
+  if (rows.length > 1) return { ok: false, error: "ambiguous", matches: rows };
+  return { ok: true, id: rows[0]!.id };
+}
+
+async function resolveSparePartIdFromToolArgs(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<EntityResolveResult> {
+  return resolveSparePartAccess(userId, { id: args.id, key: args.key });
+}
+
+async function resolveWarehouseIdFromToolArgs(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<EntityResolveResult> {
+  return resolveWarehouseAccess(userId, { id: args.id, key: args.key });
 }
 
 async function listDocuments(
@@ -1395,6 +1812,84 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "getSparePartDetails",
+      description:
+        "Get one accessible spare part / material with all visible fields and stockControlLines (Lagerdaten). Provide id (UUID) OR key (Schlüssel), not both.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"], description: "Spare part UUID." },
+          key: { type: ["string", "null"], description: "Spare part key / Schlüssel." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "searchSpareParts",
+      description:
+        "Search accessible spare parts / materials by key, name, article number, manufacturer, or alternative designation. Returns stockLineCount and totalQuantity summaries.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getWarehouseDetails",
+      description:
+        "Get one accessible warehouse (Lager) with all visible fields. Provide id (UUID) OR key (Schlüssel), not both.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"], description: "Warehouse UUID." },
+          key: { type: ["string", "null"], description: "Warehouse key / Schlüssel." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "listWarehouseStock",
+      description:
+        "List stock lines (materials, storage locations, quantities) in one warehouse. Provide warehouse id OR key. Optional query filters by material or storage location.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"], description: "Warehouse UUID." },
+          key: { type: ["string", "null"], description: "Warehouse key." },
+          query: {
+            type: ["string", "null"],
+            description: "Optional filter on spare part key/name/article or storage location.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "searchStock",
+      description:
+        "Cross-search stock rows across warehouses and materials by spare part key/name/article, warehouse key/name, or storage location.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "listDocuments",
       description:
         "List work-order or asset documents visible to the user. For work orders provide id (UUID) OR orderNumber (e.g. 100007). Each row includes source (entityType), referenceApp, and metadata.",
@@ -1486,6 +1981,23 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
     return getWorkOrderTransactions(userId, resolved.id, args.onlyCurrentUser === true);
   }
   if (name === "getAssetDetails") return getAssetDetails(userId, String(args.id ?? ""));
+  if (name === "getSparePartDetails") {
+    const resolved = await resolveSparePartIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return getSparePartDetails(userId, resolved.id);
+  }
+  if (name === "searchSpareParts") return searchSpareParts(userId, String(args.query ?? ""));
+  if (name === "getWarehouseDetails") {
+    const resolved = await resolveWarehouseIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return getWarehouseDetails(userId, resolved.id);
+  }
+  if (name === "listWarehouseStock") {
+    const resolved = await resolveWarehouseIdFromToolArgs(userId, args);
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    return listWarehouseStock(userId, resolved.id, args.query);
+  }
+  if (name === "searchStock") return searchStock(userId, String(args.query ?? ""));
   if (name === "listDocuments") {
     if (args.sourceKind === "workOrder") {
       const hasId = typeof args.sourceId === "string" && args.sourceId.trim();

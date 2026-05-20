@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Check, MessageCircle, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -14,8 +14,9 @@ import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
-import { lucidePrimeBtnIcon } from "../icons/lucide";
+import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
@@ -74,6 +75,7 @@ const deleteActionIcon = "text-red-500";
 
 export function WarehousesPage() {
   const { t, i18n } = useTranslation();
+  const athene = useAtheneAssistant();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
@@ -322,11 +324,42 @@ export function WarehousesPage() {
     [deleteRow, t],
   );
 
+  const atheneContextMenuItems = useCallback(
+    (row: Warehouse | null) => [
+      {
+        label: t("assistant.askAthene"),
+        className: "app-context-menu-athene",
+        icon: athene.busy ? (
+          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ) : (
+          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ),
+        disabled: !row || athene.busy,
+        command: () => {
+          if (!row) return;
+          athene.openWithContext({
+            type: "warehouse",
+            id: row.id,
+            label: `${row.key} - ${row.name}`,
+            data: {
+              key: row.key,
+              name: row.name,
+              siteKey: row.siteKey,
+              isActive: row.isActive,
+            },
+          });
+        },
+      },
+    ],
+    [athene, t],
+  );
+
   const tableCtx = useTableContextMenu<Warehouse>({
     labels: { new: t("warehouses.new"), edit: t("warehouses.edit"), delete: t("warehouses.delete") },
     handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
     selection: selectedWarehouse,
     setSelection: setSelectedWarehouse,
+    leadingItems: atheneContextMenuItems,
   });
 
   useEffect(() => {

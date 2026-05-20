@@ -12,6 +12,13 @@ import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql, type SiteAccessClient } from "./siteAccess.js";
+import {
+  deleteSparePartEmbeddings,
+  reindexSparePart,
+  reindexWarehouse,
+  reindexWarehousesForSparePart,
+  scheduleReindex,
+} from "./assistant/embedding/index.js";
 
 export type StockControlLineRow = {
   id: string;
@@ -446,6 +453,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(500).json({ error: "no_row" });
       return;
     }
+    scheduleReindex(`sparePart ${row.id}`, async () => {
+      await reindexSparePart(row.id);
+      await reindexWarehousesForSparePart(row.id);
+    });
     res.status(201).json(row);
   } catch (err) {
     const message = (err as Error).message;
@@ -559,6 +570,10 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    scheduleReindex(`sparePart ${row.id}`, async () => {
+      await reindexSparePart(row.id);
+      await reindexWarehousesForSparePart(row.id);
+    });
     res.json(row);
   } catch (err) {
     const message = (err as Error).message;
@@ -594,6 +609,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
   try {
     const meta = auditMeta(req);
+    const warehouseIds = await pool.query<{ warehouseId: string }>(
+      `
+      SELECT DISTINCT sc."warehouseId"::text AS "warehouseId"
+      FROM "stockControl" sc
+      WHERE sc."sparePartId" = $1::uuid
+      `,
+      [id],
+    );
     const deleted = await withAuditContext(meta, async (client) => {
       const result: QueryResult<QueryResultRow> = await client.query(
         `
@@ -609,6 +632,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    scheduleReindex(`delete sparePart ${id}`, async () => {
+      await deleteSparePartEmbeddings(id);
+      for (const row of warehouseIds.rows) {
+        await reindexWarehouse(row.warehouseId);
+      }
+    });
     res.status(204).send();
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {

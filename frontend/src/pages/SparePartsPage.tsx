@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Check, MessageCircle, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Badge } from "primereact/badge";
@@ -17,8 +17,9 @@ import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
-import { lucidePrimeBtnIcon } from "../icons/lucide";
+import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import {
@@ -153,6 +154,7 @@ function isPersistedStockLine(line: StockLineForm): boolean {
 
 export function SparePartsPage() {
   const { t, i18n } = useTranslation();
+  const athene = useAtheneAssistant();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const allowChangeStockdata =
@@ -578,11 +580,43 @@ export function SparePartsPage() {
     [deleteRow, t],
   );
 
+  const atheneContextMenuItems = useCallback(
+    (row: SparePart | null) => [
+      {
+        label: t("assistant.askAthene"),
+        className: "app-context-menu-athene",
+        icon: athene.busy ? (
+          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ) : (
+          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+        ),
+        disabled: !row || athene.busy,
+        command: () => {
+          if (!row) return;
+          athene.openWithContext({
+            type: "sparePart",
+            id: row.id,
+            label: `${row.key} - ${row.name}`,
+            data: {
+              key: row.key,
+              name: row.name,
+              siteKey: row.siteKey,
+              articleNumber: row.articleNumber,
+              stockLineCount: row.stockControlLines?.length ?? 0,
+            },
+          });
+        },
+      },
+    ],
+    [athene, t],
+  );
+
   const tableCtx = useTableContextMenu<SparePart>({
     labels: { new: t("spareParts.new"), edit: t("spareParts.edit"), delete: t("spareParts.delete") },
     handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
     selection: selectedSparePart,
     setSelection: setSelectedSparePart,
+    leadingItems: atheneContextMenuItems,
   });
 
   useEffect(() => {

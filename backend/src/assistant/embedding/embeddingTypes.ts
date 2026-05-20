@@ -2,6 +2,8 @@ export const EMBEDDING_SOURCE_KIND = {
   asset: "asset",
   workOrder: "workOrder",
   workOrderDocument: "workOrderDocument",
+  sparePart: "sparePart",
+  warehouse: "warehouse",
 } as const;
 
 export type EmbeddingSourceKind =

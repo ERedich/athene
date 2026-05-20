@@ -161,3 +161,98 @@ export function buildWorkOrderDocumentText(row: WorkOrderDocumentEmbeddingRow): 
       : "documentText: [binary or non-text; metadata only]",
   ]);
 }
+
+export type SparePartEmbeddingRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  isActive: boolean;
+  serialNumber: string | null;
+  classificationKey: string | null;
+  classificationName: string | null;
+  manufacturer: string | null;
+  articleNumber: string | null;
+  alternativeDesignation: string | null;
+  stockLines: Array<{
+    warehouseKey: string;
+    warehouseName: string;
+    storageLocation: string;
+    quantity: string;
+  }>;
+  totalQuantity: string;
+};
+
+export function buildSparePartText(row: SparePartEmbeddingRow): string {
+  const stockLines =
+    row.stockLines.length > 0
+      ? row.stockLines
+          .map(
+            (line) =>
+              `warehouse=${line.warehouseKey}/${line.warehouseName}; location=${line.storageLocation}; quantity=${line.quantity}`,
+          )
+          .join("\n")
+      : null;
+  return joinLines([
+    "sourceKind: sparePart",
+    line("sparePartId", row.id),
+    line("sparePartKey", row.key),
+    line("sparePartName", row.name),
+    line("siteKey", row.siteKey),
+    line("siteName", row.siteName),
+    line("isActive", row.isActive),
+    line("serialNumber", row.serialNumber),
+    line("classificationKey", row.classificationKey),
+    line("classificationName", row.classificationName),
+    line("manufacturer", row.manufacturer),
+    line("articleNumber", row.articleNumber),
+    line("alternativeDesignation", row.alternativeDesignation),
+    line("totalQuantity", row.totalQuantity),
+    stockLines ? `stockControlLines:\n${stockLines}` : "stockControlLines: none",
+  ]);
+}
+
+export type WarehouseEmbeddingRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  isActive: boolean;
+  stockLines: Array<{
+    sparePartKey: string;
+    sparePartName: string;
+    articleNumber: string | null;
+    storageLocation: string;
+    quantity: string;
+  }>;
+  totalQuantity: string;
+  distinctSparePartCount: number;
+};
+
+export function buildWarehouseText(row: WarehouseEmbeddingRow): string {
+  const stockLines =
+    row.stockLines.length > 0
+      ? row.stockLines
+          .map(
+            (line) =>
+              `sparePart=${line.sparePartKey}/${line.sparePartName}; article=${line.articleNumber ?? ""}; location=${line.storageLocation}; quantity=${line.quantity}`,
+          )
+          .join("\n")
+      : null;
+  return joinLines([
+    "sourceKind: warehouse",
+    line("warehouseId", row.id),
+    line("warehouseKey", row.key),
+    line("warehouseName", row.name),
+    line("siteKey", row.siteKey),
+    line("siteName", row.siteName),
+    line("isActive", row.isActive),
+    line("distinctSparePartCount", row.distinctSparePartCount),
+    line("totalQuantity", row.totalQuantity),
+    stockLines ? `stockLines:\n${stockLines}` : "stockLines: none",
+  ]);
+}

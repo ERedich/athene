@@ -9,7 +9,7 @@ function parseArgs(argv: string[]): { only?: ReindexScope; limit?: number } {
   for (const arg of argv) {
     if (arg.startsWith("--only=")) {
       const value = arg.slice("--only=".length) as ReindexScope;
-      if (value === "assets" || value === "workOrders" || value === "documents" || value === "all") {
+      if (value === "assets" || value === "workOrders" || value === "documents" || value === "spareParts" || value === "warehouses" || value === "all") {
         only = value === "all" ? "all" : value;
       } else {
         console.error(`Unknown --only value: ${value}`);
@@ -48,7 +48,7 @@ async function main() {
   });
 
   console.log(
-    `Done. assets=${result.assets} workOrders=${result.workOrders} documents=${result.documents} errors=${result.errors}`,
+    `Done. assets=${result.assets} workOrders=${result.workOrders} documents=${result.documents} spareParts=${result.spareParts} warehouses=${result.warehouses} errors=${result.errors}`,
   );
   if (result.errors > 0) process.exit(1);
 }

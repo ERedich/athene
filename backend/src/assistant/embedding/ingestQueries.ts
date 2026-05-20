@@ -111,3 +111,36 @@ export const selectWorkOrderDocumentIdsSql = `
   JOIN "documentLink" dl ON dl."documentId" = d."id"
   WHERE ${workOrderVisibleDocumentsWhere}
 `;
+
+export const selectSparePartsForEmbeddingSql = `
+  SELECT
+    sp."id",
+    sp."key",
+    sp."name",
+    sp."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    sp."isActive",
+    sp."serialNumber",
+    clf."key" AS "classificationKey",
+    clf."name" AS "classificationName",
+    sp."manufacturer",
+    sp."articleNumber",
+    sp."alternativeDesignation"
+  FROM "sparePart" sp
+  JOIN "site" s ON s."id" = sp."siteId"
+  LEFT JOIN "classification" clf ON clf."id" = sp."classificationId"
+`;
+
+export const selectWarehousesForEmbeddingSql = `
+  SELECT
+    w."id",
+    w."key",
+    w."name",
+    w."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    w."isActive"
+  FROM "warehouse" w
+  JOIN "site" s ON s."id" = w."siteId"
+`;

@@ -7,6 +7,11 @@ import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
+import {
+  deleteWarehouseEmbeddings,
+  reindexWarehouse,
+  scheduleReindex,
+} from "./assistant/embedding/index.js";
 
 export type WarehouseRow = {
   id: string;
@@ -159,6 +164,7 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(500).json({ error: "no_row" });
       return;
     }
+    scheduleReindex(`warehouse ${row.id}`, () => reindexWarehouse(row.id));
     res.status(201).json(row);
   } catch (err) {
     if ((err as Error).message === "user_not_found") {
@@ -242,6 +248,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    scheduleReindex(`warehouse ${row.id}`, () => reindexWarehouse(row.id));
     res.json(row);
   } catch (err) {
     if ((err as Error).message === "user_not_found") {
@@ -283,6 +290,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    scheduleReindex(`delete warehouse ${id}`, () => deleteWarehouseEmbeddings(id));
     res.status(204).send();
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {

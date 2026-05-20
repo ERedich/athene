@@ -57,6 +57,8 @@
     "contextWorkOrder": "Auftrag",
     "contextAsset": "Asset",
     "contextMonitoring": "Monitor",
+    "contextSparePart": "Ersatzteil",
+    "contextWarehouse": "Lager",
     "globalContext": "Globaler Kontext",
     "empty": "Frag Athene etwas. Die neuesten Nachrichten stehen oben.",
     "inputLabel": "Nachricht an Athene",

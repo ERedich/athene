@@ -17,7 +17,7 @@ import { LucideSpinner } from "../icons/lucide";
 import { apiFetch } from "../lib/api";
 
 export type AtheneUiContext = {
-  type: "workOrder" | "asset" | "monitoring" | "app" | "unknown";
+  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
   id?: string;
   label?: string;
   data?: unknown;
@@ -284,7 +284,11 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
         ? t("assistant.contextAsset")
         : uiContext?.type === "monitoring"
           ? t("assistant.contextMonitoring")
-          : null;
+          : uiContext?.type === "sparePart"
+            ? t("assistant.contextSparePart")
+            : uiContext?.type === "warehouse"
+              ? t("assistant.contextWarehouse")
+              : null;
 
   const formatMessageTimestamp = (value: string) => {
     const date = new Date(value);

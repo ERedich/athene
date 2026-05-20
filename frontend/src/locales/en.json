@@ -57,6 +57,8 @@
     "contextWorkOrder": "Work order",
     "contextAsset": "Asset",
     "contextMonitoring": "Monitoring",
+    "contextSparePart": "Spare part",
+    "contextWarehouse": "Warehouse",
     "globalContext": "Global context",
     "empty": "Ask Athene something. Newest messages are shown first.",
     "inputLabel": "Message to Athene",

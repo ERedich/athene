@@ -10,7 +10,7 @@ import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRip
 import { useAppTheme } from "../theme/AppThemeContext";
 
 export type AtheneUiContext = {
-  type: "workOrder" | "asset" | "monitoring" | "app" | "unknown";
+  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
   id?: string;
   label?: string;
   data?: unknown;
