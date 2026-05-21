@@ -632,6 +632,38 @@ router.get("/:id/assignments", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/:id/status-history", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const workOrder = await getAccessibleWorkOrder(userId, id);
+    if (!workOrder) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const { rows } = await pool.query<{ status: string; occurredAt: string }>(
+      `
+      SELECT h."status", h."occurredAt"::text AS "occurredAt"
+      FROM "workOrderStatusHistory" h
+      WHERE h."workOrderId" = $1::uuid
+      ORDER BY h."occurredAt" ASC
+      `,
+      [id],
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.post("/:id/assignments", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {

@@ -1,32 +1,14 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  ArrowLeftRight,
-  Box,
-  Briefcase,
   ChevronsLeft,
   ChevronsRight,
-  History,
-  IdCard,
-  Languages,
-  LayoutGrid,
   LogOut,
-  MapPin,
-  Monitor,
   Moon,
-  Network,
-  Package,
-  Share2,
-  SlidersHorizontal,
   Star,
   Sun,
-  Table,
-  Tags,
-  type LucideIcon,
-  Users,
-  Warehouse,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
@@ -36,19 +18,10 @@ import { apiFetch } from "../lib/api";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
+import { SidebarBuildMeta } from "./SidebarBuildMeta";
+import { SidebarNav } from "./SidebarNav";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "athene.sidebar.collapsed";
-
-const navIconClass = "h-[1.125rem] w-[1.125rem] shrink-0";
-
-const navBtnBase =
-  "w-full flex items-center text-left text-sm text-on-surface-variant rounded-lg transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const navBtnExpanded = "gap-3 px-3 py-2.5";
-const navBtnCollapsed = "justify-center px-0 py-2.5";
-
-const activeNavBtn =
-  "bg-[color-mix(in_srgb,var(--color-primary)_18%,transparent)] text-[var(--color-primary)]";
 
 const chromeBackground = {
   "--app-chrome-bg": `url(${loginBgImage})`,
@@ -87,91 +60,6 @@ export type AppShellOutletContext = {
   /** Optional row/data count rendered next to the page title (e.g. `Assets [234]`). Pass `null` to hide. */
   setHeaderRowCount: (count: number | null) => void;
 };
-
-type NavItem = {
-  to: string;
-  end?: boolean;
-  Icon: LucideIcon;
-  labelKey: string;
-};
-
-const navItems: NavItem[] = [
-  {
-    to: "/dashboard",
-    end: true,
-    Icon: LayoutGrid,
-    labelKey: "dashboard.navDashboard",
-  },
-  { to: "/assets", Icon: Package, labelKey: "assets.navAssets" },
-  {
-    to: "/workorders",
-    Icon: Briefcase,
-    labelKey: "workOrders.navOrders",
-  },
-  {
-    to: "/monitoring",
-    Icon: Monitor,
-    labelKey: "monitoring.navMonitoring",
-  },
-  {
-    to: "/suchkonfig",
-    Icon: Share2,
-    labelKey: "suchkonfig.navSuchkonfig",
-  },
-  {
-    to: "/transactions",
-    Icon: ArrowLeftRight,
-    labelKey: "transactions.navTransactions",
-  },
-  { to: "/sites", Icon: MapPin, labelKey: "sites.navSites" },
-  { to: "/users", Icon: Users, labelKey: "users.navUsers" },
-  {
-    to: "/workgroups",
-    Icon: Network,
-    labelKey: "workgroups.navWorkgroups",
-  },
-  {
-    to: "/employees",
-    Icon: IdCard,
-    labelKey: "employees.navEmployees",
-  },
-  {
-    to: "/cost-centers",
-    Icon: Briefcase,
-    labelKey: "costCenters.navCostCenters",
-  },
-  {
-    to: "/warehouses",
-    Icon: Warehouse,
-    labelKey: "warehouses.navWarehouses",
-  },
-  {
-    to: "/spare-parts",
-    Icon: Box,
-    labelKey: "spareParts.navSpareParts",
-  },
-  {
-    to: "/classifications",
-    Icon: Tags,
-    labelKey: "classifications.navClassifications",
-  },
-  {
-    to: "/app-parameters",
-    Icon: SlidersHorizontal,
-    labelKey: "appParameters.navAppParameters",
-  },
-  { to: "/audit-log", Icon: History, labelKey: "auditLog.navAudit" },
-  {
-    to: "/table-viewer",
-    Icon: Table,
-    labelKey: "tableViewer.navTableViewer",
-  },
-  {
-    to: "/translations",
-    Icon: Languages,
-    labelKey: "translations.navTranslations",
-  },
-];
 
 function readInitialCollapsed(): boolean {
   if (typeof window === "undefined") return false;
@@ -278,32 +166,12 @@ export function AppShellLayout() {
           </button>
         </div>
         <nav
-          className={`shrink-0 space-y-1 ${collapsed ? "p-2" : "p-3"}`}
+          className={`min-h-0 flex-1 overflow-y-auto ${collapsed ? "p-2" : "p-3"}`}
           aria-label={t("dashboard.navAria")}
         >
-          {navItems.map((item) => {
-            const { Icon } = item;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={collapsed ? t(item.labelKey) : undefined}
-                aria-label={collapsed ? t(item.labelKey) : undefined}
-                className={({ isActive }) =>
-                  `${navBtnBase} ${collapsed ? navBtnCollapsed : navBtnExpanded} ${
-                    isActive ? activeNavBtn : ""
-                  }`
-                }
-              >
-                <Icon className={navIconClass} strokeWidth={1.75} aria-hidden />
-                {collapsed ? null : (
-                  <span className="truncate">{t(item.labelKey)}</span>
-                )}
-              </NavLink>
-            );
-          })}
+          <SidebarNav collapsed={collapsed} />
         </nav>
+        <SidebarBuildMeta collapsed={collapsed} />
         <div
           className={`mt-auto shrink-0 border-t border-white/5 ${collapsed ? "p-2" : "p-3"}`}
         >

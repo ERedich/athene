@@ -1,6 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { DataTableRowClickEvent } from "primereact/datatable";
-import type { OverlayPanel } from "primereact/overlaypanel";
 
 import {
   handleWorkOrderOverviewRowClick,
@@ -8,7 +7,6 @@ import {
 } from "../lib/workOrderOverviewPanel";
 
 export function useWorkOrderOverviewPanel() {
-  const panelRef = useRef<OverlayPanel | null>(null);
   const [activeOrder, setActiveOrder] = useState<WorkOrderOverviewRow | null>(null);
 
   const onOpen = useCallback((row: WorkOrderOverviewRow) => {
@@ -21,13 +19,12 @@ export function useWorkOrderOverviewPanel() {
 
   const onRowClick = useCallback(
     (e: DataTableRowClickEvent) => {
-      handleWorkOrderOverviewRowClick(e, panelRef, onOpen);
+      handleWorkOrderOverviewRowClick(e, onOpen);
     },
     [onOpen],
   );
 
   return {
-    panelRef,
     activeOrder,
     onRowClick,
     onHide,

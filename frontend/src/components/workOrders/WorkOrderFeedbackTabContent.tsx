@@ -11,6 +11,7 @@ import type {
   FeedbackEntryMode,
   FeedbackStatusAction,
 } from "../../lib/workOrderDialog";
+import { FeedbackRemarkInput } from "./FeedbackRemarkInput";
 
 type SelectOption = { label: string; value: string };
 
@@ -166,43 +167,24 @@ export function WorkOrderFeedbackTabContent(props: Props) {
       </div>
 
       {showPauseRemark ? (
-        <div className="space-y-2 col-span-2 md:col-span-6">
-          <label htmlFor="order-feedback-pause-remark" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-            {t("workOrders.feedbackPauseRemark")}
-            <span className="app-required-marker" aria-hidden>
-              *
-            </span>
-          </label>
-          <textarea
-            id="order-feedback-pause-remark"
-            value={feedbackPauseRemark}
-            maxLength={2000}
-            onChange={(e) => onFeedbackPauseRemarkChange(e.target.value)}
-            className="w-full p-inputtext p-component min-h-24 resize-y"
-            disabled={fieldDisabled}
-          />
-          <div className="text-xs text-on-surface-variant text-right">
-            {t("workOrders.descriptionCounter", { count: feedbackPauseRemark.length, max: 2000 })}
-          </div>
-        </div>
+        <FeedbackRemarkInput
+          id="order-feedback-pause-remark"
+          label={t("workOrders.feedbackPauseRemark")}
+          value={feedbackPauseRemark}
+          onChange={onFeedbackPauseRemarkChange}
+          disabled={fieldDisabled}
+          required
+          minHeightClass="min-h-24"
+        />
       ) : null}
 
-      <div className="space-y-2 col-span-2 md:col-span-6">
-        <label htmlFor="order-feedback-remark" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-          {t("workOrders.feedbackRemark")}
-        </label>
-        <textarea
-          id="order-feedback-remark"
-          value={feedbackRemark}
-          maxLength={2000}
-          onChange={(e) => onFeedbackRemarkChange(e.target.value)}
-          className="w-full p-inputtext p-component min-h-28 resize-y"
-          disabled={fieldDisabled}
-        />
-        <div className="text-xs text-on-surface-variant text-right">
-          {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
-        </div>
-      </div>
+      <FeedbackRemarkInput
+        id="order-feedback-remark"
+        label={t("workOrders.feedbackRemark")}
+        value={feedbackRemark}
+        onChange={onFeedbackRemarkChange}
+        disabled={fieldDisabled}
+      />
 
       <fieldset className="col-span-2 md:col-span-6 space-y-2 border-0 p-0 m-0" disabled={fieldDisabled}>
         <legend className="block text-[11px] text-outline uppercase tracking-[0.1em] mb-2">

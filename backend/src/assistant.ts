@@ -591,6 +591,63 @@ function containsDeleteIntent(message: string): boolean {
   return /\b(delete|remove|erase|destroy|drop)\b/i.test(message) || /\b(lösch|loesch|entfern)\w*/i.test(message);
 }
 
+type FeedbackContextData = {
+  intent?: string;
+  draftRemark?: string;
+  draftPauseRemark?: string;
+  activeField?: "remark" | "pauseRemark";
+  assetId?: string;
+  assetKey?: string;
+  assetName?: string;
+  orderNumber?: number;
+};
+
+function getFeedbackContextData(context: UiContext | null): FeedbackContextData | null {
+  if (!context?.data || typeof context.data !== "object") return null;
+  const data = context.data as FeedbackContextData;
+  return data.intent === "feedback" ? data : null;
+}
+
+const ATHENE_APPLY_META_RE =
+  /\n?\[ATHENE_APPLY:(remark|pauseRemark):([\s\S]*?)\]\s*$/;
+
+type AssistantApplyMeta = {
+  correctedText: string;
+  targetField: "remark" | "pauseRemark";
+};
+
+function parseAssistantApplyMeta(content: string): {
+  displayContent: string;
+  meta: AssistantApplyMeta | null;
+} {
+  const match = content.match(ATHENE_APPLY_META_RE);
+  if (!match) return { displayContent: content, meta: null };
+  const correctedText = match[2].trim();
+  if (!correctedText) return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+  return {
+    displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
+    meta: { correctedText, targetField: match[1] as "remark" | "pauseRemark" },
+  };
+}
+
+function feedbackSystemPromptAppendix(locale: string, feedbackData: FeedbackContextData): string {
+  const en = locale.toLowerCase().startsWith("en");
+  return [
+    en
+      ? "The user is composing work-order feedback (Rückmeldung) in the UI. Help with similar past problems on the same asset and with proofreading their draft remark text."
+      : "Der Benutzer erfasst gerade eine Auftragsrückmeldung in der UI. Hilf bei ähnlichen früheren Problemen am gleichen Asset und bei der Korrektur des Rückmeldetext-Entwurfs.",
+    `Draft remark (Rückmeldetext): ${JSON.stringify(feedbackData.draftRemark ?? "")}`,
+    `Draft pause remark: ${JSON.stringify(feedbackData.draftPauseRemark ?? "")}`,
+    `Active field focus: ${feedbackData.activeField ?? "remark"}`,
+    en
+      ? "For similar-problem questions: use listWorkOrdersByAsset and vector snippets; compare transaction remarks (type IN) and work-order descriptions. Do not invent history."
+      : "Bei Fragen zu ähnlichen Problemen: nutze listWorkOrdersByAsset und Vector-Snippets; vergleiche Rückmeldetexte (Transaktion type IN) und Auftragsbeschreibungen. Keine erfundene Historie.",
+    en
+      ? "When the user asks to correct or proofread feedback text, reply in the frontend language with a short explanation, then on its own final line append exactly: [ATHENE_APPLY:remark:...] or [ATHENE_APPLY:pauseRemark:...] containing ONLY the corrected text (max 2000 chars). Never save feedback automatically."
+      : "Wenn der Benutzer den Rückmeldetext korrigieren lassen will: kurz erklären, dann in einer eigenen letzten Zeile exakt anhängen: [ATHENE_APPLY:remark:...] oder [ATHENE_APPLY:pauseRemark:...] mit NUR dem korrigierten Text (max. 2000 Zeichen). Niemals automatisch speichern.",
+  ].join("\n");
+}
+
 function systemPrompt(locale: string, profile: UserProfile): string {
   const dateFormat = locale.toLowerCase().startsWith("en") ? "MM/DD/YYYY HH:mm" : "DD.MM.YYYY HH:mm";
   return [
@@ -929,6 +986,85 @@ async function getWorkOrderTransactions(
   };
 }
 
+type AssetWorkOrderHistoryRow = QueryResultRow & {
+  id: string;
+  orderNumber: number;
+  name: string;
+  status: WorkOrderStatus;
+  description: string | null;
+  recentFeedbackRemarks: Array<{ quantity: string; remark: string; bookedAt: string }>;
+};
+
+async function listWorkOrdersByAsset(
+  userId: string,
+  assetId: string,
+  excludeWorkOrderId?: string | null,
+  limit = 10,
+): Promise<unknown> {
+  if (!isUuid(assetId)) throw new Error("invalid_asset_id");
+  const cappedLimit = Math.min(Math.max(Math.trunc(limit) || 10, 1), 20);
+  const excludeId =
+    excludeWorkOrderId && isUuid(excludeWorkOrderId) ? excludeWorkOrderId : null;
+  const { rows } = await pool.query<AssetWorkOrderHistoryRow>(
+    `
+    SELECT
+      w."id",
+      w."orderNumber",
+      w."name",
+      w."status",
+      w."description",
+      COALESCE((
+        SELECT json_agg(sub ORDER BY sub."bookedAt" DESC)
+        FROM (
+          SELECT
+            t."quantity"::text AS "quantity",
+            t."remark",
+            t."bookedAt"::text AS "bookedAt"
+          FROM "transaction" t
+          WHERE t."workOrderId" = w."id"
+            AND t."type" = 'IN'
+            AND t."remark" IS NOT NULL
+            AND trim(t."remark") <> ''
+          ORDER BY t."bookedAt" DESC
+          LIMIT 5
+        ) sub
+      ), '[]'::json) AS "recentFeedbackRemarks"
+    FROM "workOrder" w
+    WHERE w."assetId" = $1::uuid
+      AND ${siteAccessSql('w."siteId"', "$2")}
+      AND ($3::uuid IS NULL OR w."id" <> $3::uuid)
+    ORDER BY w."orderNumber" DESC
+    LIMIT $4
+    `,
+    [assetId, userId, excludeId, cappedLimit],
+  );
+  return rows;
+}
+
+async function localizeSpokenText(text: string, targetLocale: string): Promise<string> {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  if (!openai) throw new Error("openai_not_configured");
+  const targetLang = targetLocale.toLowerCase().startsWith("en") ? "English" : "German";
+  const completion = await openai.chat.completions.create({
+    model: chatModel,
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content: [
+          "You normalize dictated maintenance feedback text for a CMMS.",
+          `Output ONLY the final text in ${targetLang} — no quotes, no explanation.`,
+          "Detect the spoken language, translate if needed, fix punctuation and capitalization lightly.",
+          "Preserve technical terms, asset names, and numbers. Max 2000 characters.",
+        ].join(" "),
+      },
+      { role: "user", content: trimmed.slice(0, 4000) },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? trimmed).trim().slice(0, 2000);
+}
+
 async function loadUiContextFacts(userId: string, context: UiContext | null): Promise<unknown | null> {
   if (!context?.id || !isUuid(context.id)) return null;
   if (context.type === "workOrder" || context.type === "monitoring") {
@@ -938,6 +1074,28 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
     const statusEvents = await getWorkOrderStatusEvents(userId, context.id);
     const transactions = await getWorkOrderTransactions(userId, context.id, false);
     const currentUserTransactions = await getWorkOrderTransactions(userId, context.id, true);
+    const feedbackData = getFeedbackContextData(context);
+    const wo = workOrder as WorkOrderRow;
+    const assetId =
+      (feedbackData?.assetId && isUuid(feedbackData.assetId) ? feedbackData.assetId : null) ??
+      wo.assetId;
+    const assetWorkOrderHistory =
+      feedbackData && assetId
+        ? await listWorkOrdersByAsset(userId, assetId, context.id, 8)
+        : null;
+    const semanticNotes = [
+      "The workOrder object is the current selected row's authoritative structured data.",
+      "Use statusEvents to answer who changed the order to a status such as started, paused, continued, ended, done, or cancelled. Prefer employeeName/employeeKey when present; otherwise use changedByName or changedByLogin.",
+      "Use doneByEmployeeName/doneByEmployeeKey plus endedAt or doneAt as completion attribution fields when they exist.",
+      "Use documentCount and assetDocumentCount to explain document reference colors.",
+      "Use transactions for all transactions on this work order. Use currentUserTransactions when the user asks how many hours they personally captured/booked/erfasst. Transaction type IN stores feedback hours for work orders in this app.",
+    ];
+    if (feedbackData) {
+      semanticNotes.push(
+        "Feedback UI mode: draftRemark and draftPauseRemark are unsaved user input. Use listWorkOrdersByAsset and assetWorkOrderHistory for similar past issues on the same asset.",
+        "When proofreading, the UI can apply a corrected draft via [ATHENE_APPLY:remark:...] or [ATHENE_APPLY:pauseRemark:...] on the final line of your reply.",
+      );
+    }
     return {
       contextType: "workOrder",
       workOrder,
@@ -945,13 +1103,18 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
       statusEvents,
       transactions,
       currentUserTransactions,
-      semanticNotes: [
-        "The workOrder object is the current selected row's authoritative structured data.",
-        "Use statusEvents to answer who changed the order to a status such as started, paused, continued, ended, done, or cancelled. Prefer employeeName/employeeKey when present; otherwise use changedByName or changedByLogin.",
-        "Use doneByEmployeeName/doneByEmployeeKey plus endedAt or doneAt as completion attribution fields when they exist.",
-        "Use documentCount and assetDocumentCount to explain document reference colors.",
-        "Use transactions for all transactions on this work order. Use currentUserTransactions when the user asks how many hours they personally captured/booked/erfasst. Transaction type IN stores feedback hours for work orders in this app.",
-      ],
+      ...(feedbackData
+        ? {
+            feedbackMode: true,
+            feedbackDrafts: {
+              draftRemark: feedbackData.draftRemark ?? "",
+              draftPauseRemark: feedbackData.draftPauseRemark ?? "",
+              activeField: feedbackData.activeField ?? "remark",
+            },
+            assetWorkOrderHistory,
+          }
+        : {}),
+      semanticNotes,
     };
   }
   if (context.type === "asset") {
@@ -1750,6 +1913,26 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "listWorkOrdersByAsset",
+      description:
+        "List accessible work orders on the same asset (newest first), with recent feedback remarks from IN transactions. Use for similar-problem history while composing feedback.",
+      parameters: {
+        type: "object",
+        properties: {
+          assetId: { type: "string", description: "Asset UUID." },
+          excludeWorkOrderId: {
+            type: ["string", "null"],
+            description: "Optional work order UUID to exclude (usually the current order).",
+          },
+          limit: { type: ["integer", "null"], description: "Max rows (default 10, max 20)." },
+        },
+        required: ["assetId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "countWorkOrdersByStatus",
       description: "Count accessible work orders, optionally filtered by one status. German UI labels are accepted: Beendet=ended, Erledigt=done, Offen=open, Zugewiesen=assigned, Gestartet=started, Pausiert=paused, Aufgenommen=continued, Storniert=cancelled.",
       parameters: {
@@ -1969,6 +2152,14 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
     return listWorkOrderDocumentCounts(userId, args.query, args.limit);
   }
   if (name === "searchWorkOrders") return searchWorkOrders(userId, String(args.query ?? ""));
+  if (name === "listWorkOrdersByAsset") {
+    return listWorkOrdersByAsset(
+      userId,
+      String(args.assetId ?? ""),
+      args.excludeWorkOrderId as string | null | undefined,
+      typeof args.limit === "number" ? args.limit : 10,
+    );
+  }
   if (name === "countWorkOrdersByStatus") return countWorkOrdersByStatus(userId, args.status);
   if (name === "getWorkOrderStatusEvents") {
     const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);
@@ -2025,6 +2216,35 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
   if (name === "createWorkOrder") return createWorkOrder(userId, args);
   return { error: "unknown_tool" };
 }
+
+router.post("/localize-spoken-text", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const body = req.body as Record<string, unknown> | null | undefined;
+  const text = readString(body?.text, 4000);
+  const targetLocale =
+    typeof body?.targetLocale === "string" && body.targetLocale.trim()
+      ? body.targetLocale.trim()
+      : "de";
+  if (!text) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    if (!openai) {
+      res.status(503).json({ error: "openai_not_configured" });
+      return;
+    }
+    const localized = await localizeSpokenText(text, targetLocale);
+    res.json({ text: localized });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
 
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
@@ -2086,10 +2306,12 @@ router.post("/", async (req: Request, res: Response) => {
     const history = (await loadMessages(conversationId, 20)).reverse();
     const contextFacts = await loadUiContextFacts(userId, clientContext);
     const vectorSnippets = await retrieveRelevantChunks(userId, message);
+    const feedbackData = getFeedbackContextData(clientContext);
     const contextBlock = [
       clientContext ? `Current UI context: ${JSON.stringify(clientContext)}` : "",
       contextFacts ? `Authoritative structured context facts: ${JSON.stringify(contextFacts)}` : "",
       vectorSnippets ? `Relevant vector snippets (discovery hints — confirm with tools when needed):\n${vectorSnippets}` : "",
+      feedbackData ? feedbackSystemPromptAppendix(locale, feedbackData) : "",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -2136,13 +2358,24 @@ router.post("/", async (req: Request, res: Response) => {
       });
     }
 
-    const content =
+    const rawContent =
       completion.choices[0]?.message?.content?.trim() ||
       (locale.toLowerCase().startsWith("en")
         ? "I could not produce an answer."
         : "Ich konnte keine Antwort erzeugen.");
-    const assistantMessage = await insertMessage(conversationId, "assistant", content, locale, clientContext);
-    res.json({ conversationId, userMessage, assistantMessage });
+    const { displayContent, meta } = parseAssistantApplyMeta(rawContent);
+    const assistantMessage = await insertMessage(
+      conversationId,
+      "assistant",
+      displayContent,
+      locale,
+      clientContext,
+    );
+    res.json({
+      conversationId,
+      userMessage,
+      assistantMessage: meta ? { ...assistantMessage, meta } : assistantMessage,
+    });
   } catch (err) {
     console.error(err);
     const messageText = (err as Error).message;

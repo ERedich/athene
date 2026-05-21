@@ -12,7 +12,8 @@
     "build": "npm run build -w backend && npm run build -w frontend",
     "migrate": "npm run migrate -w backend",
     "athene:reindex": "npm run athene:reindex-embeddings -w backend",
-    "athene:reindex-embeddings": "npm run athene:reindex-embeddings -w backend"
+    "athene:reindex-embeddings": "npm run athene:reindex-embeddings -w backend",
+    "athene:bench-load": "npm run athene:bench-load -w backend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

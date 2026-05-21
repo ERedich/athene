@@ -1,9 +1,8 @@
-import { forwardRef } from "react";
 import { useTranslation } from "react-i18next";
-import { OverlayPanel } from "primereact/overlaypanel";
-import type { OverlayPanel as OverlayPanelType } from "primereact/overlaypanel";
+import { Dialog } from "primereact/dialog";
 
 import type { WorkOrderOverviewRow } from "../../lib/workOrderOverviewPanel";
+import { WorkOrderDialogTitle } from "./WorkOrderDialogTitle";
 import { WorkOrderOverviewContent } from "./WorkOrderOverviewContent";
 
 type Props = {
@@ -11,22 +10,33 @@ type Props = {
   onHide: () => void;
 };
 
-export const WorkOrderOverviewOverlay = forwardRef<OverlayPanelType, Props>(function WorkOrderOverviewOverlay(
-  { order, onHide },
-  ref,
-) {
+export function WorkOrderOverviewOverlay({ order, onHide }: Props) {
   const { t } = useTranslation();
 
   return (
-    <OverlayPanel
-      ref={ref}
-      className="app-wo-overview-overlay"
-      dismissable
-      showCloseIcon
+    <Dialog
+      visible={order !== null}
       onHide={onHide}
+      className="app-wo-overview-dialog"
+      header={
+        order ? (
+          <div className="min-w-0 pr-2">
+            <div className="text-base font-medium">
+              <WorkOrderDialogTitle orderNumber={order.orderNumber} status={order.status} isCreate={false} />
+            </div>
+            <p className="mt-1 truncate text-sm text-on-surface-variant" title={order.name}>
+              {order.name}
+            </p>
+          </div>
+        ) : undefined
+      }
+      modal
+      dismissableMask
+      draggable={false}
+      resizable={false}
       aria-label={t("workOrders.overview.panelLabel")}
     >
       {order ? <WorkOrderOverviewContent order={order} /> : null}
-    </OverlayPanel>
+    </Dialog>
   );
-});
+}

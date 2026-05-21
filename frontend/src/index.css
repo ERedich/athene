@@ -1652,6 +1652,57 @@ html.theme-crossfade-fallback #root {
   vertical-align: top;
 }
 
+/* Sidebar nav: PrimeReact ripple ink matches primary accent */
+.app-sidebar-nav-link .p-ink {
+  background: color-mix(in srgb, var(--color-primary) 32%, transparent);
+}
+
+/* Sidebar nav: slide open/close for submenu groups */
+.app-sidebar-nav-submenu {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease-out;
+}
+
+.app-sidebar-nav-submenu--open {
+  grid-template-rows: 1fr;
+}
+
+.app-sidebar-nav-submenu-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-sidebar-nav-submenu-inner--expanded {
+  margin-left: 0.75rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid
+    color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+.app-sidebar-nav-submenu:not(.app-sidebar-nav-submenu--open)
+  .app-sidebar-nav-submenu-inner {
+  pointer-events: none;
+}
+
+.app-sidebar-nav-chevron {
+  transition: transform 0.22s ease-out;
+}
+
+.app-sidebar-nav-chevron--open {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar-nav-submenu {
+    transition: none;
+  }
+
+  .app-sidebar-nav-chevron {
+    transition: none;
+  }
+}
+
 /* App shell page title: monospace (with logo); signature underscore accent. */
 .app-shell-title {
   white-space: nowrap;
@@ -1800,16 +1851,52 @@ html.theme-crossfade-fallback #root {
   padding-top: 0.25rem;
 }
 
-/* Work order overview overlay (Ctrl+click tooltip). */
-.app-wo-overview-overlay.p-overlaypanel {
-  width: min(36rem, calc(100vw - 2rem));
-  max-height: 70vh;
+/* Work order overview dialog (Ctrl+click). */
+.app-wo-overview-dialog.p-dialog {
+  width: min(88rem, calc(100vw - 2rem));
+  max-height: 90vh;
 }
 
-.app-wo-overview-overlay.p-overlaypanel .p-overlaypanel-content {
-  padding: 1rem 1.25rem;
+.app-wo-overview-dialog .p-dialog-header {
+  align-items: flex-start;
+  padding: 1rem 1.25rem 0.75rem;
+}
+
+.app-wo-overview-dialog .p-dialog-content {
+  padding: 0 1.25rem 1rem;
   overflow-y: auto;
-  max-height: calc(70vh - 2.75rem);
+  max-height: calc(90vh - 6rem);
+}
+
+.app-wo-overview-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.app-wo-overview-charts-heading {
+  margin: 0 0 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-outline);
+}
+
+.app-wo-overview-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.app-wo-overview-chart-cell {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .app-wo-overview-charts-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .app-wo-overview-kpi {
@@ -1837,9 +1924,151 @@ html.theme-crossfade-fallback #root {
   color: var(--color-on-surface);
 }
 
-.app-wo-overview-chart {
-  height: 10rem;
+.app-wo-overview-section-title {
+  margin: 0 0 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-outline);
+}
+
+.app-wo-overview-schedule {
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--surface-overlay));
+}
+
+.app-wo-overview-schedule-track {
   position: relative;
+  height: 0.75rem;
+  margin: 0.25rem 0 0.875rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-wo-overview-schedule-planned {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
+
+.app-wo-overview-schedule-marker {
+  position: absolute;
+  top: -0.2rem;
+  width: 2px;
+  height: 1.15rem;
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.app-wo-overview-schedule-marker--start {
+  background: var(--color-primary);
+}
+
+.app-wo-overview-schedule-marker--planned-end {
+  background: color-mix(in srgb, var(--color-primary) 55%, var(--color-on-surface));
+  opacity: 0.85;
+}
+
+.app-wo-overview-schedule-marker--actual-end {
+  background: rgb(22, 163, 74);
+  width: 3px;
+}
+
+.app-wo-overview-schedule-marker--now {
+  width: 3px;
+}
+
+.app-wo-overview-schedule-marker--on-time {
+  background: rgb(22, 163, 74);
+}
+
+.app-wo-overview-schedule-marker--late {
+  background: rgb(220, 38, 38);
+}
+
+.app-wo-overview-schedule-marker--actual-end.app-wo-overview-schedule-marker--late {
+  background: rgb(220, 38, 38);
+}
+
+.app-wo-overview-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+@media (max-width: 640px) {
+  .app-wo-overview-schedule-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.app-wo-overview-schedule-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--surface-overlay);
+}
+
+.app-wo-overview-schedule-item--actual-on-time {
+  border-color: color-mix(in srgb, rgb(22, 163, 74) 35%, transparent);
+  background: color-mix(in srgb, rgb(22, 163, 74) 8%, var(--surface-overlay));
+}
+
+.app-wo-overview-schedule-item--actual-late {
+  border-color: color-mix(in srgb, rgb(220, 38, 38) 35%, transparent);
+  background: color-mix(in srgb, rgb(220, 38, 38) 8%, var(--surface-overlay));
+}
+
+.app-wo-overview-schedule-item--actual-late .app-wo-overview-schedule-value {
+  color: rgb(220, 38, 38);
+}
+
+.app-wo-overview-schedule-item--actual-late .app-wo-overview-schedule-hint {
+  color: rgb(220, 38, 38);
+}
+
+.app-wo-overview-schedule-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-outline);
+}
+
+.app-wo-overview-schedule-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-on-surface);
+}
+
+.app-wo-overview-schedule-hint {
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-wo-overview-charts-grid .app-wo-overview-chart {
+  height: 10rem;
+}
+
+.app-wo-overview-chart {
+  height: 11rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-wo-overview-chart .p-chart {
+  height: 100%;
+  width: 100%;
 }
 
 .app-wo-overview-chart-skeleton {
@@ -1857,4 +2086,156 @@ html.theme-crossfade-fallback #root {
   50% {
     opacity: 0.9;
   }
+}
+
+/* Dashboard sparkline KPI cards */
+.app-dashboard-spark-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  max-width: 88rem;
+}
+
+.app-dashboard-spark-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-outline);
+}
+
+.app-dashboard-spark-row {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .app-dashboard-spark-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .app-dashboard-spark-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.app-dashboard-spark-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  background: var(--surface-overlay);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  overflow: hidden;
+}
+
+.app-dashboard-spark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem 0.5rem;
+}
+
+.app-dashboard-spark-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.app-dashboard-spark-icon {
+  display: flex;
+  shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  color: rgb(255 255 255);
+}
+
+.app-dashboard-spark-icon--green {
+  background: rgb(34 197 94);
+}
+
+.app-dashboard-spark-icon--blue {
+  background: rgb(59 130 246);
+}
+
+.app-dashboard-spark-icon--amber {
+  background: rgb(245 158 11);
+}
+
+.app-dashboard-spark-icon--teal {
+  background: rgb(20 184 166);
+}
+
+.app-dashboard-spark-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--color-on-surface);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-dashboard-spark-value {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--color-on-surface);
+  white-space: nowrap;
+}
+
+.app-dashboard-spark-value-suffix {
+  margin-left: 0.2em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-spark-chart {
+  position: relative;
+  height: 5.5rem;
+  margin-top: auto;
+  padding: 0 0.25rem;
+}
+
+.app-dashboard-spark-chart .p-chart {
+  height: 100%;
+  width: 100%;
+}
+
+.app-dashboard-spark-chart-skeleton {
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, rgb(34 197 94) 12%, transparent) 0%,
+    color-mix(in srgb, var(--color-on-surface) 4%, transparent) 100%
+  );
+  animation: app-pulse 1.2s ease-in-out infinite;
+}
+
+.app-dashboard-spark-footer {
+  padding: 0 1rem 0.625rem;
+}
+
+.app-dashboard-spark-demo-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-sidebar-build-meta {
+  opacity: 0.85;
 }

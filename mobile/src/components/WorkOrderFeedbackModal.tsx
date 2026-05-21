@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { Sparkles, X } from "lucide-react-native";
 
+import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
+import { FeedbackRemarkInput } from "./FeedbackRemarkInput";
 import { HapticPressable } from "./HapticPressable";
 
 import type { WorkOrderFeedbackBody } from "../hooks/queries";
@@ -14,12 +17,25 @@ import {
 import { pressedOpacity, PRESSED_OPACITY_CONTROL } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
+export type WorkOrderFeedbackModalOrder = {
+  id: string;
+  orderNumber: number;
+  name: string;
+  status: string;
+  siteId: string;
+  siteKey: string;
+  assetId: string;
+  assetKey: string;
+  assetName: string;
+};
+
 type Props = {
   visible: boolean;
   saving: boolean;
   entryMode: FeedbackEntryMode;
   segmentStartedAt: string | null;
   reportingEmployeeLabel: string;
+  order: WorkOrderFeedbackModalOrder | null;
   onSubmit: (body: WorkOrderFeedbackBody) => Promise<boolean> | boolean;
   onClose: () => void;
 };
@@ -30,11 +46,13 @@ export function WorkOrderFeedbackModal({
   entryMode,
   segmentStartedAt,
   reportingEmployeeLabel,
+  order,
   onSubmit,
   onClose,
 }: Props) {
   const { t } = useTranslation();
   const { colors, radii } = useAppTheme();
+  const athene = useAtheneAssistant();
   const [hours, setHours] = useState("");
   const [remark, setRemark] = useState("");
   const [pauseRemark, setPauseRemark] = useState("");
@@ -66,7 +84,15 @@ export function WorkOrderFeedbackModal({
           gap: 10,
           maxHeight: "90%",
         },
-        title: { fontSize: 16, fontWeight: "700", color: colors.onSurface },
+        titleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        },
+        title: { flex: 1, fontSize: 16, fontWeight: "700", color: colors.onSurface },
+        headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+        headerIconBtn: { padding: 8 },
         label: {
           fontSize: 11,
           color: colors.onSurfaceVariant,
@@ -92,16 +118,6 @@ export function WorkOrderFeedbackModal({
           paddingHorizontal: 12,
           paddingVertical: 10,
           fontSize: 15,
-        },
-        area: {
-          minHeight: 72,
-          textAlignVertical: "top",
-        },
-        counter: {
-          marginTop: 4,
-          alignSelf: "flex-end",
-          color: colors.onSurfaceVariant,
-          fontSize: 12,
         },
         radioRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
         radioOuter: {
@@ -137,6 +153,7 @@ export function WorkOrderFeedbackModal({
         },
         btnSecondaryText: { color: colors.onSurface, fontWeight: "600" },
         btnPrimaryText: { color: "#fff", fontWeight: "700" },
+        disabled: { opacity: 0.45 },
       }),
     [colors, radii],
   );
@@ -181,11 +198,59 @@ export function WorkOrderFeedbackModal({
 
   const statusOptions: FeedbackStatusAction[] = ["none", "pause", "end"];
 
+  const openAthene = () => {
+    if (!order) return;
+    athene.openForFeedback({
+      workOrderId: order.id,
+      label: `#${order.orderNumber} - ${order.name}`,
+      data: {
+        orderNumber: order.orderNumber,
+        name: order.name,
+        status: order.status,
+        siteId: order.siteId,
+        siteKey: order.siteKey,
+        assetId: order.assetId,
+        assetKey: order.assetKey,
+        assetName: order.assetName,
+      },
+      draftRemark: remark,
+      draftPauseRemark: pauseRemark,
+      onApplyText: (field, text) => {
+        if (field === "pauseRemark") setPauseRemark(text);
+        else setRemark(text);
+      },
+    });
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <Text style={styles.title}>{t("workOrders.tabFeedback")}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{t("workOrders.tabFeedback")}</Text>
+            <View style={styles.headerActions}>
+              <HapticPressable
+                disabled={!order || athene.busy}
+                style={({ pressed }) => [
+                  styles.headerIconBtn,
+                  (!order || athene.busy) && styles.disabled,
+                  pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+                ]}
+                onPress={openAthene}
+                accessibilityLabel={t("workOrders.feedbackAskAthene")}
+              >
+                <Sparkles size={22} color={colors.primary} />
+              </HapticPressable>
+              <HapticPressable
+                disabled={saving}
+                style={({ pressed }) => [styles.headerIconBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                onPress={close}
+                accessibilityLabel={t("workOrders.cancel")}
+              >
+                <X size={22} color={colors.onSurfaceVariant} />
+              </HapticPressable>
+            </View>
+          </View>
 
           <Text style={styles.label}>{t("workOrders.feedbackReportingEmployee")}</Text>
           <View style={styles.readOnly}>
@@ -204,32 +269,22 @@ export function WorkOrderFeedbackModal({
           />
 
           {showPauseRemark ? (
-            <>
-              <Text style={styles.label}>{t("workOrders.feedbackPauseRemark")}</Text>
-              <TextInput
-                value={pauseRemark}
-                onChangeText={setPauseRemark}
-                placeholder={t("workOrders.feedbackPauseRemark")}
-                placeholderTextColor={colors.onSurfaceVariant}
-                style={[styles.input, styles.area]}
-                multiline
-                editable={!saving}
-              />
-              <Text style={styles.counter}>{t("workOrders.descriptionCounter", { count: pauseRemark.length, max: 2000 })}</Text>
-            </>
+            <FeedbackRemarkInput
+              label={t("workOrders.feedbackPauseRemark")}
+              value={pauseRemark}
+              onChange={setPauseRemark}
+              disabled={saving}
+              placeholder={t("workOrders.feedbackPauseRemark")}
+            />
           ) : null}
 
-          <Text style={styles.label}>{t("workOrders.feedbackRemark")}</Text>
-          <TextInput
+          <FeedbackRemarkInput
+            label={t("workOrders.feedbackRemark")}
             value={remark}
-            onChangeText={setRemark}
+            onChange={setRemark}
+            disabled={saving}
             placeholder={t("workOrders.feedbackRemark")}
-            placeholderTextColor={colors.onSurfaceVariant}
-            style={[styles.input, styles.area]}
-            multiline
-            editable={!saving}
           />
-          <Text style={styles.counter}>{t("workOrders.descriptionCounter", { count: remark.length, max: 2000 })}</Text>
 
           <Text style={styles.label}>{t("workOrders.feedbackStatusActionLegend")}</Text>
           {statusOptions.map((value) => (

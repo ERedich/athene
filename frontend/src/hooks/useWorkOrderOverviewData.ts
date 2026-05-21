@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch } from "../lib/api";
+import type { StatusHistoryEntry } from "../lib/workOrderOverviewCharts";
 import type { TransactionRow } from "../pages/TransactionsPage";
 
 export type WorkOrderOverviewAssignment = {
@@ -12,6 +13,7 @@ export type WorkOrderOverviewAssignment = {
 type LoadState = {
   assignments: WorkOrderOverviewAssignment[];
   transactions: TransactionRow[];
+  statusHistory: StatusHistoryEntry[];
   loading: boolean;
   error: boolean;
 };
@@ -19,6 +21,7 @@ type LoadState = {
 const emptyState: LoadState = {
   assignments: [],
   transactions: [],
+  statusHistory: [],
   loading: false,
   error: false,
 };
@@ -34,9 +37,10 @@ export function useWorkOrderOverviewData(orderId: string | null) {
       txParams.set("page", "1");
       txParams.set("limit", "200");
 
-      const [assignRes, txRes] = await Promise.all([
+      const [assignRes, txRes, historyRes] = await Promise.all([
         apiFetch(`/api/work-orders/${id}/assignments`),
         apiFetch(`/api/transactions?${txParams.toString()}`),
+        apiFetch(`/api/work-orders/${id}/status-history`),
       ]);
 
       let assignments: WorkOrderOverviewAssignment[] = [];
@@ -61,9 +65,21 @@ export function useWorkOrderOverviewData(orderId: string | null) {
         transactions = Array.isArray(data.rows) ? data.rows : [];
       }
 
-      setState({ assignments, transactions, loading: false, error: !assignRes.ok && !txRes.ok });
+      let statusHistory: StatusHistoryEntry[] = [];
+      if (historyRes.ok) {
+        const raw = (await historyRes.json()) as StatusHistoryEntry[];
+        statusHistory = Array.isArray(raw) ? raw : [];
+      }
+
+      setState({
+        assignments,
+        transactions,
+        statusHistory,
+        loading: false,
+        error: !assignRes.ok && !txRes.ok && !historyRes.ok,
+      });
     } catch {
-      setState({ assignments: [], transactions: [], loading: false, error: true });
+      setState({ assignments: [], transactions: [], statusHistory: [], loading: false, error: true });
     }
   }, []);
 

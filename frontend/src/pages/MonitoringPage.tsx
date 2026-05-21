@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import {
   Check,
   CircleX,
@@ -10,6 +20,7 @@ import {
   Pencil,
   Plus,
   Send,
+  Star,
   Trash2,
   TriangleAlert,
   Upload,
@@ -2142,28 +2153,51 @@ export function MonitoringPage() {
     [openFeedbackTab, startOrder, t],
   );
 
+  const openFeedbackAthene = useCallback(() => {
+    if (!editingOrder) return;
+    const row = editingOrder;
+    athene.openForFeedback({
+      workOrderId: row.id,
+      label: `#${row.orderNumber} - ${row.name}`,
+      data: {
+        orderNumber: row.orderNumber,
+        name: row.name,
+        status: row.status,
+        siteId: row.siteId,
+        siteKey: row.siteKey,
+        assetId: row.assetId,
+        assetKey: row.assetKey,
+        assetName: row.assetName,
+      },
+      draftRemark: feedbackRemark,
+      draftPauseRemark: feedbackPauseRemark,
+      onApplyText: (field, text) => {
+        if (field === "pauseRemark") setFeedbackPauseRemark(text);
+        else setFeedbackRemark(text);
+      },
+    });
+  }, [athene, editingOrder, feedbackPauseRemark, feedbackRemark]);
+
   const dialogHeaderIcons = useMemo(() => {
     if (!editingId || !editingOrder) return null;
     const row = editingOrder;
+    let actionIcons: ReactNode = null;
     if (["open", "assigned", "paused"].includes(row.status)) {
-      return (
-        <div className="mr-1 flex items-center gap-1">
-          <Button
-            type="button"
-            text
-            rounded
-            className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
-            icon={<AppPlayStartIcon />}
-            title={t("workOrders.start")}
-            aria-label={t("workOrders.start")}
-            onClick={() => void startOrder(row)}
-          />
-        </div>
+      actionIcons = (
+        <Button
+          type="button"
+          text
+          rounded
+          className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0"
+          icon={<AppPlayStartIcon />}
+          title={t("workOrders.start")}
+          aria-label={t("workOrders.start")}
+          onClick={() => void startOrder(row)}
+        />
       );
-    }
-    if (row.status === "started" || row.status === "continued") {
-      return (
-        <div className="mr-1 flex items-center gap-1">
+    } else if (row.status === "started" || row.status === "continued") {
+      actionIcons = (
+        <>
           <Button
             type="button"
             text
@@ -2184,11 +2218,44 @@ export function MonitoringPage() {
             aria-label={t("workOrders.pause")}
             onClick={() => openFeedbackTab(row, "pause")}
           />
-        </div>
+        </>
       );
     }
-    return null;
-  }, [editingId, editingOrder, openFeedbackTab, startOrder, t]);
+    if (activeTabIndex !== orderDialogTabs.Feedback) {
+      return actionIcons ? <div className="mr-1 flex items-center gap-1">{actionIcons}</div> : null;
+    }
+    return (
+      <div className="mr-1 flex items-center gap-1">
+        <Button
+          type="button"
+          text
+          rounded
+          className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0 text-[var(--color-primary)]"
+          icon={
+            athene.busy ? (
+              <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+            ) : (
+              <Star className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+            )
+          }
+          title={t("workOrders.feedbackAskAthene")}
+          aria-label={t("workOrders.feedbackAskAthene")}
+          disabled={athene.busy}
+          onClick={openFeedbackAthene}
+        />
+        {actionIcons}
+      </div>
+    );
+  }, [
+    activeTabIndex,
+    athene.busy,
+    editingId,
+    editingOrder,
+    openFeedbackAthene,
+    openFeedbackTab,
+    startOrder,
+    t,
+  ]);
 
   const reportingEmployeeLabel = useMemo(() => {
     const parts = [user.employeeKey, user.employeeName]
@@ -2288,7 +2355,7 @@ export function MonitoringPage() {
         }}
       />
       <ConfirmDialog />
-      <WorkOrderOverviewOverlay ref={overview.panelRef} order={overviewOrder} onHide={overview.onHide} />
+      <WorkOrderOverviewOverlay order={overviewOrder} onHide={overview.onHide} />
       {!isPreloadMode ? tableCtx.ContextMenuEl : null}
 
       <div

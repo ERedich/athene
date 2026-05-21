@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "tsx scripts/migrate.ts",
-    "athene:reindex-embeddings": "tsx scripts/athene-reindex-embeddings.ts"
+    "athene:reindex-embeddings": "tsx scripts/athene-reindex-embeddings.ts",
+    "athene:bench-load": "tsx scripts/benchmark-app-load.ts"
   },
   "dependencies": {
     "@types/multer": "^2.1.0",

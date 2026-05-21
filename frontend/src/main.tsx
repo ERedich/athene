@@ -13,9 +13,13 @@ import { initializeTheme } from "./theme";
 initializeTheme();
 applyDensity(readInitialDensity());
 
+const primeReactConfig = {
+  ripple: true,
+};
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <PrimeReactProvider>
+    <PrimeReactProvider value={primeReactConfig}>
       <BrowserRouter>
         <App />
       </BrowserRouter>

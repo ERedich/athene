@@ -11,6 +11,15 @@
       "expo-router",
       "@react-native-community/datetimepicker"
     ],
+    "ios": {
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Athene needs microphone access so you can dictate questions.",
+        "NSSpeechRecognitionUsageDescription": "Athene needs speech recognition so you can dictate questions."
+      }
+    },
+    "android": {
+      "permissions": ["android.permission.RECORD_AUDIO"]
+    },
     "experiments": {
       "typedRoutes": true
     },

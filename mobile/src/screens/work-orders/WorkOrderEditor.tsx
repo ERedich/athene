@@ -1,6 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { ClipboardCheck, Pause, Play, Square } from "lucide-react-native";
+import { ClipboardCheck, Pause, Play, Sparkles, Square } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +27,8 @@ import { AssetPicker } from "../../components/AssetPicker";
 import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
 import { DateTimeField } from "../../components/DateTimeField";
+import { useAtheneAssistant } from "../../assistant/AtheneAssistantContext";
+import { FeedbackRemarkInput } from "../../components/FeedbackRemarkInput";
 import { HapticPressable } from "../../components/HapticPressable";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import {
@@ -151,6 +153,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const ripple = surfaceRippleColor(isDark);
   const insets = useSafeAreaInsets();
   const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
+  const athene = useAtheneAssistant();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
 
   const { data: orders = [], isLoading: ordersLoading } = useWorkOrdersQuery();
@@ -278,6 +281,32 @@ export function WorkOrderEditor({ orderId }: Props) {
     [effectiveOrderId, orderId, qc, router, t],
   );
 
+  const onFeedbackTab = tabRoutes[tabIndex]?.key === "feedback";
+
+  const openFeedbackAthene = useCallback(() => {
+    if (!currentOrder) return;
+    athene.openForFeedback({
+      workOrderId: currentOrder.id,
+      label: `#${currentOrder.orderNumber} - ${currentOrder.name}`,
+      data: {
+        orderNumber: currentOrder.orderNumber,
+        name: currentOrder.name,
+        status: currentOrder.status,
+        siteId: currentOrder.siteId,
+        siteKey: currentOrder.siteKey,
+        assetId: currentOrder.assetId,
+        assetKey: currentOrder.assetKey,
+        assetName: currentOrder.assetName,
+      },
+      draftRemark: feedbackRemark,
+      draftPauseRemark: feedbackPauseRemark,
+      onApplyText: (field, text) => {
+        if (field === "pauseRemark") setFeedbackPauseRemark(text);
+        else setFeedbackRemark(text);
+      },
+    });
+  }, [athene, currentOrder, feedbackPauseRemark, feedbackRemark]);
+
   useLayoutEffect(() => {
     if (!currentOrder) {
       navigation.setOptions({ headerRight: undefined });
@@ -286,6 +315,19 @@ export function WorkOrderEditor({ orderId }: Props) {
     navigation.setOptions({
       headerRight: () => (
         <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
+          {onFeedbackTab ? (
+            <HapticPressable
+              onPress={openFeedbackAthene}
+              disabled={athene.busy}
+              {...androidRippleProps(ripple, true)}
+              style={({ pressed }) => [
+                { padding: 8 },
+                { opacity: athene.busy ? 0.35 : pressed ? PRESSED_OPACITY_CONTROL : 1 },
+              ]}
+            >
+              <Sparkles size={20} color={colors.primary} />
+            </HapticPressable>
+          ) : null}
           <HapticPressable
             onPress={() => void startOrder()}
             disabled={!canStartWorkOrder(currentOrder.status)}
@@ -358,7 +400,18 @@ export function WorkOrderEditor({ orderId }: Props) {
       ),
     });
     return () => navigation.setOptions({ headerRight: undefined });
-  }, [colors.primary, currentOrder, navigation, openFeedbackWithMode, ripple, startOrder, tabRoutes]);
+  }, [
+    athene.busy,
+    colors.primary,
+    currentOrder,
+    navigation,
+    onFeedbackTab,
+    openFeedbackAthene,
+    openFeedbackWithMode,
+    ripple,
+    startOrder,
+    tabRoutes,
+  ]);
 
   useEffect(() => {
     if (isNew || !row || hydrated) return;
@@ -1326,28 +1379,21 @@ export function WorkOrderEditor({ orderId }: Props) {
                     editable={!feedbackSaving}
                   />
                   {(feedbackEntryMode === "pause" || feedbackStatusAction === "pause") ? (
-                    <>
-                      <Text style={styles.label}>{t("workOrders.feedbackPauseRemark")}</Text>
-                      <TextInput
-                        value={feedbackPauseRemark}
-                        onChangeText={setFeedbackPauseRemark}
-                        style={[styles.input, styles.description]}
-                        multiline
-                        editable={!feedbackSaving}
-                      />
-                    </>
+                    <FeedbackRemarkInput
+                      label={t("workOrders.feedbackPauseRemark")}
+                      value={feedbackPauseRemark}
+                      onChange={setFeedbackPauseRemark}
+                      disabled={feedbackSaving}
+                      placeholder={t("workOrders.feedbackPauseRemark")}
+                    />
                   ) : null}
-                  <Text style={styles.label}>{t("workOrders.feedbackRemark")}</Text>
-                  <TextInput
+                  <FeedbackRemarkInput
+                    label={t("workOrders.feedbackRemark")}
                     value={feedbackRemark}
-                    onChangeText={setFeedbackRemark}
-                    style={[styles.input, styles.description]}
-                    multiline
-                    editable={!feedbackSaving}
+                    onChange={setFeedbackRemark}
+                    disabled={feedbackSaving}
+                    placeholder={t("workOrders.feedbackRemark")}
                   />
-                  <Text style={styles.counter}>
-                    {t("workOrders.descriptionCounter", { count: feedbackRemark.length, max: 2000 })}
-                  </Text>
                   <Text style={styles.label}>{t("workOrders.feedbackStatusActionLegend")}</Text>
                   {(["none", "pause", "end"] as const).map((value) => (
                     <HapticPressable

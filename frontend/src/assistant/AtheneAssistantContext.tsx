@@ -10,11 +10,12 @@ import {
   type ReactNode,
   type TransitionEvent,
 } from "react";
-import { Send, X } from "lucide-react";
+import { Mic, Send, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { LucideSpinner } from "../icons/lucide";
 import { apiFetch } from "../lib/api";
+import { useSpeechRecognition, type SpeechRecognitionErrorCode } from "./useSpeechRecognition";
 
 export type AtheneUiContext = {
   type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
@@ -30,6 +31,20 @@ type AtheneMessage = {
   locale: string | null;
   clientContext: AtheneUiContext | null;
   createdAt: string;
+  meta?: {
+    correctedText: string;
+    targetField: "remark" | "pauseRemark";
+  };
+};
+
+export type OpenForFeedbackParams = {
+  workOrderId: string;
+  label: string;
+  data: Record<string, unknown>;
+  draftRemark: string;
+  draftPauseRemark?: string;
+  activeField?: "remark" | "pauseRemark";
+  onApplyText?: (field: "remark" | "pauseRemark", text: string) => void;
 };
 
 type AtheneAssistantContextValue = {
@@ -37,7 +52,13 @@ type AtheneAssistantContextValue = {
   open: () => void;
   close: () => void;
   openWithContext: (context: AtheneUiContext) => void;
+  openForFeedback: (params: OpenForFeedbackParams) => void;
 };
+
+function isFeedbackUiContext(context: AtheneUiContext | null): boolean {
+  if (!context?.data || typeof context.data !== "object") return false;
+  return (context.data as { intent?: string }).intent === "feedback";
+}
 
 const AtheneAssistantContext = createContext<AtheneAssistantContextValue | null>(null);
 
@@ -153,6 +174,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const [loadError, setLoadError] = useState(false);
   const loadedRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const onApplyTextRef = useRef<OpenForFeedbackParams["onApplyText"]>(undefined);
 
   const revealNewestMessage = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -212,10 +234,35 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     void loadConversation();
   }, [loadConversation]);
 
-  const close = useCallback(() => setVisible(false), []);
+  const appendTranscript = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${trimmed}` : trimmed));
+  }, []);
+
+  const speech = useSpeechRecognition({
+    locale: i18n.language,
+    disabled: busy,
+    onFinalTranscript: appendTranscript,
+  });
+
+  const voiceErrorMessage = useCallback(
+    (code: SpeechRecognitionErrorCode | null) => {
+      if (!code) return null;
+      if (code === "permission_denied") return t("assistant.voicePermissionDenied");
+      return t("assistant.voiceError");
+    },
+    [t],
+  );
+
+  const close = useCallback(() => {
+    speech.stop();
+    setVisible(false);
+  }, [speech]);
 
   const openWithContext = useCallback(
     (context: AtheneUiContext) => {
+      onApplyTextRef.current = undefined;
       setUiContext(context);
       setVisible(true);
       void loadConversation();
@@ -223,19 +270,37 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     [loadConversation],
   );
 
-  const send = useCallback(
-    async (event?: FormEvent) => {
-      event?.preventDefault();
-      const message = input.trim();
-      if (!message || busy) return;
+  const openForFeedback = useCallback(
+    (params: OpenForFeedbackParams) => {
+      onApplyTextRef.current = params.onApplyText;
+      setUiContext({
+        type: "workOrder",
+        id: params.workOrderId,
+        label: params.label,
+        data: {
+          ...params.data,
+          intent: "feedback",
+          draftRemark: params.draftRemark,
+          draftPauseRemark: params.draftPauseRemark ?? "",
+          activeField: params.activeField ?? "remark",
+        },
+      });
+      setVisible(true);
+      void loadConversation();
+    },
+    [loadConversation],
+  );
+
+  const sendMessage = useCallback(
+    async (message: string) => {
+      if (!message.trim() || busy) return;
       setBusy(true);
-      setInput("");
       try {
         const res = await apiFetch("/api/assistant", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message,
+            message: message.trim(),
             locale: i18n.language,
             uiContext,
           }),
@@ -269,12 +334,31 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
         setBusy(false);
       }
     },
-    [busy, i18n.language, input, revealNewestMessage, t, uiContext],
+    [busy, i18n.language, revealNewestMessage, t, uiContext],
   );
 
+  const send = useCallback(
+    async (event?: FormEvent) => {
+      event?.preventDefault();
+      speech.stop();
+      const message = input.trim();
+      if (!message || busy) return;
+      setInput("");
+      await sendMessage(message);
+    },
+    [busy, input, sendMessage, speech],
+  );
+
+  const applyCorrectedText = useCallback((message: AtheneMessage) => {
+    if (!message.meta?.correctedText) return;
+    onApplyTextRef.current?.(message.meta.targetField, message.meta.correctedText);
+  }, []);
+
+  const feedbackMode = isFeedbackUiContext(uiContext);
+
   const value = useMemo<AtheneAssistantContextValue>(
-    () => ({ busy, open, close, openWithContext }),
-    [busy, close, open, openWithContext],
+    () => ({ busy, open, close, openWithContext, openForFeedback }),
+    [busy, close, open, openForFeedback, openWithContext],
   );
 
   const uiContextKindLabel =
@@ -382,12 +466,41 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                       </time>
                     </div>
                     {renderMessageContent(message.content)}
+                    {message.meta?.correctedText && onApplyTextRef.current ? (
+                      <button
+                        type="button"
+                        className="mt-2 rounded-sm border border-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)]"
+                        onClick={() => applyCorrectedText(message)}
+                      >
+                        {t("assistant.applyCorrectedText")}
+                      </button>
+                    ) : null}
                   </article>
                 ))}
               </div>
             </div>
 
             <form className="border-t border-white/10 p-3" onSubmit={send}>
+              {feedbackMode ? (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] px-3 py-1 text-xs text-on-surface hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => void sendMessage(t("assistant.feedbackSuggestSimilar"))}
+                  >
+                    {t("assistant.feedbackSuggestSimilar")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] px-3 py-1 text-xs text-on-surface hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => void sendMessage(t("assistant.feedbackSuggestCorrect"))}
+                  >
+                    {t("assistant.feedbackSuggestCorrect")}
+                  </button>
+                </div>
+              ) : null}
               <label className="sr-only" htmlFor="athene-assistant-input">
                 {t("assistant.inputLabel")}
               </label>
@@ -395,7 +508,11 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 id="athene-assistant-input"
                 className="min-h-[90px] w-full resize-none rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-highest p-3 text-sm text-on-surface outline-none focus:border-[var(--color-primary)]"
                 value={input}
-                placeholder={t("assistant.placeholder")}
+                placeholder={
+                  speech.listening && speech.interimTranscript
+                    ? speech.interimTranscript
+                    : t("assistant.placeholder")
+                }
                 disabled={busy}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -405,6 +522,16 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                   }
                 }}
               />
+              {speech.listening ? (
+                <p className="mt-1 text-xs text-[var(--color-primary)]" aria-live="polite">
+                  {t("assistant.listening")}
+                </p>
+              ) : null}
+              {voiceErrorMessage(speech.errorCode) ? (
+                <p className="mt-1 text-xs text-red-500" role="alert">
+                  {voiceErrorMessage(speech.errorCode)}
+                </p>
+              ) : null}
               <div className="mt-2 flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -413,18 +540,41 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 >
                   {t("assistant.clearContext")}
                 </button>
-                <button
-                  type="submit"
-                  className="inline-flex h-9 items-center gap-2 rounded-sm bg-[var(--color-primary)] px-3 text-sm font-semibold text-white disabled:opacity-50"
-                  disabled={busy || !input.trim()}
-                >
-                  {busy ? (
-                    <LucideSpinner className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-                  ) : (
-                    <Send className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-                  )}
-                  <span>{t("assistant.send")}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {speech.supported ? (
+                    <button
+                      type="button"
+                      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] text-on-surface-variant transition-colors hover:text-[var(--color-primary)] disabled:opacity-50 ${
+                        speech.listening
+                          ? "border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
+                          : ""
+                      }`}
+                      aria-label={
+                        speech.listening ? t("assistant.stopListening") : t("assistant.startListening")
+                      }
+                      title={
+                        speech.listening ? t("assistant.stopListening") : t("assistant.startListening")
+                      }
+                      aria-pressed={speech.listening}
+                      disabled={busy}
+                      onClick={speech.toggleListening}
+                    >
+                      <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                    </button>
+                  ) : null}
+                  <button
+                    type="submit"
+                    className="inline-flex h-9 items-center gap-2 rounded-sm bg-[var(--color-primary)] px-3 text-sm font-semibold text-white disabled:opacity-50"
+                    disabled={busy || !input.trim()}
+                  >
+                    {busy ? (
+                      <LucideSpinner className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                    ) : (
+                      <Send className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                    )}
+                    <span>{t("assistant.send")}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </section>

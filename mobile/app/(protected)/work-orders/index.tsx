@@ -994,6 +994,21 @@ export default function WorkOrdersListScreen() {
             .filter(Boolean)
             .join(" — ") || t("workOrders.feedbackReportingEmployeeEmpty")
         }
+        order={
+          selectedOrder
+            ? {
+                id: selectedOrder.id,
+                orderNumber: selectedOrder.orderNumber,
+                name: selectedOrder.name,
+                status: selectedOrder.status,
+                siteId: selectedOrder.siteId,
+                siteKey: selectedOrder.siteKey,
+                assetId: selectedOrder.assetId,
+                assetKey: selectedOrder.assetKey,
+                assetName: selectedOrder.assetName,
+              }
+            : null
+        }
         onClose={() => setFeedbackOpen(false)}
         onSubmit={submitFeedback}
       />

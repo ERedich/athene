@@ -1,6 +1,4 @@
-import type { MutableRefObject } from "react";
 import type { DataTableRowClickEvent } from "primereact/datatable";
-import type { OverlayPanel } from "primereact/overlaypanel";
 
 import type { WorkOrderStatus } from "../components/workOrders/WorkOrderDialogTitle";
 
@@ -43,7 +41,6 @@ export function isWorkOrderOverviewTriggerClick(target: EventTarget | null): boo
 
 export function handleWorkOrderOverviewRowClick(
   e: DataTableRowClickEvent,
-  panelRef: MutableRefObject<OverlayPanel | null>,
   onOpen: (row: WorkOrderOverviewRow) => void,
 ): boolean {
   const originalEvent = e.originalEvent;
@@ -55,9 +52,5 @@ export function handleWorkOrderOverviewRowClick(
   if (!row?.id || row.id.startsWith("preload-")) return false;
 
   onOpen(row);
-  const panel = panelRef.current;
-  if (panel && !panel.isVisible()) {
-    panel.toggle(originalEvent);
-  }
   return true;
 }
