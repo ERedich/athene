@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   Box,
   Briefcase,
+  CalendarDays,
   History,
   IdCard,
   Languages,
@@ -121,6 +122,11 @@ export const navGroups: NavGroup[] = [
         to: "/workorders",
         Icon: Briefcase,
         labelKey: "workOrders.navOrders",
+      },
+      {
+        to: "/kalendar",
+        Icon: CalendarDays,
+        labelKey: "kalendar.navKalendar",
       },
       {
         to: "/transactions",

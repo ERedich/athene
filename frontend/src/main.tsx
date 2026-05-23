@@ -15,6 +15,13 @@ applyDensity(readInitialDensity());
 
 const primeReactConfig = {
   ripple: true,
+  pt: {
+    dialog: {
+      transition: {
+        timeout: { enter: 300, exit: 300 },
+      },
+    },
+  },
 };
 
 createRoot(document.getElementById("root")!).render(

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import { OpenAI } from "openai";
 import type { QueryResult, QueryResultRow } from "pg";
 
@@ -17,6 +19,16 @@ import {
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated } from "./workOrderRealtime.js";
+import { updateWorkOrderPlanning, updateWorkOrderPlanningBatch } from "./workOrders.js";
+import {
+  effectivePlannedEnd,
+  findFreePlanningSlots,
+  getAssetPlanningConflicts,
+  isBeforeLocalToday,
+  planSequentialWorkOrderSlots,
+  type OrderToPlanSequentially,
+  type PlanningOrderRow,
+} from "./workOrderScheduling.js";
 
 type AssistantRole = "user" | "assistant" | "system" | "tool";
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
@@ -30,10 +42,17 @@ type WorkOrderStatus =
   | "done"
   | "cancelled";
 type UiContext = {
-  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
+  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "calendar" | "app" | "unknown";
   id?: string;
   label?: string;
   data?: unknown;
+};
+
+type CalendarContextData = {
+  viewMode?: "month" | "week" | "day";
+  rangeStart?: string;
+  rangeEnd?: string;
+  anchorDate?: string;
 };
 
 type AssistantMessageRow = {
@@ -109,6 +128,9 @@ type WorkOrderRow = QueryResultRow & {
   documentCount: number;
   assetDocumentCount: number;
   assignedEmployeeCount: number;
+  originalWo: string | null;
+  originalWoOrderNumber: number | null;
+  originalWoName: string | null;
 };
 
 type AssetRow = QueryResultRow & {
@@ -208,6 +230,7 @@ type ParsedCreateWorkOrder = {
   responsibleEmployeeId: string | null;
   workgroupId: string;
   classificationId: string | null;
+  originalWo: string | null;
 };
 
 type WorkOrderStatusCountResult = {
@@ -341,6 +364,12 @@ const openaiApiKey = process.env.OPENAI_API_KEY?.trim();
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 const chatModel = process.env.OPENAI_CHAT_MODEL?.trim() || "gpt-4o-mini";
 const embeddingModel = process.env.OPENAI_EMBEDDING_MODEL?.trim() || "text-embedding-3-small";
+const whisperModel = process.env.OPENAI_WHISPER_MODEL?.trim() || "whisper-1";
+const SPOKEN_AUDIO_MAX_BYTES = 10 * 1024 * 1024;
+const spokenAudioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: SPOKEN_AUDIO_MAX_BYTES },
+});
 
 const selectWorkOrdersSql = `
   SELECT
@@ -377,6 +406,9 @@ const selectWorkOrdersSql = `
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
+    w."originalWo",
+    orig."orderNumber" AS "originalWoOrderNumber",
+    orig."name" AS "originalWoName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -404,6 +436,7 @@ const selectWorkOrdersSql = `
     GROUP BY "workOrderId"
   ) ended_history ON ended_history."workOrderId" = w."id"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
+  LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${workOrderDocumentCountSubquery}
@@ -510,6 +543,11 @@ function parseIsoDatetime(value: unknown): string | null {
   return d.toISOString();
 }
 
+function workOrderDatetimeToIso(value: unknown): string | null {
+  if (value instanceof Date) return value.toISOString();
+  return parseIsoDatetime(value);
+}
+
 function isOrderType(value: unknown): value is WorkOrderType {
   return typeof value === "string" && (allowedOrderTypes as string[]).includes(value);
 }
@@ -547,6 +585,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
   const responsibleEmployeeId = readOptionalString(args.responsibleEmployeeId, 80);
   const workgroupId = readString(args.workgroupId, 80);
   const classificationId = readOptionalString(args.classificationId, 80);
+  const originalWo = readOptionalString(args.originalWo, 80);
 
   if (
     !name ||
@@ -561,7 +600,8 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     !isUuid(costCenterId) ||
     !isUuid(workgroupId) ||
     (responsibleEmployeeId !== null && !isUuid(responsibleEmployeeId)) ||
-    (classificationId !== null && !isUuid(classificationId))
+    (classificationId !== null && !isUuid(classificationId)) ||
+    (originalWo !== null && !isUuid(originalWo))
   ) {
     throw new Error("invalid_body");
   }
@@ -578,6 +618,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     responsibleEmployeeId,
     workgroupId,
     classificationId,
+    originalWo,
   };
 }
 
@@ -609,12 +650,62 @@ function getFeedbackContextData(context: UiContext | null): FeedbackContextData 
 }
 
 const ATHENE_APPLY_META_RE =
-  /\n?\[ATHENE_APPLY:(remark|pauseRemark):([\s\S]*?)\]\s*$/;
+  /\n?\[ATHENE_APPLY:(remark|pauseRemark|reschedule|rescheduleBatch):([\s\S]*?)\]\s*$/;
 
-type AssistantApplyMeta = {
-  correctedText: string;
-  targetField: "remark" | "pauseRemark";
+export type AssistantApplyRescheduleMeta = {
+  orderNumber?: number;
+  id?: string;
+  plannedStart: string;
+  plannedEnd: string;
+  allowAssetOverlap?: boolean;
 };
+
+type AssistantApplyMeta =
+  | { correctedText: string; targetField: "remark" | "pauseRemark" }
+  | { reschedule: AssistantApplyRescheduleMeta }
+  | { rescheduleBatch: AssistantApplyRescheduleMeta[] };
+
+function parseRescheduleApplyPayload(raw: unknown): AssistantApplyRescheduleMeta | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const plannedStart = parseIsoDatetime(o.plannedStart);
+  const plannedEnd = parseIsoDatetime(o.plannedEnd);
+  if (!plannedStart || !plannedEnd) return null;
+  const id = typeof o.id === "string" && isUuid(o.id.trim()) ? o.id.trim() : undefined;
+  const orderNumber =
+    typeof o.orderNumber === "number" && Number.isFinite(o.orderNumber)
+      ? o.orderNumber
+      : typeof o.orderNumber === "string" && /^\d+$/.test(o.orderNumber.trim())
+        ? Number(o.orderNumber.trim())
+        : undefined;
+  if (!id && orderNumber === undefined) return null;
+  const allowAssetOverlap = o.allowAssetOverlap === true;
+  return { id, orderNumber, plannedStart, plannedEnd, allowAssetOverlap };
+}
+
+function parseRescheduleApplyPayloadJson(raw: string): AssistantApplyRescheduleMeta | null {
+  try {
+    return parseRescheduleApplyPayload(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function parseRescheduleBatchApplyPayload(raw: string): AssistantApplyRescheduleMeta[] | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const items: AssistantApplyRescheduleMeta[] = [];
+    for (const entry of parsed) {
+      const item = parseRescheduleApplyPayload(entry);
+      if (!item) return null;
+      items.push(item);
+    }
+    return items;
+  } catch {
+    return null;
+  }
+}
 
 function parseAssistantApplyMeta(content: string): {
   displayContent: string;
@@ -622,12 +713,71 @@ function parseAssistantApplyMeta(content: string): {
 } {
   const match = content.match(ATHENE_APPLY_META_RE);
   if (!match) return { displayContent: content, meta: null };
-  const correctedText = match[2].trim();
-  if (!correctedText) return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+  const payload = match[2].trim();
+  const field = match[1];
+  if (!payload) {
+    return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+  }
+  if (field === "reschedule") {
+    const reschedule = parseRescheduleApplyPayloadJson(payload);
+    if (!reschedule) {
+      return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+    }
+    return {
+      displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
+      meta: { reschedule },
+    };
+  }
+  if (field === "rescheduleBatch") {
+    const rescheduleBatch = parseRescheduleBatchApplyPayload(payload);
+    if (!rescheduleBatch) {
+      return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+    }
+    return {
+      displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
+      meta: { rescheduleBatch },
+    };
+  }
   return {
     displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
-    meta: { correctedText, targetField: match[1] as "remark" | "pauseRemark" },
+    meta: { correctedText: payload, targetField: field as "remark" | "pauseRemark" },
   };
+}
+
+function getCalendarContextData(context: UiContext | null): CalendarContextData | null {
+  if (!context?.data || typeof context.data !== "object") return null;
+  return context.data as CalendarContextData;
+}
+
+function calendarSystemPromptAppendix(locale: string, calendarData: CalendarContextData | null): string {
+  const en = locale.toLowerCase().startsWith("en");
+  const lines = [
+    en
+      ? "The user is in the Kalendar (planning calendar) UI. Help find free slots and reschedule work orders on the same asset without overlapping planned times."
+      : "Der Benutzer ist in der Kalendar-Planungsansicht. Hilf bei freien Terminen und Verschieben von Aufträgen am gleichen Asset ohne überlappende Planungszeiten.",
+    en
+      ? "Planning collision rule: only the same asset counts. If analyzeWorkOrderPlanning reports conflicts, ask: 'There is already another order on asset {key} in that period — move anyway?' Only after yes use allowAssetOverlap: true."
+      : "Kollisionsregel: nur gleiches Asset. Bei Konflikten fragen: 'Am gleichen Tag gibt es bereits einen Auftrag für Asset {key} — trotzdem verschieben?' Erst nach Ja allowAssetOverlap: true.",
+    en
+      ? "Never move plannedStart before today (local calendar day, Europe/Berlin). Preserve duration when shifting unless the user specifies new end times."
+      : "plannedStart nie vor heute (Kalendertag Europe/Berlin). Bei Verschieben die Dauer beibehalten, außer der Benutzer nennt explizit neue Endzeiten.",
+    en
+      ? "NEVER propose or confirm planned dates without calling a planning tool first (findPlanningSlots, planSequentialWorkOrderSlots, or analyzeWorkOrderPlanning). Never assign the same start time to multiple orders on the same asset."
+      : "NIEMALS Termine vorschlagen oder bestätigen ohne vorher ein Planungs-Tool (findPlanningSlots, planSequentialWorkOrderSlots, analyzeWorkOrderPlanning). Nie mehreren Aufträgen am gleichen Asset dieselbe Startzeit geben.",
+    en
+      ? "For TWO OR MORE orders on the same asset: always use planSequentialWorkOrderSlots first, present its assignments table, then append [ATHENE_APPLY:rescheduleBatch:[{...},{...}]] with the tool result (include id + orderNumber per row). After explicit confirmation, call rescheduleWorkOrdersBatch with the same assignments — not rescheduleWorkOrder in a loop."
+      : "Bei ZWEI ODER MEHR Aufträgen am gleichen Asset: zuerst planSequentialWorkOrderSlots, Tabelle zeigen, dann [ATHENE_APPLY:rescheduleBatch:[{...},{...}]] mit Tool-Ergebnis (id + orderNumber). Nach Bestätigung rescheduleWorkOrdersBatch — nicht rescheduleWorkOrder einzeln.",
+    en
+      ? "For ONE order: use findPlanningSlots or analyzeWorkOrderPlanning before suggesting; append [ATHENE_APPLY:reschedule:{...}] for a single validated slot."
+      : "Für EINEN Auftrag: vor Vorschlag findPlanningSlots oder analyzeWorkOrderPlanning; bei einem Slot [ATHENE_APPLY:reschedule:{...}].",
+  ];
+  if (calendarData?.viewMode) {
+    lines.push(`Calendar view: ${calendarData.viewMode}`);
+  }
+  if (calendarData?.rangeStart && calendarData?.rangeEnd) {
+    lines.push(`Visible planning window: ${calendarData.rangeStart} – ${calendarData.rangeEnd}`);
+  }
+  return lines.join("\n");
 }
 
 function feedbackSystemPromptAppendix(locale: string, feedbackData: FeedbackContextData): string {
@@ -658,7 +808,9 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "You can never delete records. If a user asks you to delete, remove, or erase records, answer with the fixed refusal and do not call tools.",
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
     "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, or search configuration.",
-    "You may create work orders only through the createWorkOrder tool and only after collecting the required fields from the user.",
+    "You may create work orders only through createWorkOrder or createWorkOrderFromOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
+    "createWorkOrder requires UUID values for assetId, costCenterId, and workgroupId (and responsibleEmployeeId when set). Never pass business keys (assetKey, costCenterKey, employeeKey) or order numbers as IDs. getWorkOrderDetails returns both keys and UUIDs: use the *Id fields for createWorkOrder.",
+    "After the user confirms they want the same data as a template order (possibly with a new name or dates), call the create tool immediately. Do not loop on re-confirming fields already taken from getWorkOrderDetails or createWorkOrderFromOrder.",
     "For questions about counts, totals, or how many work orders exist in a status, use countWorkOrdersByStatus.",
     `Work-order status labels and aliases: ${allowedWorkOrderStatuses
       .map((status) => `${workOrderStatusMetadata[status].de}/${workOrderStatusMetadata[status].en}=${status}`)
@@ -684,6 +836,10 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: Warehouses (Lager) belong to a site. listWarehouseStock lists all materials and quantities stored in one warehouse. searchStock finds stock rows across warehouses and materials.",
     "Program logic: App parameter MT-ACSD (allowChangeStockdata) controls whether existing stock rows are editable in the spare-parts UI. When false (N), existing warehouse/storageLocation/quantity rows are read-only; new stock rows may still be added. Balance changes to existing rows happen only via transactions (RM/RT not fully implemented yet).",
     "Program logic: You have read-only access to spare parts and warehouses. Never create, update, or delete materials, warehouses, or stock lines.",
+    "Program logic: Calendar / planning — NEVER invent or guess plannedStart/plannedEnd. Always call tools first: listWorkOrdersInPlanningWindow (overview), analyzeWorkOrderPlanning (test one interval), findPlanningSlots (one order), planSequentialWorkOrderSlots (two+ orders on same asset, back-to-back). Only present dates returned by tools.",
+    "Program logic: Multiple orders on the same asset must use planSequentialWorkOrderSlots so they do not overlap each other. Then [ATHENE_APPLY:rescheduleBatch:[...]] or rescheduleWorkOrdersBatch after explicit user confirmation. Single order: findPlanningSlots + [ATHENE_APPLY:reschedule:{...}].",
+    "Program logic: Planning collisions apply only when two accessible work orders share the same assetId and their planned intervals overlap. Different assets do not collide. Overlaps are allowed after user confirmation — explain conflicts (asset key/name, conflicting order numbers) and ask e.g. whether to move anyway; on yes call rescheduleWorkOrder or rescheduleWorkOrdersBatch with allowAssetOverlap: true.",
+    "Program logic: Do not ask the user to pick raw slot rows when they already asked to move specific orders — run planSequentialWorkOrderSlots and show the concrete per-order schedule.",
     "All answers and tool requests must respect the user's site restrictions.",
     "Use UI context when a row is selected. If context is missing or ambiguous, ask a short clarifying question.",
     `Known user context: ${JSON.stringify(profile)}`,
@@ -1041,32 +1197,609 @@ async function listWorkOrdersByAsset(
   return rows;
 }
 
-async function localizeSpokenText(text: string, targetLocale: string): Promise<string> {
+type PlanningListRow = PlanningOrderRow & {
+  status: WorkOrderStatus;
+  siteKey: string;
+  siteName: string;
+};
+
+async function fetchPlanningOrdersInWindow(
+  userId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  assetId?: string | null,
+): Promise<PlanningListRow[]> {
+  const params: unknown[] = [userId, rangeStart.toISOString(), rangeEnd.toISOString()];
+  let assetFilter = "";
+  if (assetId) {
+    params.push(assetId);
+    assetFilter = ` AND w."assetId" = $${params.length}::uuid`;
+  }
+  const { rows } = await pool.query<PlanningListRow>(
+    `
+    SELECT
+      w."id",
+      w."orderNumber",
+      w."name",
+      w."assetId",
+      a."key" AS "assetKey",
+      w."plannedStart",
+      w."plannedEnd",
+      w."status",
+      s."key" AS "siteKey",
+      s."name" AS "siteName"
+    FROM "workOrder" w
+    JOIN "asset" a ON a."id" = w."assetId"
+    JOIN "site" s ON s."id" = w."siteId"
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND w."plannedStart" <= $3::timestamptz
+      AND (w."plannedEnd" IS NULL OR w."plannedEnd" >= $2::timestamptz)
+      ${assetFilter}
+    ORDER BY w."plannedStart" ASC, w."orderNumber" ASC
+    `,
+    params,
+  );
+  return rows;
+}
+
+function compactPlanningRow(row: PlanningListRow) {
+  return {
+    id: row.id,
+    orderNumber: row.orderNumber,
+    name: row.name,
+    assetId: row.assetId,
+    assetKey: row.assetKey,
+    siteKey: row.siteKey,
+    siteName: row.siteName,
+    plannedStart: row.plannedStart,
+    plannedEnd: row.plannedEnd,
+    status: row.status,
+  };
+}
+
+async function listWorkOrdersInPlanningWindow(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const rangeStart = parseIsoDatetime(args.rangeStart);
+  const rangeEnd = parseIsoDatetime(args.rangeEnd);
+  if (!rangeStart || !rangeEnd) throw new Error("invalid_body");
+
+  let assetId: string | null = null;
+  if (args.assetId !== undefined && args.assetId !== null) {
+    const raw = String(args.assetId).trim();
+    if (!isUuid(raw)) throw new Error("invalid_asset_id");
+    assetId = raw;
+  } else if (args.orderNumber !== undefined && args.orderNumber !== null) {
+    const resolved = await resolveWorkOrderAccess(userId, { orderNumber: args.orderNumber });
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    const wo = (await getWorkOrderDetails(userId, resolved.id)) as WorkOrderRow & { error?: string };
+    if (wo.error === "not_found") return { error: "not_found" };
+    assetId = wo.assetId;
+  }
+
+  const rows = await fetchPlanningOrdersInWindow(
+    userId,
+    new Date(rangeStart),
+    new Date(rangeEnd),
+    assetId,
+  );
+  return {
+    rangeStart,
+    rangeEnd,
+    assetId,
+    count: rows.length,
+    workOrders: rows.map(compactPlanningRow),
+  };
+}
+
+async function analyzeWorkOrderPlanning(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const resolved = await resolveWorkOrderAccess(userId, {
+    id: args.id,
+    orderNumber: args.orderNumber,
+  });
+  if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+
+  const wo = (await getWorkOrderDetails(userId, resolved.id)) as WorkOrderRow & { error?: string };
+  if (wo.error === "not_found") return { error: "not_found" };
+
+  const proposedStartIso =
+    args.proposedPlannedStart !== undefined && args.proposedPlannedStart !== null
+      ? parseIsoDatetime(args.proposedPlannedStart)
+      : workOrderDatetimeToIso(wo.plannedStart);
+  if (!proposedStartIso) throw new Error("invalid_body");
+
+  const proposedEndIso =
+    args.proposedPlannedEnd !== undefined
+      ? args.proposedPlannedEnd === null
+        ? null
+        : parseIsoDatetime(args.proposedPlannedEnd)
+      : workOrderDatetimeToIso(wo.plannedEnd);
+  if (args.proposedPlannedEnd !== undefined && args.proposedPlannedEnd !== null && !proposedEndIso) {
+    throw new Error("invalid_body");
+  }
+
+  const proposedStart = new Date(proposedStartIso);
+  const proposedEnd = effectivePlannedEnd(proposedStartIso, proposedEndIso);
+
+  const windowStart = new Date(
+    Math.min(proposedStart.getTime(), new Date(wo.plannedStart).getTime()) - 14 * 24 * 60 * 60 * 1000,
+  );
+  const windowEnd = new Date(
+    Math.max(
+      proposedEnd.getTime(),
+      effectivePlannedEnd(wo.plannedStart, workOrderDatetimeToIso(wo.plannedEnd)).getTime(),
+    ) + 14 * 24 * 60 * 60 * 1000,
+  );
+
+  const overlapping = await fetchPlanningOrdersInWindow(userId, windowStart, windowEnd, wo.assetId);
+  const conflicts = getAssetPlanningConflicts(
+    overlapping,
+    wo.assetId,
+    proposedStart,
+    proposedEnd,
+    wo.id,
+  );
+
+  return {
+    workOrder: {
+      id: wo.id,
+      orderNumber: wo.orderNumber,
+      name: wo.name,
+      assetId: wo.assetId,
+      assetKey: wo.assetKey,
+      plannedStart: wo.plannedStart,
+      plannedEnd: wo.plannedEnd,
+    },
+    proposed: {
+      plannedStart: proposedStartIso,
+      plannedEnd: proposedEndIso ?? proposedEnd.toISOString(),
+    },
+    beforeToday: isBeforeLocalToday(proposedStartIso),
+    assetConflictCount: conflicts.length,
+    conflicts,
+    requiresUserConfirmation: conflicts.length > 0,
+    userConfirmationHint:
+      conflicts.length > 0
+        ? "Ask the user if they want to move anyway (same asset overlap). On confirmation, reschedule with allowAssetOverlap: true."
+        : undefined,
+  };
+}
+
+async function findPlanningSlotsTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const rangeStart = parseIsoDatetime(args.rangeStart);
+  const rangeEnd = parseIsoDatetime(args.rangeEnd);
+  if (!rangeStart || !rangeEnd) throw new Error("invalid_body");
+
+  let assetId: string;
+  let excludeWorkOrderId: string | undefined;
+  let anchorStart: Date;
+  let anchorEnd: Date | null;
+  let durationMs: number;
+
+  if (args.orderNumber !== undefined || args.id !== undefined) {
+    const resolved = await resolveWorkOrderAccess(userId, {
+      id: args.id,
+      orderNumber: args.orderNumber,
+    });
+    if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+    const wo = (await getWorkOrderDetails(userId, resolved.id)) as WorkOrderRow & { error?: string };
+    if (wo.error === "not_found") return { error: "not_found" };
+    assetId = wo.assetId;
+    excludeWorkOrderId = wo.id;
+    anchorStart = new Date(wo.plannedStart);
+    const endIso = workOrderDatetimeToIso(wo.plannedEnd);
+    anchorEnd = endIso ? new Date(endIso) : new Date(anchorStart);
+    durationMs = Math.max(0, anchorEnd.getTime() - anchorStart.getTime());
+  } else if (args.assetId !== undefined && isUuid(String(args.assetId).trim())) {
+    assetId = String(args.assetId).trim();
+    anchorStart = new Date(rangeStart);
+    const rawMinutes = args.durationMinutes;
+    if (typeof rawMinutes !== "number" || !Number.isFinite(rawMinutes) || rawMinutes <= 0) {
+      throw new Error("invalid_body");
+    }
+    durationMs = Math.round(rawMinutes) * 60_000;
+    anchorEnd = new Date(anchorStart.getTime() + durationMs);
+  } else {
+    throw new Error("invalid_body");
+  }
+
+  if (args.durationMinutes !== undefined && typeof args.durationMinutes === "number") {
+    durationMs = Math.max(0, Math.round(args.durationMinutes) * 60_000);
+  }
+
+  const maxSlots =
+    typeof args.maxSlots === "number" && Number.isFinite(args.maxSlots)
+      ? Math.min(Math.max(Math.trunc(args.maxSlots), 1), 10)
+      : 5;
+
+  const occupied = await fetchPlanningOrdersInWindow(
+    userId,
+    new Date(rangeStart),
+    new Date(rangeEnd),
+    assetId,
+  );
+
+  const slots = findFreePlanningSlots({
+    assetId,
+    durationMs,
+    rangeStart: new Date(rangeStart),
+    rangeEnd: new Date(rangeEnd),
+    occupiedOrders: occupied,
+    excludeWorkOrderId,
+    anchorPlannedStart: anchorStart,
+    anchorPlannedEnd: anchorEnd,
+    maxSlots,
+  });
+
+  return {
+    assetId,
+    rangeStart,
+    rangeEnd,
+    durationMinutes: Math.round(durationMs / 60_000),
+    slots,
+  };
+}
+
+function parseOrderNumberList(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const nums: number[] = [];
+  for (const item of value) {
+    if (typeof item === "number" && Number.isFinite(item)) {
+      nums.push(Math.trunc(item));
+    } else if (typeof item === "string" && /^\d+$/.test(item.trim())) {
+      nums.push(Number(item.trim()));
+    } else {
+      return null;
+    }
+  }
+  return nums;
+}
+
+async function planSequentialWorkOrderSlotsTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const rangeStart = parseIsoDatetime(args.rangeStart);
+  const rangeEnd = parseIsoDatetime(args.rangeEnd);
+  if (!rangeStart || !rangeEnd) throw new Error("invalid_body");
+
+  const orderNumbers = parseOrderNumberList(args.orderNumbers);
+  if (!orderNumbers) throw new Error("invalid_body");
+
+  const resolvedOrders: OrderToPlanSequentially[] = [];
+  let assetId: string | null = null;
+  let assetKey: string | undefined;
+
+  for (const orderNumber of orderNumbers) {
+    const resolved = await resolveWorkOrderAccess(userId, { orderNumber });
+    if (!resolved.ok) {
+      return { error: resolved.error, matches: resolved.matches, orderNumber };
+    }
+    const wo = (await getWorkOrderDetails(userId, resolved.id)) as WorkOrderRow & { error?: string };
+    if (wo.error === "not_found") return { error: "not_found", orderNumber };
+    if (assetId === null) {
+      assetId = wo.assetId;
+      assetKey = wo.assetKey;
+    } else if (assetId !== wo.assetId) {
+      return {
+        error: "mixed_assets",
+        hint: "planSequentialWorkOrderSlots requires all orders on the same asset. Plan each asset group separately.",
+      };
+    }
+    const start = new Date(wo.plannedStart);
+    const endIso = workOrderDatetimeToIso(wo.plannedEnd);
+    const end = endIso ? new Date(endIso) : new Date(start);
+    const durationMs = Math.max(0, end.getTime() - start.getTime());
+    resolvedOrders.push({
+      id: wo.id,
+      orderNumber: wo.orderNumber,
+      name: wo.name,
+      durationMs: durationMs > 0 ? durationMs : 24 * 60 * 60 * 1000,
+      plannedStart: wo.plannedStart,
+      plannedEnd: wo.plannedEnd,
+    });
+  }
+
+  resolvedOrders.sort((a, b) => a.orderNumber - b.orderNumber);
+
+  const occupied = await fetchPlanningOrdersInWindow(
+    userId,
+    new Date(rangeStart),
+    new Date(rangeEnd),
+    assetId!,
+  );
+
+  const plan = planSequentialWorkOrderSlots({
+    assetId: assetId!,
+    orders: resolvedOrders,
+    rangeStart: new Date(rangeStart),
+    rangeEnd: new Date(rangeEnd),
+    occupiedOrders: occupied,
+    preserveTimeOfDayFromFirst: true,
+  });
+
+  if (!plan.ok) {
+    return {
+      ok: false,
+      error: plan.error,
+      assetId,
+      assetKey,
+      partialAssignments: plan.planned,
+      unplannedOrderNumbers: plan.unplannedOrderNumbers,
+      hint: "Extend rangeEnd or reduce the number of orders; slots are packed sequentially without asset overlap.",
+    };
+  }
+
+  return {
+    ok: true,
+    assetId,
+    assetKey,
+    rangeStart,
+    rangeEnd,
+    assignments: plan.assignments,
+    hint: "Present this table to the user. For UI apply, append [ATHENE_APPLY:rescheduleBatch:[...]] with id, orderNumber, plannedStart, plannedEnd from assignments.",
+  };
+}
+
+async function rescheduleWorkOrdersBatchTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const raw = args.assignments;
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error("invalid_body");
+
+  const batch: Array<{ workOrderId: string; plannedStart: string; plannedEnd: string | null }> =
+    [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object") throw new Error("invalid_body");
+    const row = entry as Record<string, unknown>;
+    let workOrderId =
+      typeof row.id === "string" && isUuid(row.id.trim()) ? row.id.trim() : undefined;
+    if (!workOrderId && row.orderNumber !== undefined) {
+      const resolved = await resolveWorkOrderAccess(userId, { orderNumber: row.orderNumber });
+      if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+      workOrderId = resolved.id;
+    }
+    if (!workOrderId) throw new Error("invalid_body");
+    const plannedStart = parseIsoDatetime(row.plannedStart);
+    const plannedEnd =
+      row.plannedEnd === null || row.plannedEnd === undefined
+        ? null
+        : parseIsoDatetime(row.plannedEnd);
+    if (!plannedStart || (row.plannedEnd !== null && row.plannedEnd !== undefined && !plannedEnd)) {
+      throw new Error("invalid_body");
+    }
+    batch.push({ workOrderId, plannedStart, plannedEnd });
+  }
+
+  const allowAssetOverlap = args.allowAssetOverlap === true;
+  const result = await updateWorkOrderPlanningBatch(userId, batch, {
+    source: "assistant",
+    allowAssetOverlap,
+  });
+  if (!result.ok) {
+    return {
+      error: result.error,
+      conflicts: result.conflicts,
+      failedOrderNumber: result.failedOrderNumber,
+      hint:
+        result.error === "asset_conflict"
+          ? "Re-run planSequentialWorkOrderSlots and use its assignments verbatim."
+          : undefined,
+    };
+  }
+  return {
+    ok: true,
+    updatedCount: result.rows.length,
+    workOrders: result.rows.map((row) => ({
+      id: row.id,
+      orderNumber: row.orderNumber,
+      name: row.name,
+      plannedStart: row.plannedStart,
+      plannedEnd: row.plannedEnd,
+    })),
+  };
+}
+
+async function rescheduleWorkOrderTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const resolved = await resolveWorkOrderAccess(userId, {
+    id: args.id,
+    orderNumber: args.orderNumber,
+  });
+  if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+
+  const plannedStart = parseIsoDatetime(args.plannedStart);
+  const plannedEnd =
+    args.plannedEnd === null || args.plannedEnd === undefined
+      ? null
+      : parseIsoDatetime(args.plannedEnd);
+  if (!plannedStart || (args.plannedEnd !== null && args.plannedEnd !== undefined && !plannedEnd)) {
+    throw new Error("invalid_body");
+  }
+
+  const allowAssetOverlap = args.allowAssetOverlap === true;
+  const result = await updateWorkOrderPlanning(userId, resolved.id, plannedStart, plannedEnd, {
+    source: "assistant",
+    allowAssetOverlap,
+  });
+  if (!result.ok) {
+    return {
+      error: result.error,
+      conflicts: result.conflicts,
+      hint:
+        result.error === "asset_conflict"
+          ? "Ask the user if they want to move anyway (same asset). On yes, call again with allowAssetOverlap: true."
+          : result.error === "before_today"
+            ? "plannedStart must not be before today (Europe/Berlin calendar day)."
+            : undefined,
+    };
+  }
+  return {
+    ok: true,
+    workOrder: {
+      id: result.row.id,
+      orderNumber: result.row.orderNumber,
+      name: result.row.name,
+      plannedStart: result.row.plannedStart,
+      plannedEnd: result.row.plannedEnd,
+      plannedDurationMinutes: result.row.plannedDurationMinutes,
+    },
+  };
+}
+
+type SpokenLocaleCode = "de" | "en";
+
+function targetLocaleToCode(targetLocale: string): SpokenLocaleCode {
+  return targetLocale.toLowerCase().startsWith("en") ? "en" : "de";
+}
+
+function normalizeDetectedLanguage(language: string | undefined | null): SpokenLocaleCode | null {
+  if (!language?.trim()) return null;
+  const l = language.trim().toLowerCase();
+  if (l === "de" || l.startsWith("german") || l === "ger") return "de";
+  if (l === "en" || l.startsWith("english") || l === "eng") return "en";
+  if (l.startsWith("de")) return "de";
+  if (l.startsWith("en")) return "en";
+  return null;
+}
+
+function extensionForMimeType(mimeType: string): string {
+  const m = mimeType.toLowerCase();
+  if (m.includes("webm")) return "webm";
+  if (m.includes("mp4") || m.includes("m4a")) return "m4a";
+  if (m.includes("wav")) return "wav";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  if (m.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+async function localizeSpokenText(
+  text: string,
+  targetLocale: string,
+  options?: { sourceLanguage?: string | null; mode?: "normalize" | "translate" },
+): Promise<string> {
   const trimmed = text.trim();
   if (!trimmed) return "";
   if (!openai) throw new Error("openai_not_configured");
-  const targetLang = targetLocale.toLowerCase().startsWith("en") ? "English" : "German";
+  const targetCode = targetLocaleToCode(targetLocale);
+  const targetLang = targetCode === "en" ? "English" : "German";
+  const mode = options?.mode ?? "translate";
+  const sourceHint = options?.sourceLanguage?.trim()
+    ? `Source language (from speech recognition): ${options.sourceLanguage}.`
+    : "";
+
+  const systemLines =
+    mode === "normalize"
+      ? [
+          "You normalize dictated maintenance/CMMS feedback text.",
+          `Output ONLY the final text in ${targetLang} — no quotes, no explanation.`,
+          sourceHint,
+          "The text is already in the target language. Fix punctuation and capitalization only.",
+          "Do NOT change meaning, rephrase, or replace technical terms. Max 2000 characters.",
+        ]
+      : [
+          "You translate dictated maintenance/CMMS feedback text faithfully.",
+          `Output ONLY the final text in ${targetLang} — no quotes, no explanation.`,
+          sourceHint,
+          "Translate meaning faithfully for a technician audience. Do NOT paraphrase creatively.",
+          "Preserve technical terms (e.g. leakage → Leckage/Undichtigkeit, main pump → Hauptpumpe, seal → Dichtung).",
+          "Keep asset names, numbers, and order references unchanged. Max 2000 characters.",
+        ];
+
   const completion = await openai.chat.completions.create({
     model: chatModel,
-    temperature: 0.2,
+    temperature: 0,
     messages: [
-      {
-        role: "system",
-        content: [
-          "You normalize dictated maintenance feedback text for a CMMS.",
-          `Output ONLY the final text in ${targetLang} — no quotes, no explanation.`,
-          "Detect the spoken language, translate if needed, fix punctuation and capitalization lightly.",
-          "Preserve technical terms, asset names, and numbers. Max 2000 characters.",
-        ].join(" "),
-      },
+      { role: "system", content: systemLines.join(" ") },
       { role: "user", content: trimmed.slice(0, 4000) },
     ],
   });
   return (completion.choices[0]?.message?.content ?? trimmed).trim().slice(0, 2000);
 }
 
+type WhisperVerboseJson = {
+  text?: string;
+  language?: string;
+};
+
+async function transcribeSpokenAudio(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ transcript: string; detectedLanguage: string | null }> {
+  if (!openai) throw new Error("openai_not_configured");
+  if (!buffer.length) throw new Error("empty_audio");
+
+  const ext = extensionForMimeType(mimeType);
+  const stream = Readable.from(buffer) as Readable & { path: string };
+  stream.path = `spoken.${ext}`;
+
+  const result = (await openai.audio.transcriptions.create({
+    file: stream as Parameters<typeof openai.audio.transcriptions.create>[0]["file"],
+    model: whisperModel,
+    response_format: "verbose_json",
+  })) as WhisperVerboseJson;
+
+  const transcript = (result.text ?? "").trim();
+  if (!transcript) throw new Error("empty_transcript");
+  return { transcript, detectedLanguage: result.language ?? null };
+}
+
+async function processSpokenAudio(
+  buffer: Buffer,
+  mimeType: string,
+  targetLocale: string,
+): Promise<{ text: string; transcript: string; detectedLanguage: string | null }> {
+  const { transcript, detectedLanguage } = await transcribeSpokenAudio(buffer, mimeType);
+  const targetCode = targetLocaleToCode(targetLocale);
+  const detectedCode = normalizeDetectedLanguage(detectedLanguage);
+  const sameLanguage = detectedCode !== null && detectedCode === targetCode;
+
+  const text = await localizeSpokenText(transcript, targetLocale, {
+    sourceLanguage: detectedLanguage,
+    mode: sameLanguage ? "normalize" : "translate",
+  });
+
+  return { text, transcript, detectedLanguage };
+}
+
 async function loadUiContextFacts(userId: string, context: UiContext | null): Promise<unknown | null> {
-  if (!context?.id || !isUuid(context.id)) return null;
+  if (!context) return null;
+
+  if (context.type === "calendar") {
+    const calendarView = getCalendarContextData(context);
+    const calendarNotes = [
+      "Calendar UI context: use planning tools for the visible window and selected work order when present.",
+      "Apply-meta [ATHENE_APPLY:reschedule:{...}] lets the user confirm a proposed plannedStart/plannedEnd in the UI.",
+    ];
+    if (context.id && isUuid(context.id)) {
+      const workOrder = await getWorkOrderDetails(userId, context.id);
+      if ((workOrder as { error?: string }).error === "not_found") {
+        return { error: "context_not_accessible" };
+      }
+      return {
+        contextType: "calendar",
+        calendarView,
+        workOrder,
+        semanticNotes: calendarNotes,
+      };
+    }
+    if (calendarView) {
+      return { contextType: "calendar", calendarView, semanticNotes: calendarNotes };
+    }
+    return null;
+  }
+
+  if (!context.id || !isUuid(context.id)) return null;
   if (context.type === "workOrder" || context.type === "monitoring") {
     const workOrder = await getWorkOrderDetails(userId, context.id);
     if ((workOrder as { error?: string }).error === "not_found") return { error: "context_not_accessible" };
@@ -1782,6 +2515,84 @@ async function assertResponsibleEmployeeContext(
   if (!member.rows[0]) throw new Error("responsible_employee_not_in_workgroup");
 }
 
+async function createWorkOrderFromOrder(userId: string, args: Record<string, unknown>): Promise<unknown> {
+  const name = readString(args.name, 200);
+  if (!name) throw new Error("invalid_body");
+
+  const resolved = await resolveWorkOrderAccess(userId, { orderNumber: args.templateOrderNumber });
+  if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+
+  const templateRaw = await getWorkOrderDetails(userId, resolved.id);
+  if ((templateRaw as { error?: string }).error === "not_found") {
+    return { error: "not_found" };
+  }
+  const template = templateRaw as WorkOrderRow;
+  if (!template.workgroupId) {
+    return {
+      error: "template_missing_workgroup",
+      hint: "The template work order has no workgroup; createWorkOrder cannot copy it.",
+    };
+  }
+
+  const plannedStart =
+    args.plannedStart !== undefined && args.plannedStart !== null
+      ? parseIsoDatetime(args.plannedStart)
+      : workOrderDatetimeToIso(template.plannedStart);
+  if (!plannedStart) throw new Error("invalid_body");
+
+  const plannedEnd =
+    args.plannedEnd !== undefined
+      ? args.plannedEnd === null
+        ? null
+        : parseIsoDatetime(args.plannedEnd)
+      : workOrderDatetimeToIso(template.plannedEnd);
+
+  if (args.plannedEnd !== undefined && args.plannedEnd !== null && !plannedEnd) {
+    throw new Error("invalid_body");
+  }
+
+  const rawDuration = args.plannedDurationMinutes;
+  const plannedDurationMinutes =
+    rawDuration !== undefined
+      ? rawDuration === null
+        ? null
+        : typeof rawDuration === "number" && Number.isInteger(rawDuration) && rawDuration >= 0
+          ? rawDuration
+          : null
+      : template.plannedDurationMinutes;
+  if (rawDuration !== undefined && rawDuration !== null && plannedDurationMinutes === null) {
+    throw new Error("invalid_body");
+  }
+
+  const description =
+    args.description !== undefined ? readOptionalString(args.description, 2000) : template.description;
+
+  const responsibleEmployeeId =
+    args.responsibleEmployeeId !== undefined
+      ? readOptionalString(args.responsibleEmployeeId, 80)
+      : template.responsibleEmployeeId;
+  if (responsibleEmployeeId !== null && !isUuid(responsibleEmployeeId)) {
+    throw new Error("invalid_body");
+  }
+
+  const orderType = isOrderType(args.orderType) ? args.orderType : template.orderType;
+
+  return createWorkOrder(userId, {
+    name,
+    description,
+    assetId: template.assetId,
+    costCenterId: template.costCenterId,
+    plannedStart,
+    plannedEnd,
+    plannedDurationMinutes,
+    orderType,
+    responsibleEmployeeId,
+    workgroupId: template.workgroupId,
+    classificationId: template.classificationId,
+    originalWo: template.id,
+  });
+}
+
 async function createWorkOrder(userId: string, args: Record<string, unknown>): Promise<unknown> {
   const parsed = parseCreateWorkOrderArgs(args);
   const row = await withAuditContext(
@@ -1818,13 +2629,27 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
         "work_order",
       );
 
+      if (parsed.originalWo) {
+        const templateAccess = await client.query<{ id: string }>(
+          `
+          SELECT "id"
+          FROM "workOrder"
+          WHERE "id" = $1::uuid
+            AND ${siteAccessSql('"siteId"', "$2")}
+          LIMIT 1
+          `,
+          [parsed.originalWo, userId],
+        );
+        if (!templateAccess.rows[0]) throw new Error("invalid_original_wo");
+      }
+
       const { rows } = await client.query<WorkOrderRow>(
         `
         WITH inserted AS (
           INSERT INTO "workOrder"
-            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId")
+            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId", "originalWo")
           VALUES
-            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
+            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid)
           RETURNING *
         )
         ${selectWorkOrdersSql.replace('FROM "workOrder" w', 'FROM inserted w')}
@@ -1842,6 +2667,7 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
           parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
+          parsed.originalWo,
         ],
       );
       return rows[0] ?? null;
@@ -2111,21 +2937,193 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "listWorkOrdersInPlanningWindow",
+      description:
+        "List accessible work orders whose planned interval overlaps a date range (calendar window). Optional filter by assetId or orderNumber (resolves that order's asset).",
+      parameters: {
+        type: "object",
+        properties: {
+          rangeStart: { type: "string", description: "ISO 8601 range start (inclusive overlap)." },
+          rangeEnd: { type: "string", description: "ISO 8601 range end (inclusive overlap)." },
+          assetId: { type: ["string", "null"], description: "Optional asset UUID filter." },
+          orderNumber: {
+            type: ["string", "null"],
+            description: "Optional order number; filters to that order's asset.",
+          },
+        },
+        required: ["rangeStart", "rangeEnd"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "analyzeWorkOrderPlanning",
+      description:
+        "Analyze planning for one work order: current or proposed plannedStart/plannedEnd, asset-only conflicts, and whether the start is before today.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
+          proposedPlannedStart: { type: ["string", "null"], description: "ISO datetime to test." },
+          proposedPlannedEnd: { type: ["string", "null"], description: "ISO datetime to test." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "findPlanningSlots",
+      description:
+        "Find free planning slots on one asset in a date range without asset conflicts. Provide orderNumber or id (uses that order's duration and time-of-day anchor) OR assetId with durationMinutes.",
+      parameters: {
+        type: "object",
+        properties: {
+          rangeStart: { type: "string" },
+          rangeEnd: { type: "string" },
+          id: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
+          assetId: { type: ["string", "null"] },
+          durationMinutes: {
+            type: ["integer", "null"],
+            description: "Required with assetId when no order reference.",
+          },
+          maxSlots: { type: ["integer", "null"], description: "Default 5, max 10." },
+        },
+        required: ["rangeStart", "rangeEnd"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "planSequentialWorkOrderSlots",
+      description:
+        "REQUIRED before proposing dates for 2+ work orders on the same asset. Returns a validated back-to-back schedule (no mutual overlap, no conflict with other orders on that asset). Provide orderNumbers array, rangeStart, rangeEnd (ISO). Always use this instead of guessing the same start time for multiple orders.",
+      parameters: {
+        type: "object",
+        properties: {
+          orderNumbers: {
+            type: "array",
+            items: { type: ["string", "integer"] },
+            description: "Order numbers to schedule sequentially, e.g. [100009, 100024, 100025].",
+          },
+          rangeStart: { type: "string" },
+          rangeEnd: { type: "string" },
+        },
+        required: ["orderNumbers", "rangeStart", "rangeEnd"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rescheduleWorkOrdersBatch",
+      description:
+        "Apply plannedStart/plannedEnd for multiple work orders in one validated batch. Use assignments from planSequentialWorkOrderSlots after explicit user confirmation. Prefer this over multiple rescheduleWorkOrder calls.",
+      parameters: {
+        type: "object",
+        properties: {
+          assignments: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: ["string", "null"] },
+                orderNumber: { type: ["string", "integer", "null"] },
+                plannedStart: { type: "string" },
+                plannedEnd: { type: ["string", "null"] },
+              },
+              required: ["plannedStart", "plannedEnd"],
+            },
+          },
+          allowAssetOverlap: {
+            type: "boolean",
+            description: "Set true only after the user confirmed moving despite same-asset overlaps.",
+          },
+        },
+        required: ["assignments"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "rescheduleWorkOrder",
+      description:
+        "Move ONE work order only. For 2+ orders on the same asset use planSequentialWorkOrderSlots + rescheduleWorkOrdersBatch instead. Call only after explicit user confirmation with tool-validated dates.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: ["string", "null"] },
+          orderNumber: { type: ["string", "null"] },
+          plannedStart: { type: "string", description: "ISO 8601 datetime." },
+          plannedEnd: { type: ["string", "null"], description: "ISO 8601 datetime." },
+          allowAssetOverlap: {
+            type: "boolean",
+            description: "Set true only after the user confirmed moving despite same-asset overlap.",
+          },
+        },
+        required: ["plannedStart"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createWorkOrderFromOrder",
+      description:
+        "Create a new work order by copying reference fields (asset, cost center, workgroup, classification, dates, responsible employee, order type) from an existing accessible template order. Use when the user asks for the same components as another Auftrag. Provide templateOrderNumber (e.g. 100015) and the new name; optional overrides for description, plannedStart, plannedEnd, plannedDurationMinutes, orderType, responsibleEmployeeId.",
+      parameters: {
+        type: "object",
+        properties: {
+          templateOrderNumber: {
+            type: ["string", "integer"],
+            description: "Source work order number to copy from, e.g. 100015.",
+          },
+          name: { type: "string", description: "Name/title for the new work order." },
+          description: { type: ["string", "null"] },
+          plannedStart: {
+            type: ["string", "null"],
+            description: "ISO datetime override; omit to copy from template.",
+          },
+          plannedEnd: { type: ["string", "null"] },
+          plannedDurationMinutes: { type: ["integer", "null"] },
+          orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
+          responsibleEmployeeId: {
+            type: ["string", "null"],
+            description: "Employee UUID override; omit to copy from template.",
+          },
+        },
+        required: ["templateOrderNumber", "name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "createWorkOrder",
-      description: "Create a work order after the user provided all required fields. Never use for master data.",
+      description:
+        "Create a work order with explicit UUID references. assetId, costCenterId, and workgroupId must be UUIDs from getWorkOrderDetails (*Id fields), never business keys (assetKey, costCenterKey). Prefer createWorkOrderFromOrder when copying an existing order.",
       parameters: {
         type: "object",
         properties: {
           name: { type: "string" },
           description: { type: ["string", "null"] },
-          assetId: { type: "string" },
-          costCenterId: { type: "string" },
-          plannedStart: { type: "string" },
+          assetId: { type: "string", description: "Asset UUID, not assetKey." },
+          costCenterId: { type: "string", description: "Cost center UUID, not costCenterKey." },
+          plannedStart: { type: "string", description: "ISO 8601 datetime." },
           plannedEnd: { type: ["string", "null"] },
           plannedDurationMinutes: { type: ["integer", "null"] },
           orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
-          responsibleEmployeeId: { type: ["string", "null"] },
-          workgroupId: { type: "string" },
+          responsibleEmployeeId: {
+            type: ["string", "null"],
+            description: "Employee UUID, not employeeKey.",
+          },
+          workgroupId: { type: "string", description: "Workgroup UUID, not workgroupKey." },
           classificationId: { type: ["string", "null"] },
         },
         required: ["name", "assetId", "costCenterId", "plannedStart", "orderType", "workgroupId"],
@@ -2213,8 +3211,65 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
     if (!isUuid(args.sourceId)) throw new Error("invalid_id");
     return readDocumentText(userId, args.sourceKind, args.sourceId, args.documentId);
   }
+  if (name === "listWorkOrdersInPlanningWindow") {
+    return listWorkOrdersInPlanningWindow(userId, args);
+  }
+  if (name === "analyzeWorkOrderPlanning") {
+    return analyzeWorkOrderPlanning(userId, args);
+  }
+  if (name === "findPlanningSlots") {
+    return findPlanningSlotsTool(userId, args);
+  }
+  if (name === "planSequentialWorkOrderSlots") {
+    return planSequentialWorkOrderSlotsTool(userId, args);
+  }
+  if (name === "rescheduleWorkOrdersBatch") {
+    return rescheduleWorkOrdersBatchTool(userId, args);
+  }
+  if (name === "rescheduleWorkOrder") {
+    return rescheduleWorkOrderTool(userId, args);
+  }
+  if (name === "createWorkOrderFromOrder") return createWorkOrderFromOrder(userId, args);
   if (name === "createWorkOrder") return createWorkOrder(userId, args);
   return { error: "unknown_tool" };
+}
+
+function createWorkOrderToolErrorPayload(toolName: string, message: string): Record<string, unknown> {
+  const payload: Record<string, unknown> = { error: message };
+  if (
+    toolName === "rescheduleWorkOrder" ||
+    toolName === "rescheduleWorkOrdersBatch" ||
+    toolName === "planSequentialWorkOrderSlots" ||
+    toolName === "analyzeWorkOrderPlanning" ||
+    toolName === "findPlanningSlots"
+  ) {
+    if (message === "before_today") {
+      payload.hint = "plannedStart must not be before today (Europe/Berlin calendar day).";
+    } else if (message === "asset_conflict") {
+      payload.hint =
+        "Ask the user if they want to move anyway (same asset). On yes, retry with allowAssetOverlap: true.";
+    } else if (message === "invalid_body") {
+      payload.hint = "Provide ISO plannedStart/plannedEnd and orderNumber or id.";
+    } else if (message === "mixed_assets") {
+      payload.hint = "Split the request per asset and run planSequentialWorkOrderSlots for each asset.";
+    } else if (message === "cannot_fit_all") {
+      payload.hint = "Widen rangeEnd or plan fewer orders per batch.";
+    }
+    return payload;
+  }
+  if (toolName !== "createWorkOrder" && toolName !== "createWorkOrderFromOrder") return payload;
+  if (message === "invalid_body") {
+    payload.hint =
+      "Use UUID fields assetId, costCenterId, workgroupId from getWorkOrderDetails (not assetKey/costCenterKey/employeeKey). When copying an existing order, use createWorkOrderFromOrder with templateOrderNumber and name.";
+  } else if (message === "site_access_denied") {
+    payload.hint =
+      "The template order belongs to a site that is not your current working site and site change is not allowed.";
+  } else if (message === "responsible_employee_not_in_workgroup") {
+    payload.hint = "The responsible employee must be a member of the selected workgroup.";
+  } else if (message === "asset_cost_center_mismatch") {
+    payload.hint = "Asset and cost center must belong to the same site.";
+  }
+  return payload;
 }
 
 router.post("/localize-spoken-text", async (req: Request, res: Response) => {
@@ -2238,13 +3293,54 @@ router.post("/localize-spoken-text", async (req: Request, res: Response) => {
       res.status(503).json({ error: "openai_not_configured" });
       return;
     }
-    const localized = await localizeSpokenText(text, targetLocale);
+    const localized = await localizeSpokenText(text, targetLocale, { mode: "translate" });
     res.json({ text: localized });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }
 });
+
+router.post(
+  "/transcribe-spoken",
+  spokenAudioUpload.single("audio"),
+  async (req: Request, res: Response) => {
+    const userId = req.session.userId;
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      res.status(400).json({ error: "invalid_body" });
+      return;
+    }
+    const targetLocale =
+      typeof req.body?.targetLocale === "string" && req.body.targetLocale.trim()
+        ? req.body.targetLocale.trim()
+        : "de";
+    try {
+      if (!openai) {
+        res.status(503).json({ error: "openai_not_configured" });
+        return;
+      }
+      const result = await processSpokenAudio(file.buffer, file.mimetype || "application/octet-stream", targetLocale);
+      res.json(result);
+    } catch (err) {
+      const message = (err as Error).message;
+      if (message === "openai_not_configured") {
+        res.status(503).json({ error: "openai_not_configured" });
+        return;
+      }
+      if (message === "empty_audio" || message === "empty_transcript") {
+        res.status(400).json({ error: "invalid_body" });
+        return;
+      }
+      console.error(err);
+      res.status(500).json({ error: "internal_error" });
+    }
+  },
+);
 
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
@@ -2307,11 +3403,14 @@ router.post("/", async (req: Request, res: Response) => {
     const contextFacts = await loadUiContextFacts(userId, clientContext);
     const vectorSnippets = await retrieveRelevantChunks(userId, message);
     const feedbackData = getFeedbackContextData(clientContext);
+    const calendarData =
+      clientContext?.type === "calendar" ? getCalendarContextData(clientContext) : null;
     const contextBlock = [
       clientContext ? `Current UI context: ${JSON.stringify(clientContext)}` : "",
       contextFacts ? `Authoritative structured context facts: ${JSON.stringify(contextFacts)}` : "",
       vectorSnippets ? `Relevant vector snippets (discovery hints — confirm with tools when needed):\n${vectorSnippets}` : "",
       feedbackData ? feedbackSystemPromptAppendix(locale, feedbackData) : "",
+      calendarData ? calendarSystemPromptAppendix(locale, calendarData) : "",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -2328,7 +3427,7 @@ router.post("/", async (req: Request, res: Response) => {
       tool_choice: "auto",
     });
 
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       const choice = completion.choices[0]?.message;
       const toolCalls = choice?.tool_calls ?? [];
       if (!toolCalls.length) break;
@@ -2343,10 +3442,11 @@ router.post("/", async (req: Request, res: Response) => {
             content: JSON.stringify(result),
           });
         } catch (err) {
+          const message = (err as Error).message || "tool_error";
           openAiMessages.push({
             role: "tool",
             tool_call_id: call.id,
-            content: JSON.stringify({ error: (err as Error).message || "tool_error" }),
+            content: JSON.stringify(createWorkOrderToolErrorPayload(call.function.name, message)),
           });
         }
       }

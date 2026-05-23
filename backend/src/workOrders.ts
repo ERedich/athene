@@ -12,7 +12,7 @@ import {
 } from "./assistant/embedding/index.js";
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
-import { withAuditContext } from "./auditContext.js";
+import { withAuditContext, type AuditSessionMeta } from "./auditContext.js";
 import { pool } from "./db.js";
 import {
   DOCUMENT_MAX_BYTES,
@@ -33,6 +33,17 @@ import {
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
 import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
+import {
+  calendarDayKey,
+  computePlannedDurationMinutes,
+  DEFAULT_PLANNING_TIME_ZONE,
+  effectivePlannedEnd,
+  getAssetPlanningConflicts,
+  isBeforeLocalToday,
+  validateBatchPlanningAssignments,
+  type PlanningConflict,
+  type PlanningOrderRow,
+} from "./workOrderScheduling.js";
 
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
 type WorkOrderStatus =
@@ -86,6 +97,9 @@ type WorkOrderRow = {
   assetDocumentCount: number;
   assignedEmployeeCount: number;
   transactionCount: number;
+  originalWo: string | null;
+  originalWoOrderNumber: number | null;
+  originalWoName: string | null;
 };
 
 type WorkOrderAssignmentRow = {
@@ -110,6 +124,7 @@ type ParsedBody = {
   responsibleEmployeeId: string | null;
   workgroupId: string;
   classificationId: string | null;
+  originalWo: string | null;
 };
 
 type AssetSiteRow = QueryResultRow & { id: string; siteId: string };
@@ -290,6 +305,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
   if (classificationIdRaw !== null && !isUuid(classificationIdRaw)) return null;
 
+  const originalWoRaw = readTrimmedOptionalString(o.originalWo);
+  if (originalWoRaw !== null && !isUuid(originalWoRaw)) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -302,6 +320,7 @@ function parseBody(body: unknown): ParsedBody | null {
     responsibleEmployeeId,
     workgroupId: workgroupIdTrimmed,
     classificationId: classificationIdRaw,
+    originalWo: originalWoRaw,
   };
 }
 
@@ -380,6 +399,9 @@ const selectWorkOrdersSql = `
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
+    w."originalWo",
+    orig."orderNumber" AS "originalWoOrderNumber",
+    orig."name" AS "originalWoName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -396,6 +418,7 @@ const selectWorkOrdersSql = `
   LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
+  LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${workOrderDocumentCountSubquery}
@@ -586,6 +609,66 @@ router.get("/", async (req: Request, res: Response) => {
       [userId, ...built.params],
     );
     res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/planning-conflicts", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const plannedStart = parseIsoDatetime(req.query.plannedStart);
+  const plannedEnd =
+    req.query.plannedEnd === undefined || req.query.plannedEnd === ""
+      ? null
+      : parseIsoDatetime(req.query.plannedEnd);
+  if (!plannedStart || (req.query.plannedEnd && !plannedEnd)) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const check = await checkWorkOrderAssetPlanningConflicts(userId, id, plannedStart, plannedEnd);
+    if ("error" in check) {
+      res.status(check.error === "not_found" ? 404 : 400).json({ error: check.error });
+      return;
+    }
+    res.json(check);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const access = await getAccessibleWorkOrder(userId, id);
+    if (!access) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const row = await getWorkOrderRowForRealtime(id);
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
   } catch (err) {
     sendPgError(res, err);
   }
@@ -1400,13 +1483,18 @@ router.post("/", async (req: Request, res: Response) => {
         "work_order",
       );
 
+      if (parsed.originalWo) {
+        const template = await getAccessibleWorkOrder(meta.userId, parsed.originalWo);
+        if (!template) throw new Error("invalid_original_wo");
+      }
+
       const { rows } = await client.query<WorkOrderRow>(
         `
         WITH inserted AS (
           INSERT INTO "workOrder"
-            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId")
+            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId", "originalWo")
           VALUES
-            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
+            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid)
           RETURNING *
         )
         SELECT
@@ -1441,6 +1529,9 @@ router.post("/", async (req: Request, res: Response) => {
           i."workgroupId",
           wg."key" AS "workgroupKey",
           wg."name" AS "workgroupName",
+          i."originalWo",
+          orig."orderNumber" AS "originalWoOrderNumber",
+          orig."name" AS "originalWoName",
           i."createdAt",
           i."updatedAt",
           COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
@@ -1457,6 +1548,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "employee" re ON re."id" = i."responsibleEmployeeId"
         LEFT JOIN "employee" dbe ON dbe."id" = i."doneBy"
         LEFT JOIN "workgroup" wg ON wg."id" = i."workgroupId"
+        LEFT JOIN "workOrder" orig ON orig."id" = i."originalWo"
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         ${workOrderAssetDocumentCountSubqueryOnInsert}
@@ -1474,6 +1566,7 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
+          parsed.originalWo,
         ],
       );
       return rows[0] ?? null;
@@ -1529,6 +1622,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "responsible_employee_not_in_workgroup" });
       return;
     }
+    if (message === "invalid_original_wo") {
+      res.status(400).json({ error: "invalid_original_wo" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -1546,6 +1643,35 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 
   try {
+    const userId = req.session.userId;
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const allowAssetOverlap = readAllowAssetOverlap(req.body);
+    if (!allowAssetOverlap) {
+      const check = await checkWorkOrderAssetPlanningConflicts(
+        userId,
+        id,
+        parsed.plannedStart,
+        parsed.plannedEnd,
+      );
+      if ("error" in check) {
+        res.status(check.error === "not_found" ? 404 : 400).json({ error: check.error });
+        return;
+      }
+      if (check.conflicts.length > 0) {
+        res.status(409).json({
+          error: "asset_conflict",
+          assetKey: check.assetKey,
+          assetName: check.assetName,
+          conflicts: check.conflicts,
+          sameDayConflict: check.sameDayConflict,
+        });
+        return;
+      }
+    }
+
     const meta = auditMeta(req);
     const previousAsset = await pool.query<{ assetId: string }>(
       `
@@ -1653,6 +1779,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."workgroupId",
           wg."key" AS "workgroupKey",
           wg."name" AS "workgroupName",
+          u."originalWo",
+          orig."orderNumber" AS "originalWoOrderNumber",
+          orig."name" AS "originalWoName",
           u."createdAt",
           u."updatedAt",
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
@@ -1669,6 +1798,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
         LEFT JOIN "employee" dbe ON dbe."id" = u."doneBy"
         LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
+        LEFT JOIN "workOrder" orig ON orig."id" = u."originalWo"
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         ${workOrderDocumentCountSubqueryOnUpdate}
@@ -1802,6 +1932,540 @@ router.delete("/:id", async (req: Request, res: Response) => {
     sendPgError(res, err);
   }
 });
+
+export type WorkOrderPlanningConflictCheck = {
+  assetId: string;
+  assetKey: string;
+  assetName: string;
+  conflicts: PlanningConflict[];
+  /** True when at least one conflicting order shares a calendar day with the proposed range. */
+  sameDayConflict: boolean;
+};
+
+function hasConflictOnSameCalendarDay(
+  plannedStart: Date,
+  plannedEnd: Date,
+  conflicts: PlanningConflict[],
+  timeZone = DEFAULT_PLANNING_TIME_ZONE,
+): boolean {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const days = new Set<string>();
+  for (let t = plannedStart.getTime(); t <= plannedEnd.getTime(); t += MS_PER_DAY) {
+    days.add(calendarDayKey(new Date(t), timeZone));
+  }
+  return conflicts.some((c) => {
+    const conflictStart = new Date(c.plannedStart);
+    const conflictEnd = effectivePlannedEnd(c.plannedStart, c.plannedEnd);
+    for (let t = conflictStart.getTime(); t <= conflictEnd.getTime(); t += MS_PER_DAY) {
+      if (days.has(calendarDayKey(new Date(t), timeZone))) return true;
+    }
+    return false;
+  });
+}
+
+export async function checkWorkOrderAssetPlanningConflicts(
+  userId: string,
+  workOrderId: string,
+  plannedStartIso: string,
+  plannedEndIso: string | null,
+  excludeWorkOrderIds: string[] = [],
+): Promise<WorkOrderPlanningConflictCheck | { error: "not_found" | "invalid_body" }> {
+  if (!isUuid(workOrderId)) {
+    return { error: "invalid_body" };
+  }
+
+  const existing = await pool.query<{
+    assetId: string;
+    assetKey: string;
+    assetName: string;
+    plannedStart: string;
+    plannedEnd: string | null;
+  }>(
+    `
+    SELECT
+      w."assetId"::text AS "assetId",
+      a."key" AS "assetKey",
+      a."name" AS "assetName",
+      w."plannedStart",
+      w."plannedEnd"
+    FROM "workOrder" w
+    JOIN "asset" a ON a."id" = w."assetId"
+    WHERE w."id" = $1::uuid
+      AND ${siteAccessSql('w."siteId"', "$2")}
+    LIMIT 1
+    `,
+    [workOrderId, userId],
+  );
+  const row = existing.rows[0];
+  if (!row) {
+    return { error: "not_found" };
+  }
+
+  const proposedStart = new Date(plannedStartIso);
+  const proposedEnd = effectivePlannedEnd(plannedStartIso, plannedEndIso);
+  if (Number.isNaN(proposedStart.getTime()) || Number.isNaN(proposedEnd.getTime())) {
+    return { error: "invalid_body" };
+  }
+
+  const currentEnd = effectivePlannedEnd(row.plannedStart, row.plannedEnd);
+  const windowStart = new Date(
+    Math.min(proposedStart.getTime(), new Date(row.plannedStart).getTime()) - 14 * 24 * 60 * 60 * 1000,
+  );
+  const windowEnd = new Date(
+    Math.max(proposedEnd.getTime(), currentEnd.getTime()) + 14 * 24 * 60 * 60 * 1000,
+  );
+  const { rows: overlapping } = await pool.query<PlanningOrderRow>(
+    `
+    SELECT
+      w."id",
+      w."orderNumber",
+      w."name",
+      w."assetId",
+      a."key" AS "assetKey",
+      w."plannedStart",
+      w."plannedEnd"
+    FROM "workOrder" w
+    JOIN "asset" a ON a."id" = w."assetId"
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND w."assetId" = $2::uuid
+      AND w."plannedStart" <= $4::timestamptz
+      AND (w."plannedEnd" IS NULL OR w."plannedEnd" >= $3::timestamptz)
+    `,
+    [userId, row.assetId, windowStart.toISOString(), windowEnd.toISOString()],
+  );
+  const excludeIds = new Set([workOrderId, ...excludeWorkOrderIds]);
+  const conflicts = getAssetPlanningConflicts(
+    overlapping,
+    row.assetId,
+    proposedStart,
+    proposedEnd,
+    excludeIds,
+  );
+
+  return {
+    assetId: row.assetId,
+    assetKey: row.assetKey,
+    assetName: row.assetName,
+    conflicts,
+    sameDayConflict: hasConflictOnSameCalendarDay(proposedStart, proposedEnd, conflicts),
+  };
+}
+
+function readAllowAssetOverlap(body: unknown): boolean {
+  if (body === null || typeof body !== "object") return false;
+  return (body as Record<string, unknown>).allowAssetOverlap === true;
+}
+
+export type UpdateWorkOrderPlanningResult =
+  | { ok: true; row: WorkOrderRow }
+  | { ok: false; error: string; conflicts?: PlanningConflict[] };
+
+export async function updateWorkOrderPlanning(
+  userId: string,
+  workOrderId: string,
+  plannedStartIso: string,
+  plannedEndIso: string | null,
+  options?: {
+    source?: string;
+    skipConflictCheck?: boolean;
+    /** Other work orders being moved in the same batch — ignore their current slots for conflict checks. */
+    excludeWorkOrderIds?: string[];
+    /** User confirmed overlap on the same asset — skip conflict rejection. */
+    allowAssetOverlap?: boolean;
+  },
+): Promise<UpdateWorkOrderPlanningResult> {
+  if (!isUuid(workOrderId)) {
+    return { ok: false, error: "invalid_id" };
+  }
+
+  const existing = await pool.query<WorkOrderRow>(
+    `
+    ${selectWorkOrdersSql}
+    WHERE w."id" = $1::uuid
+      AND ${siteAccessSql('w."siteId"', "$2")}
+    LIMIT 1
+    `,
+    [workOrderId, userId],
+  );
+  const row = existing.rows[0];
+  if (!row) {
+    return { ok: false, error: "not_found" };
+  }
+  if (!row.workgroupId) {
+    return { ok: false, error: "invalid_body" };
+  }
+
+  if (isBeforeLocalToday(plannedStartIso)) {
+    return { ok: false, error: "before_today" };
+  }
+
+  const proposedStart = new Date(plannedStartIso);
+  const proposedEnd = effectivePlannedEnd(plannedStartIso, plannedEndIso);
+  if (Number.isNaN(proposedStart.getTime()) || Number.isNaN(proposedEnd.getTime())) {
+    return { ok: false, error: "invalid_body" };
+  }
+
+  if (!options?.skipConflictCheck && !options?.allowAssetOverlap) {
+    const check = await checkWorkOrderAssetPlanningConflicts(
+      userId,
+      workOrderId,
+      plannedStartIso,
+      plannedEndIso,
+      options?.excludeWorkOrderIds ?? [],
+    );
+    if ("error" in check) {
+      return { ok: false, error: check.error };
+    }
+    if (check.conflicts.length > 0) {
+      return { ok: false, error: "asset_conflict", conflicts: check.conflicts };
+    }
+  }
+
+  const plannedDurationMinutes = computePlannedDurationMinutes(proposedStart, proposedEnd);
+  const parsed = parseBody({
+    name: row.name,
+    description: row.description,
+    assetId: row.assetId,
+    costCenterId: row.costCenterId,
+    plannedStart: plannedStartIso,
+    plannedEnd: plannedEndIso,
+    plannedDurationMinutes,
+    orderType: row.orderType,
+    responsibleEmployeeId: row.responsibleEmployeeId,
+    workgroupId: row.workgroupId,
+    classificationId: row.classificationId,
+  });
+  if (!parsed) {
+    return { ok: false, error: "invalid_body" };
+  }
+
+  const meta: AuditSessionMeta = {
+    userId,
+    requestId: randomUUID(),
+    source: options?.source ?? "assistant",
+  };
+
+  try {
+    const previousAssetId = row.assetId;
+    const updated = await withAuditContext(meta, async (client) => {
+      const existingAccess = await client.query<QueryResultRow & { id: string; siteId: string }>(
+        `
+        SELECT "id", "siteId"::text AS "siteId"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [workOrderId, meta.userId],
+      );
+      const existingRow = existingAccess.rows[0];
+      if (!existingRow) return null;
+
+      const siteIdFromRelations = await assertAssetAndCostCenterContext(
+        client,
+        meta.userId,
+        parsed.assetId,
+        parsed.costCenterId,
+      );
+      const allowSiteChange = await getAllowSiteChange(client);
+      const effectiveSiteId = allowSiteChange ? siteIdFromRelations : existingRow.siteId;
+      if (effectiveSiteId !== siteIdFromRelations) {
+        throw new Error("site_access_denied");
+      }
+
+      await assertSiteAccess(client, meta.userId, effectiveSiteId);
+      await assertWorkgroupForOrderSite(client, meta.userId, parsed.workgroupId, effectiveSiteId);
+      await assertAssignmentsCompatibleWithWorkgroup(client, workOrderId, parsed.workgroupId);
+      await assertResponsibleEmployeeContext(
+        client,
+        meta.userId,
+        parsed.responsibleEmployeeId,
+        effectiveSiteId,
+        parsed.workgroupId,
+      );
+      await assertClassificationForSiteAndScope(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        parsed.classificationId,
+        "work_order",
+      );
+
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        WITH updated AS (
+          UPDATE "workOrder"
+          SET
+            "name" = $1,
+            "description" = $2,
+            "siteId" = $3::uuid,
+            "assetId" = $4::uuid,
+            "costCenterId" = $5::uuid,
+            "plannedStart" = $6::timestamptz,
+            "plannedEnd" = $7::timestamptz,
+            "plannedDurationMinutes" = $8::integer,
+            "orderType" = $9,
+            "responsibleEmployeeId" = $10::uuid,
+            "workgroupId" = $11::uuid,
+            "classificationId" = $12::uuid
+          WHERE "id" = $13::uuid
+          RETURNING *
+        )
+        SELECT
+          u."id",
+          u."orderNumber",
+          u."name",
+          u."description",
+          u."siteId",
+          s."key" AS "siteKey",
+          s."name" AS "siteName",
+          s."colorHex" AS "siteColorHex",
+          u."assetId",
+          a."key" AS "assetKey",
+          a."name" AS "assetName",
+          u."costCenterId",
+          c."key" AS "costCenterKey",
+          c."name" AS "costCenterName",
+          u."classificationId",
+          clf."key" AS "classificationKey",
+          clf."name" AS "classificationName",
+          u."plannedStart",
+          u."plannedEnd",
+          u."plannedDurationMinutes",
+          u."orderType",
+          u."status",
+          u."responsibleEmployeeId",
+          re."key" AS "responsibleEmployeeKey",
+          re."name" AS "responsibleEmployeeName",
+          u."doneBy",
+          dbe."key" AS "doneByEmployeeKey",
+          dbe."name" AS "doneByEmployeeName",
+          u."workgroupId",
+          wg."key" AS "workgroupKey",
+          wg."name" AS "workgroupName",
+          u."originalWo",
+          orig."orderNumber" AS "originalWoOrderNumber",
+          orig."name" AS "originalWoName",
+          u."createdAt",
+          u."updatedAt",
+          COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
+          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
+          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+          COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
+          COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
+          COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
+        FROM updated u
+        JOIN "site" s ON s."id" = u."siteId"
+        JOIN "asset" a ON a."id" = u."assetId"
+        JOIN "costCenter" c ON c."id" = u."costCenterId"
+        LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
+        LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
+        LEFT JOIN "employee" dbe ON dbe."id" = u."doneBy"
+        LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
+        LEFT JOIN "workOrder" orig ON orig."id" = u."originalWo"
+        LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
+        ${workOrderDocumentCountSubqueryOnUpdate}
+        ${workOrderAssetDocumentCountSubqueryOnUpdate}
+        LEFT JOIN (
+          SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
+          FROM "workOrderEmployeeAssignment"
+          GROUP BY "workOrderId"
+        ) assign_counts ON assign_counts."workOrderId" = u."id"
+        LEFT JOIN (
+          SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
+          FROM "transaction"
+          GROUP BY "workOrderId"
+        ) tx_counts ON tx_counts."workOrderId" = u."id"
+        `,
+        [
+          parsed.name,
+          parsed.description,
+          effectiveSiteId,
+          parsed.assetId,
+          parsed.costCenterId,
+          parsed.plannedStart,
+          parsed.plannedEnd,
+          parsed.plannedDurationMinutes,
+          parsed.orderType,
+          parsed.responsibleEmployeeId,
+          parsed.workgroupId,
+          parsed.classificationId,
+          workOrderId,
+        ],
+      );
+      return rows[0] ?? null;
+    });
+
+    if (!updated) {
+      return { ok: false, error: "not_found" };
+    }
+
+    scheduleReindex(`workOrder ${updated.id}`, () => reindexWorkOrder(updated.id));
+    if (previousAssetId && previousAssetId !== updated.assetId) {
+      scheduleReindex(`workOrder asset docs ${previousAssetId}`, () =>
+        reindexWorkOrderDocumentsForAsset(previousAssetId),
+      );
+      scheduleReindex(`workOrder asset docs ${updated.assetId}`, () =>
+        reindexWorkOrderDocumentsForAsset(updated.assetId),
+      );
+    }
+    void broadcastWorkOrderUpdated(updated.siteId, updated).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
+
+    return { ok: true, row: updated };
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "site_access_denied") return { ok: false, error: "site_access_denied" };
+    if (message === "responsible_employee_not_in_workgroup") {
+      return { ok: false, error: "responsible_employee_not_in_workgroup" };
+    }
+    console.error(err);
+    return { ok: false, error: "internal_error" };
+  }
+}
+
+export type BatchPlanningAssignment = {
+  workOrderId: string;
+  plannedStart: string;
+  plannedEnd: string | null;
+};
+
+export type UpdateWorkOrderPlanningBatchResult =
+  | { ok: true; rows: WorkOrderRow[] }
+  | {
+      ok: false;
+      error: string;
+      conflicts?: PlanningConflict[];
+      failedOrderNumber?: number;
+    };
+
+export async function updateWorkOrderPlanningBatch(
+  userId: string,
+  assignments: BatchPlanningAssignment[],
+  options?: { source?: string; allowAssetOverlap?: boolean },
+): Promise<UpdateWorkOrderPlanningBatchResult> {
+  if (assignments.length === 0) {
+    return { ok: false, error: "invalid_body" };
+  }
+
+  const ids = assignments.map((a) => a.workOrderId);
+  if (ids.some((id) => !isUuid(id))) {
+    return { ok: false, error: "invalid_id" };
+  }
+
+  const excludeSet = new Set(ids);
+  let assetId: string | null = null;
+  const parsedAssignments: Array<{ id: string; plannedStart: string; plannedEnd: string }> = [];
+
+  for (const item of assignments) {
+    const plannedStart = parseIsoDatetime(item.plannedStart);
+    const plannedEnd =
+      item.plannedEnd === null || item.plannedEnd === undefined
+        ? null
+        : parseIsoDatetime(item.plannedEnd);
+    if (!plannedStart || (item.plannedEnd !== null && item.plannedEnd !== undefined && !plannedEnd)) {
+      return { ok: false, error: "invalid_body" };
+    }
+    if (isBeforeLocalToday(plannedStart)) {
+      return { ok: false, error: "before_today" };
+    }
+
+    const existing = await pool.query<{ assetId: string; orderNumber: number }>(
+      `
+      SELECT w."assetId"::text AS "assetId", w."orderNumber"
+      FROM "workOrder" w
+      WHERE w."id" = $1::uuid
+        AND ${siteAccessSql('w."siteId"', "$2")}
+      LIMIT 1
+      `,
+      [item.workOrderId, userId],
+    );
+    const row = existing.rows[0];
+    if (!row) {
+      return { ok: false, error: "not_found", failedOrderNumber: undefined };
+    }
+    if (assetId === null) assetId = row.assetId;
+    if (assetId !== row.assetId) {
+      return { ok: false, error: "mixed_assets" };
+    }
+
+    const endDate = effectivePlannedEnd(plannedStart, plannedEnd);
+    parsedAssignments.push({
+      id: item.workOrderId,
+      plannedStart,
+      plannedEnd: endDate.toISOString(),
+    });
+  }
+
+  const windowStart = parsedAssignments.reduce(
+    (min, a) => Math.min(min, new Date(a.plannedStart).getTime()),
+    Number.POSITIVE_INFINITY,
+  );
+  const windowEnd = parsedAssignments.reduce(
+    (max, a) => Math.max(max, new Date(a.plannedEnd).getTime()),
+    Number.NEGATIVE_INFINITY,
+  );
+  const padMs = 14 * 24 * 60 * 60 * 1000;
+  const { rows: overlapping } = await pool.query<PlanningOrderRow>(
+    `
+    SELECT
+      w."id",
+      w."orderNumber",
+      w."name",
+      w."assetId",
+      a."key" AS "assetKey",
+      w."plannedStart",
+      w."plannedEnd"
+    FROM "workOrder" w
+    JOIN "asset" a ON a."id" = w."assetId"
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND w."assetId" = $2::uuid
+      AND w."plannedStart" <= $4::timestamptz
+      AND (w."plannedEnd" IS NULL OR w."plannedEnd" >= $3::timestamptz)
+    `,
+    [
+      userId,
+      assetId,
+      new Date(windowStart - padMs).toISOString(),
+      new Date(windowEnd + padMs).toISOString(),
+    ],
+  );
+
+  if (!options?.allowAssetOverlap) {
+    const validation = validateBatchPlanningAssignments(assetId!, parsedAssignments, overlapping);
+    if (!validation.valid) {
+      return { ok: false, error: "asset_conflict", conflicts: validation.conflicts };
+    }
+  }
+
+  const rows: WorkOrderRow[] = [];
+  for (const item of assignments) {
+    const result = await updateWorkOrderPlanning(
+      userId,
+      item.workOrderId,
+      item.plannedStart,
+      item.plannedEnd,
+      {
+        source: options?.source ?? "assistant",
+        excludeWorkOrderIds: [...excludeSet],
+        allowAssetOverlap: options?.allowAssetOverlap,
+      },
+    );
+    if (!result.ok) {
+      const failed = overlapping.find((o) => o.id === item.workOrderId);
+      return {
+        ok: false,
+        error: result.error,
+        conflicts: result.conflicts,
+        failedOrderNumber: failed?.orderNumber,
+      };
+    }
+    rows.push(result.row);
+  }
+
+  return { ok: true, rows };
+}
 
 export const workOrdersRouter = router;
 

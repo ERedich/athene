@@ -46,6 +46,8 @@ export function FeedbackRemarkInput({
   const voiceErrorMessage = () => {
     if (!speech.errorCode) return null;
     if (speech.errorCode === "permission_denied") return t("assistant.voicePermissionDenied");
+    if (speech.errorCode === "transcribe_failed") return t("assistant.voiceTranscribeFailed");
+    if (speech.errorCode === "unsupported") return t("assistant.voiceNotSupported");
     return t("assistant.voiceError");
   };
 
@@ -102,7 +104,7 @@ export function FeedbackRemarkInput({
       ) : null}
       {speech.localizing ? (
         <p className="text-xs text-on-surface-variant" aria-live="polite">
-          {t("workOrders.feedbackVoiceLocalizing")}
+          {t("workOrders.feedbackVoiceTranscribing")}
         </p>
       ) : null}
       {voiceErrorMessage() ? (

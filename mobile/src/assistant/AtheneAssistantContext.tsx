@@ -17,8 +17,7 @@ import {
 import { HapticPressable } from "../components/HapticPressable";
 
 import { apiFetch } from "../lib/api";
-import { useSpeechRecognition } from "./useSpeechRecognition";
-import type { SpeechRecognitionErrorCode } from "./speechRecognitionTypes";
+import { useWhisperDictation, type WhisperDictationErrorCode } from "../hooks/useWhisperDictation";
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
@@ -204,16 +203,18 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${trimmed}` : trimmed));
   }, []);
 
-  const speech = useSpeechRecognition({
-    locale: i18n.language,
+  const speech = useWhisperDictation({
+    targetLocale: i18n.language,
     disabled: busy,
-    onFinalTranscript: appendTranscript,
+    onResult: appendTranscript,
   });
 
   const voiceErrorMessage = useCallback(
-    (code: SpeechRecognitionErrorCode | null) => {
+    (code: WhisperDictationErrorCode | null) => {
       if (!code) return null;
       if (code === "permission_denied") return t("assistant.voicePermissionDenied");
+      if (code === "transcribe_failed") return t("assistant.voiceTranscribeFailed");
+      if (code === "unsupported") return t("assistant.voiceNotSupported");
       return t("assistant.voiceError");
     },
     [t],
@@ -389,18 +390,19 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 style={styles.input}
                 multiline
                 value={input}
-                editable={!busy}
-                placeholder={
-                  speech.listening && speech.interimTranscript
-                    ? speech.interimTranscript
-                    : t("assistant.placeholder")
-                }
+                editable={!busy && !speech.processing}
+                placeholder={t("assistant.placeholder")}
                 placeholderTextColor={colors.onSurfaceVariant}
                 onChangeText={setInput}
               />
-              {speech.listening ? (
+              {speech.recording ? (
                 <Text style={styles.listeningText} accessibilityLiveRegion="polite">
                   {t("assistant.listening")}
+                </Text>
+              ) : null}
+              {speech.processing ? (
+                <Text style={styles.listeningText} accessibilityLiveRegion="polite">
+                  {t("assistant.voiceTranscribing")}
                 </Text>
               ) : null}
               {voiceErrorMessage(speech.errorCode) ? (
@@ -414,46 +416,41 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 </HapticPressable>
                 <View style={styles.formActions}>
                   <HapticPressable
-                    disabled={busy}
+                    disabled={busy || speech.processing}
                     accessibilityLabel={
-                      speech.supported
-                        ? speech.listening
-                          ? t("assistant.stopListening")
-                          : t("assistant.startListening")
-                        : t("assistant.voiceInput")
+                      speech.recording ? t("assistant.stopListening") : t("assistant.startListening")
                     }
-                    accessibilityState={{ selected: speech.listening, disabled: !speech.supported }}
+                    accessibilityState={{ selected: speech.recording, disabled: !speech.supported }}
                     {...androidRippleProps(ripple, true)}
                     style={({ pressed }) => [
                       styles.voiceButton,
-                      speech.listening && speech.supported && styles.voiceButtonActive,
-                      (busy || !speech.supported) && styles.voiceButtonDisabled,
+                      (speech.recording || speech.processing) && speech.supported && styles.voiceButtonActive,
+                      (busy || !speech.supported || speech.processing) && styles.voiceButtonDisabled,
                       pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
                     ]}
                     onPress={() => {
                       if (!speech.supported) {
-                        Alert.alert(
-                          t("assistant.voiceInput"),
-                          Platform.OS === "web"
-                            ? t("assistant.voiceNotSupported")
-                            : t("assistant.voiceRequiresDevBuild"),
-                        );
+                        Alert.alert(t("assistant.voiceInput"), t("assistant.voiceNotSupported"));
                         return;
                       }
-                      if (!speech.listening) {
+                      if (!speech.recording) {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       }
-                      speech.toggleListening();
+                      speech.toggleRecording();
                     }}
                   >
-                    <Mic
-                      size={20}
-                      color={
-                        speech.listening && speech.supported
-                          ? colors.primary
-                          : colors.onSurfaceVariant
-                      }
-                    />
+                    {speech.processing ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Mic
+                        size={20}
+                        color={
+                          speech.recording && speech.supported
+                            ? colors.primary
+                            : colors.onSurfaceVariant
+                        }
+                      />
+                    )}
                   </HapticPressable>
                   <HapticPressable
                     disabled={busy || !input.trim()}

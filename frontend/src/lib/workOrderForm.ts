@@ -1,0 +1,94 @@
+export type WorkOrderType = "maintenance" | "repair" | "breakdown";
+
+export type WorkOrderFormFields = {
+  orderNumber: number | null;
+  name: string;
+  description: string;
+  assetId: string;
+  costCenterId: string;
+  plannedStart: Date | null;
+  plannedEnd: Date | null;
+  plannedDurationHours: string;
+  orderType: WorkOrderType;
+  responsibleEmployeeId: string;
+  workgroupId: string;
+  classificationId: string;
+  originalWoId: string;
+  /** Shown in create dialog when copying; not sent to API. */
+  copySourceOrderNumber: number | null;
+};
+
+export type WorkOrderFormSource = {
+  id: string;
+  orderNumber: number;
+  name: string;
+  description: string | null;
+  assetId: string;
+  costCenterId: string;
+  plannedStart: string;
+  plannedEnd: string;
+  plannedDurationMinutes: number | null;
+  orderType: WorkOrderType;
+  responsibleEmployeeId: string | null;
+  workgroupId: string | null;
+  classificationId: string | null;
+  originalWo?: string | null;
+  originalWoOrderNumber?: number | null;
+};
+
+export function parseIsoDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function emptyWorkOrderForm(): WorkOrderFormFields {
+  const start = new Date();
+  const plannedEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    orderNumber: null,
+    name: "",
+    description: "",
+    assetId: "",
+    costCenterId: "",
+    plannedStart: start,
+    plannedEnd,
+    plannedDurationHours: "24",
+    orderType: "maintenance",
+    responsibleEmployeeId: "",
+    workgroupId: "",
+    classificationId: "",
+    originalWoId: "",
+    copySourceOrderNumber: null,
+  };
+}
+
+export function workOrderRowToFormState(
+  row: WorkOrderFormSource,
+  opts?: { name?: string; asCopy?: boolean },
+): WorkOrderFormFields {
+  const asCopy = opts?.asCopy === true;
+  return {
+    orderNumber: asCopy ? null : row.orderNumber,
+    name: opts?.name ?? row.name,
+    description: row.description ?? "",
+    assetId: row.assetId,
+    costCenterId: row.costCenterId,
+    plannedStart: parseIsoDate(row.plannedStart),
+    plannedEnd: parseIsoDate(row.plannedEnd),
+    plannedDurationHours:
+      row.plannedDurationMinutes == null
+        ? ""
+        : Number.isInteger(row.plannedDurationMinutes / 60)
+          ? String(row.plannedDurationMinutes / 60)
+          : (row.plannedDurationMinutes / 60).toFixed(2),
+    orderType: row.orderType,
+    responsibleEmployeeId: row.responsibleEmployeeId ?? "",
+    workgroupId: row.workgroupId ?? "",
+    classificationId: row.classificationId ?? "",
+    originalWoId: asCopy ? row.id : (row.originalWo ?? ""),
+    copySourceOrderNumber: asCopy
+      ? row.orderNumber
+      : row.originalWoOrderNumber ?? null,
+  };
+}

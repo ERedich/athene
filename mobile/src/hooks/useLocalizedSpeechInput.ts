@@ -1,8 +1,4 @@
-import { useCallback, useRef, useState } from "react";
-
-import { useSpeechRecognition } from "../assistant/useSpeechRecognition";
-import type { SpeechRecognitionErrorCode } from "../assistant/speechRecognitionTypes";
-import { apiFetch } from "../lib/api";
+import { useWhisperDictation, type WhisperDictationErrorCode } from "./useWhisperDictation";
 
 export type UseLocalizedSpeechInputOptions = {
   targetLocale: string;
@@ -17,51 +13,25 @@ export function useLocalizedSpeechInput({
   onAppend,
   maxLength = 2000,
 }: UseLocalizedSpeechInputOptions) {
-  const [localizing, setLocalizing] = useState(false);
-  const localizingRef = useRef(false);
-
-  const localizeAndAppend = useCallback(
-    async (raw: string) => {
-      const trimmed = raw.trim();
-      if (!trimmed || localizingRef.current) return;
-      localizingRef.current = true;
-      setLocalizing(true);
-      try {
-        const res = await apiFetch("/api/assistant/localize-spoken-text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmed, targetLocale }),
-        });
-        if (!res.ok) throw new Error("localize_failed");
-        const data = (await res.json()) as { text?: string };
-        const localized = (data.text ?? trimmed).trim();
-        if (!localized) return;
-        onAppend(localized.slice(0, maxLength));
-      } catch {
-        onAppend(trimmed.slice(0, maxLength));
-      } finally {
-        localizingRef.current = false;
-        setLocalizing(false);
-      }
-    },
-    [maxLength, onAppend, targetLocale],
-  );
-
-  const speech = useSpeechRecognition({
-    locale: targetLocale,
-    disabled: disabled || localizing,
-    onFinalTranscript: (text) => {
-      void localizeAndAppend(text);
+  const dictation = useWhisperDictation({
+    targetLocale,
+    disabled,
+    onResult: (text) => {
+      const next = text.trim();
+      if (!next) return;
+      onAppend(next.slice(0, maxLength));
     },
   });
 
   return {
-    supported: speech.supported,
-    listening: speech.listening,
-    interimTranscript: speech.interimTranscript,
-    errorCode: speech.errorCode as SpeechRecognitionErrorCode | null,
-    localizing,
-    toggleListening: speech.toggleListening,
-    stop: speech.stop,
+    supported: dictation.supported,
+    listening: dictation.recording,
+    interimTranscript: "",
+    errorCode: dictation.errorCode,
+    localizing: dictation.processing,
+    toggleListening: dictation.toggleRecording,
+    stop: dictation.stop,
   };
 }
+
+export type SpeechRecognitionErrorCode = WhisperDictationErrorCode;

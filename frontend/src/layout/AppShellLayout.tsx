@@ -34,6 +34,7 @@ function headerTitleKey(pathname: string): string {
     dashboard: "dashboard.appName",
     assets: "assets.appName",
     workorders: "workOrders.appName",
+    kalendar: "kalendar.appName",
     monitoring: "monitoring.appName",
     suchkonfig: "suchkonfig.appName",
     transactions: "transactions.appName",

@@ -4,82 +4,53 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth/AuthContext";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
-
-type Asset = {
-  id: string;
-  key: string;
-  name: string;
-  siteId: string;
-  costCenterId: string | null;
-};
-
-type CostCenter = {
-  id: string;
-  key: string;
-  name: string;
-  siteId: string;
-  isActive: boolean;
-};
-
-type ClassificationListRow = {
-  id: string;
-  key: string;
-  name: string;
-  siteId: string;
-  appliesToAsset: boolean;
-  appliesToWorkOrder: boolean;
-};
-
-type Employee = {
-  id: string;
-  key: string;
-  name: string;
-  siteId: string;
-  isActive: boolean;
-};
-
-type Workgroup = {
-  id: string;
-  key: string;
-  name: string;
-  siteId: string;
-  isActive: boolean;
-  employeeIds: string[];
-};
-
-type SiteOption = { id: string; key: string; name: string };
-
-type UserDirectoryRow = { id: string; loginName: string; name: string };
+import type {
+  WorkOrderReferenceAsset,
+  WorkOrderReferenceClassification,
+  WorkOrderReferenceCostCenter,
+  WorkOrderReferenceEmployee,
+  WorkOrderReferenceWorkgroup,
+  WorkOrderSiteOption,
+  WorkOrderUserDirectoryRow,
+} from "../lib/workOrderTypes";
 
 export type WorkOrderSearchReferenceSelectOption = { label: string; value: string };
 
-/** Loads sites, assets, … for WorkOrderSearchPanel (Suchkonfig / shared filters). */
-export function useWorkOrderSearchReferenceData() {
+type Options = {
+  /** When false, call `reload()` manually (e.g. lazy load for dialog). Default true. */
+  autoLoad?: boolean;
+};
+
+/** Loads sites, assets, … for WorkOrderSearchPanel and the global edit dialog. */
+export function useWorkOrderSearchReferenceData(options: Options = {}) {
+  const { autoLoad = true } = options;
   const { t, i18n } = useTranslation();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
 
-  const [loading, setLoading] = useState(true);
-  const [sites, setSites] = useState<SiteOption[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
-  const [classifications, setClassifications] = useState<ClassificationListRow[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [workgroups, setWorkgroups] = useState<Workgroup[]>([]);
-  const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryRow[]>([]);
+  const [loading, setLoading] = useState(autoLoad);
+  const [loaded, setLoaded] = useState(false);
+  const [sites, setSites] = useState<WorkOrderSiteOption[]>([]);
+  const [assets, setAssets] = useState<WorkOrderReferenceAsset[]>([]);
+  const [costCenters, setCostCenters] = useState<WorkOrderReferenceCostCenter[]>([]);
+  const [classifications, setClassifications] = useState<WorkOrderReferenceClassification[]>([]);
+  const [employees, setEmployees] = useState<WorkOrderReferenceEmployee[]>([]);
+  const [workgroups, setWorkgroups] = useState<WorkOrderReferenceWorkgroup[]>([]);
+  const [directoryUsers, setDirectoryUsers] = useState<WorkOrderUserDirectoryRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes, sitesRes, usersRes] = await Promise.all([
-        apiFetch("/api/assets"),
-        apiFetch("/api/cost-centers"),
-        apiFetch("/api/classifications"),
-        apiFetch("/api/employees"),
-        apiFetch("/api/workgroups"),
-        apiFetch("/api/sites"),
-        apiFetch("/api/users"),
-      ]);
+      const [assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes, sitesRes, usersRes] =
+        await Promise.all([
+          apiFetch("/api/assets"),
+          apiFetch("/api/cost-centers"),
+          apiFetch("/api/classifications"),
+          apiFetch("/api/employees"),
+          apiFetch("/api/workgroups"),
+          apiFetch("/api/sites"),
+          apiFetch("/api/users"),
+        ]);
       if (
         !assetsRes.ok ||
         !costCentersRes.ok ||
@@ -100,7 +71,15 @@ export function useWorkOrderSearchReferenceData() {
           workgroupsRes.json(),
           sitesRes.json(),
           usersRes.json(),
-        ])) as [Asset[], CostCenter[], ClassificationListRow[], Employee[], Workgroup[], SiteOption[], UserDirectoryRow[]];
+        ])) as [
+          WorkOrderReferenceAsset[],
+          WorkOrderReferenceCostCenter[],
+          WorkOrderReferenceClassification[],
+          WorkOrderReferenceEmployee[],
+          WorkOrderReferenceWorkgroup[],
+          WorkOrderSiteOption[],
+          WorkOrderUserDirectoryRow[],
+        ];
 
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setCostCenters(Array.isArray(costCentersData) ? costCentersData : []);
@@ -120,6 +99,7 @@ export function useWorkOrderSearchReferenceData() {
             }))
           : [],
       );
+      setLoaded(true);
     } catch {
       setAssets([]);
       setCostCenters([]);
@@ -134,8 +114,8 @@ export function useWorkOrderSearchReferenceData() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (autoLoad) void load();
+  }, [autoLoad, load]);
 
   const accessibleAssets = useMemo(
     () => assets.filter((asset) => !siteFieldLocked || asset.siteId === user.workingSiteId),
@@ -200,7 +180,16 @@ export function useWorkOrderSearchReferenceData() {
 
   return {
     loading,
+    loaded,
     reload: load,
+    assets,
+    accessibleAssets,
+    costCenters,
+    classifications,
+    employees,
+    workgroups,
+    sites,
+    directoryUsers,
     searchSiteOptions,
     searchAssetOptions,
     searchCostCenterOptions,

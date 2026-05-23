@@ -13,6 +13,7 @@ import { EmployeesPage } from "./pages/EmployeesPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
+import { KalendarPage } from "./pages/KalendarPage";
 import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { SitesPage } from "./pages/SitesPage";
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
+          <Route path="kalendar" element={<KalendarPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="transactions" element={<TransactionsPage />} />

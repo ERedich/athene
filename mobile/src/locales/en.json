@@ -46,6 +46,8 @@
     "voiceRequiresDevBuild": "Voice input is not available in Expo Go. Open the app in the browser via \"npm run dev\" (mobile web) or use a development build with native modules.",
     "voicePermissionDenied": "Microphone access was denied.",
     "voiceError": "Voice input failed.",
+    "voiceTranscribing": "Recognizing and translating speech…",
+    "voiceTranscribeFailed": "Could not transcribe speech. Check OPENAI_API_KEY or try again.",
     "feedbackSuggestSimilar": "Were there similar problems on this asset before?",
     "feedbackSuggestCorrect": "Correct my feedback text (spelling and style)",
     "applyCorrectedText": "Apply text"
@@ -185,6 +187,7 @@
     "feedbackHoursPlaceholder": "e.g. 1.5",
     "feedbackRemark": "Remark",
     "feedbackVoiceInput": "Dictate feedback text",
+    "feedbackVoiceTranscribing": "Recognizing and translating speech…",
     "feedbackVoiceLocalizing": "Translating to system language…",
     "feedbackAskAthene": "Ask Athene about this feedback",
     "feedbackCompleteOrder": "Complete order",

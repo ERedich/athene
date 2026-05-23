@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
 import { AtheneAssistantProvider } from "../assistant/AtheneAssistantContext";
+import { WorkOrderDialogProvider } from "../workOrders/WorkOrderDialogContext";
 import { apiFetch } from "../lib/api";
 import { applyUiTranslationOverrides } from "../lib/applyUiTranslationOverrides";
 
@@ -152,9 +153,11 @@ export function RequireAuth() {
   return (
     <AuthSessionContext.Provider value={session}>
       <AtheneAssistantProvider>
-        <div className={`min-h-screen w-full ${shellEnterClass}`}>
-          <Outlet />
-        </div>
+        <WorkOrderDialogProvider>
+          <div className={`min-h-screen w-full ${shellEnterClass}`}>
+            <Outlet />
+          </div>
+        </WorkOrderDialogProvider>
       </AtheneAssistantProvider>
     </AuthSessionContext.Provider>
   );

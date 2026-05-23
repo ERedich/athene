@@ -9,7 +9,13 @@
     "newArchEnabled": false,
     "plugins": [
       "expo-router",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Athene needs microphone access so you can dictate feedback and questions."
+        }
+      ]
     ],
     "ios": {
       "infoPlist": {

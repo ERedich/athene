@@ -15,13 +15,35 @@ import { useTranslation } from "react-i18next";
 
 import { LucideSpinner } from "../icons/lucide";
 import { apiFetch } from "../lib/api";
-import { useSpeechRecognition, type SpeechRecognitionErrorCode } from "./useSpeechRecognition";
+import { useWhisperDictation, type WhisperDictationErrorCode } from "../hooks/useWhisperDictation";
+import {
+  fetchWorkOrderById,
+  fetchWorkOrderByOrderNumber,
+  putWorkOrder,
+} from "../lib/workOrderApi";
 
 export type AtheneUiContext = {
-  type: "workOrder" | "asset" | "monitoring" | "sparePart" | "warehouse" | "app" | "unknown";
+  type:
+    | "workOrder"
+    | "asset"
+    | "monitoring"
+    | "sparePart"
+    | "warehouse"
+    | "calendar"
+    | "app"
+    | "unknown";
   id?: string;
   label?: string;
   data?: unknown;
+};
+
+export type AtheneRescheduleMeta = {
+  orderNumber?: number;
+  id?: string;
+  plannedStart: string;
+  plannedEnd: string;
+  /** User accepted overlap on the same asset (Athene asked first). */
+  allowAssetOverlap?: boolean;
 };
 
 type AtheneMessage = {
@@ -32,8 +54,10 @@ type AtheneMessage = {
   clientContext: AtheneUiContext | null;
   createdAt: string;
   meta?: {
-    correctedText: string;
-    targetField: "remark" | "pauseRemark";
+    correctedText?: string;
+    targetField?: "remark" | "pauseRemark";
+    reschedule?: AtheneRescheduleMeta;
+    rescheduleBatch?: AtheneRescheduleMeta[];
   };
 };
 
@@ -47,12 +71,25 @@ export type OpenForFeedbackParams = {
   onApplyText?: (field: "remark" | "pauseRemark", text: string) => void;
 };
 
+export type OpenForCalendarParams = {
+  workOrderId?: string;
+  label?: string;
+  data: {
+    viewMode: "month" | "week" | "day";
+    rangeStart: string;
+    rangeEnd: string;
+    anchorDate: string;
+  };
+  onRescheduleApplied?: () => void;
+};
+
 type AtheneAssistantContextValue = {
   busy: boolean;
   open: () => void;
   close: () => void;
   openWithContext: (context: AtheneUiContext) => void;
   openForFeedback: (params: OpenForFeedbackParams) => void;
+  openForCalendar: (params: OpenForCalendarParams) => void;
 };
 
 function isFeedbackUiContext(context: AtheneUiContext | null): boolean {
@@ -175,6 +212,9 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const loadedRef = useRef(false);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const onApplyTextRef = useRef<OpenForFeedbackParams["onApplyText"]>(undefined);
+  const onRescheduleAppliedRef = useRef<OpenForCalendarParams["onRescheduleApplied"]>(undefined);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyNotice, setApplyNotice] = useState<string | null>(null);
 
   const revealNewestMessage = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -240,16 +280,18 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     setInput((prev) => (prev.trim() ? `${prev.trimEnd()} ${trimmed}` : trimmed));
   }, []);
 
-  const speech = useSpeechRecognition({
-    locale: i18n.language,
+  const speech = useWhisperDictation({
+    targetLocale: i18n.language,
     disabled: busy,
-    onFinalTranscript: appendTranscript,
+    onResult: appendTranscript,
   });
 
   const voiceErrorMessage = useCallback(
-    (code: SpeechRecognitionErrorCode | null) => {
+    (code: WhisperDictationErrorCode | null) => {
       if (!code) return null;
       if (code === "permission_denied") return t("assistant.voicePermissionDenied");
+      if (code === "transcribe_failed") return t("assistant.voiceTranscribeFailed");
+      if (code === "unsupported") return t("assistant.voiceNotSupported");
       return t("assistant.voiceError");
     },
     [t],
@@ -263,7 +305,25 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const openWithContext = useCallback(
     (context: AtheneUiContext) => {
       onApplyTextRef.current = undefined;
+      onRescheduleAppliedRef.current = undefined;
       setUiContext(context);
+      setVisible(true);
+      void loadConversation();
+    },
+    [loadConversation],
+  );
+
+  const openForCalendar = useCallback(
+    (params: OpenForCalendarParams) => {
+      onApplyTextRef.current = undefined;
+      onRescheduleAppliedRef.current = params.onRescheduleApplied;
+      setApplyNotice(null);
+      setUiContext({
+        type: "calendar",
+        id: params.workOrderId,
+        label: params.label,
+        data: params.data,
+      });
       setVisible(true);
       void loadConversation();
     },
@@ -273,6 +333,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const openForFeedback = useCallback(
     (params: OpenForFeedbackParams) => {
       onApplyTextRef.current = params.onApplyText;
+      onRescheduleAppliedRef.current = undefined;
       setUiContext({
         type: "workOrder",
         id: params.workOrderId,
@@ -350,15 +411,78 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const applyCorrectedText = useCallback((message: AtheneMessage) => {
-    if (!message.meta?.correctedText) return;
+    if (!message.meta?.correctedText || !message.meta.targetField) return;
     onApplyTextRef.current?.(message.meta.targetField, message.meta.correctedText);
   }, []);
+
+  const applyOneReschedule = useCallback(async (reschedule: AtheneRescheduleMeta) => {
+    let order = reschedule.id != null ? await fetchWorkOrderById(reschedule.id) : null;
+    if (!order && reschedule.orderNumber != null) {
+      order = await fetchWorkOrderByOrderNumber(reschedule.orderNumber);
+    }
+    if (!order) throw new Error("not_found");
+    const newStart = new Date(reschedule.plannedStart);
+    const newEnd = new Date(reschedule.plannedEnd);
+    const plannedDurationMinutes = Math.max(
+      0,
+      Math.round((newEnd.getTime() - newStart.getTime()) / 60_000),
+    );
+    await putWorkOrder(
+      order,
+      {
+        plannedStart: reschedule.plannedStart,
+        plannedEnd: reschedule.plannedEnd,
+        plannedDurationMinutes,
+      },
+      { allowAssetOverlap: reschedule.allowAssetOverlap === true },
+    );
+  }, []);
+
+  const applyReschedule = useCallback(
+    async (message: AtheneMessage) => {
+      const reschedule = message.meta?.reschedule;
+      if (!reschedule || applyBusy) return;
+      setApplyBusy(true);
+      setApplyNotice(null);
+      try {
+        await applyOneReschedule(reschedule);
+        setApplyNotice(t("assistant.rescheduleSuccess"));
+        onRescheduleAppliedRef.current?.();
+      } catch {
+        setApplyNotice(t("assistant.rescheduleError"));
+      } finally {
+        setApplyBusy(false);
+      }
+    },
+    [applyBusy, applyOneReschedule, t],
+  );
+
+  const applyRescheduleBatch = useCallback(
+    async (message: AtheneMessage) => {
+      const batch = message.meta?.rescheduleBatch;
+      if (!batch?.length || applyBusy) return;
+      setApplyBusy(true);
+      setApplyNotice(null);
+      try {
+        for (const item of batch) {
+          await applyOneReschedule(item);
+        }
+        setApplyNotice(t("assistant.rescheduleBatchSuccess", { count: batch.length }));
+        onRescheduleAppliedRef.current?.();
+      } catch {
+        setApplyNotice(t("assistant.rescheduleError"));
+      } finally {
+        setApplyBusy(false);
+      }
+    },
+    [applyBusy, applyOneReschedule, t],
+  );
 
   const feedbackMode = isFeedbackUiContext(uiContext);
 
   const value = useMemo<AtheneAssistantContextValue>(
-    () => ({ busy, open, close, openWithContext, openForFeedback }),
-    [busy, close, open, openForFeedback, openWithContext],
+    () => ({ busy, open, close, openWithContext, openForFeedback, openForCalendar }),
+    [busy, close, open, openForCalendar, openForFeedback, openWithContext],
   );
 
   const uiContextKindLabel =
@@ -372,7 +496,9 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
             ? t("assistant.contextSparePart")
             : uiContext?.type === "warehouse"
               ? t("assistant.contextWarehouse")
-              : null;
+              : uiContext?.type === "calendar"
+                ? t("assistant.contextCalendar")
+                : null;
 
   const formatMessageTimestamp = (value: string) => {
     const date = new Date(value);
@@ -475,11 +601,36 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                         {t("assistant.applyCorrectedText")}
                       </button>
                     ) : null}
+                    {message.meta?.reschedule ? (
+                      <button
+                        type="button"
+                        className="mt-2 rounded-sm border border-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] disabled:opacity-50"
+                        disabled={applyBusy}
+                        onClick={() => void applyReschedule(message)}
+                      >
+                        {t("assistant.applyReschedule")}
+                      </button>
+                    ) : null}
+                    {message.meta?.rescheduleBatch?.length ? (
+                      <button
+                        type="button"
+                        className="mt-2 rounded-sm border border-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] disabled:opacity-50"
+                        disabled={applyBusy}
+                        onClick={() => void applyRescheduleBatch(message)}
+                      >
+                        {t("assistant.applyRescheduleBatch", {
+                          count: message.meta.rescheduleBatch.length,
+                        })}
+                      </button>
+                    ) : null}
                   </article>
                 ))}
               </div>
             </div>
 
+            {applyNotice ? (
+              <p className="border-t border-white/10 px-3 py-2 text-xs text-on-surface-variant">{applyNotice}</p>
+            ) : null}
             <form className="border-t border-white/10 p-3" onSubmit={send}>
               {feedbackMode ? (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -508,12 +659,8 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 id="athene-assistant-input"
                 className="min-h-[90px] w-full resize-none rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-highest p-3 text-sm text-on-surface outline-none focus:border-[var(--color-primary)]"
                 value={input}
-                placeholder={
-                  speech.listening && speech.interimTranscript
-                    ? speech.interimTranscript
-                    : t("assistant.placeholder")
-                }
-                disabled={busy}
+                placeholder={t("assistant.placeholder")}
+                disabled={busy || speech.processing}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -522,9 +669,14 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                   }
                 }}
               />
-              {speech.listening ? (
+              {speech.recording ? (
                 <p className="mt-1 text-xs text-[var(--color-primary)]" aria-live="polite">
                   {t("assistant.listening")}
+                </p>
+              ) : null}
+              {speech.processing ? (
+                <p className="mt-1 text-xs text-on-surface-variant" aria-live="polite">
+                  {t("assistant.voiceTranscribing")}
                 </p>
               ) : null}
               {voiceErrorMessage(speech.errorCode) ? (
@@ -545,21 +697,25 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] text-on-surface-variant transition-colors hover:text-[var(--color-primary)] disabled:opacity-50 ${
-                        speech.listening
+                        speech.recording || speech.processing
                           ? "border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
                           : ""
                       }`}
                       aria-label={
-                        speech.listening ? t("assistant.stopListening") : t("assistant.startListening")
+                        speech.recording ? t("assistant.stopListening") : t("assistant.startListening")
                       }
                       title={
-                        speech.listening ? t("assistant.stopListening") : t("assistant.startListening")
+                        speech.recording ? t("assistant.stopListening") : t("assistant.startListening")
                       }
-                      aria-pressed={speech.listening}
-                      disabled={busy}
-                      onClick={speech.toggleListening}
+                      aria-pressed={speech.recording}
+                      disabled={busy || speech.processing}
+                      onClick={speech.toggleRecording}
                     >
-                      <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                      {speech.processing ? (
+                        <LucideSpinner className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                      ) : (
+                        <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                      )}
                     </button>
                   ) : null}
                   <button

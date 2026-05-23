@@ -1,7 +1,7 @@
 import { Mic } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 
 import { HapticPressable } from "./HapticPressable";
@@ -89,6 +89,8 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
   const voiceError = () => {
     if (!speech.errorCode) return null;
     if (speech.errorCode === "permission_denied") return t("assistant.voicePermissionDenied");
+    if (speech.errorCode === "transcribe_failed") return t("assistant.voiceTranscribeFailed");
+    if (speech.errorCode === "unsupported") return t("assistant.voiceNotSupported");
     return t("assistant.voiceError");
   };
 
@@ -105,12 +107,7 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
           ]}
           onPress={() => {
             if (!speech.supported) {
-              Alert.alert(
-                t("assistant.voiceInput"),
-                Platform.OS === "web"
-                  ? t("assistant.voiceNotSupported")
-                  : t("assistant.voiceRequiresDevBuild"),
-              );
+              Alert.alert(t("assistant.voiceInput"), t("assistant.voiceNotSupported"));
               return;
             }
             if (!speech.listening) {
@@ -132,11 +129,7 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
       <TextInput
         value={value}
         onChangeText={onChange}
-        placeholder={
-          speech.listening && speech.interimTranscript
-            ? speech.interimTranscript
-            : placeholder ?? label
-        }
+        placeholder={placeholder ?? label}
         placeholderTextColor={colors.onSurfaceVariant}
         style={styles.input}
         multiline
@@ -150,7 +143,7 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
       ) : null}
       {speech.localizing ? (
         <Text style={styles.hint} accessibilityLiveRegion="polite">
-          {t("workOrders.feedbackVoiceLocalizing")}
+          {t("workOrders.feedbackVoiceTranscribing")}
         </Text>
       ) : null}
       {voiceError() ? (

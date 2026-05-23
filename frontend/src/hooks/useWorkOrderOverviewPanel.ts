@@ -26,6 +26,7 @@ export function useWorkOrderOverviewPanel() {
 
   return {
     activeOrder,
+    onOpen,
     onRowClick,
     onHide,
   };
