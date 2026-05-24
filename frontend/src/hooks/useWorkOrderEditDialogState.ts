@@ -11,9 +11,11 @@ import {
 import { File, FileText, Image, Video, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Toast } from "primereact/toast";
+import { confirmDialog } from "primereact/confirmdialog";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+import type { WorkOrderPlanningConflict } from "../lib/workOrderApi";
 import type { TransactionRow } from "../pages/TransactionsPage";
 import { useWorkOrderCopy } from "./useWorkOrderCopy";
 import { useWorkOrderSearchReferenceData } from "./useWorkOrderSearchReferenceData";
@@ -90,6 +92,47 @@ function formatHoursForInput(hours: number): string {
   if (!Number.isFinite(hours) || hours < 0) return "";
   const rounded = Math.round(hours * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+type WorkOrderSavePayload = {
+  name: string;
+  description: string | null;
+  assetId: string;
+  costCenterId: string;
+  plannedStart: string;
+  plannedEnd: string | null;
+  plannedDurationMinutes: number | null;
+  orderType: WorkOrder["orderType"];
+  responsibleEmployeeId: string | null;
+  workgroupId: string;
+  classificationId: string | null;
+  originalWo?: string | null;
+};
+
+type WorkOrderAssetConflictPayload = {
+  assetKey: string;
+  assetName: string;
+  conflicts: WorkOrderPlanningConflict[];
+  sameDayConflict: boolean;
+};
+
+function buildAssetConflictConfirmMessage(
+  t: (key: string, opts?: Record<string, string>) => string,
+  conflict: WorkOrderAssetConflictPayload,
+): string {
+  const intro = conflict.sameDayConflict
+    ? t("kalendar.moveAssetConflictSameDay", {
+        assetKey: conflict.assetKey,
+        assetName: conflict.assetName,
+      })
+    : t("kalendar.moveAssetConflictOverlap", {
+        assetKey: conflict.assetKey,
+        assetName: conflict.assetName,
+      });
+  const list = conflict.conflicts
+    .map((c) => `#${c.orderNumber} ${c.name}`)
+    .join("\n");
+  return list ? `${intro}\n\n${list}` : intro;
 }
 
 function workOrderRowFromMeta(
@@ -943,13 +986,15 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   }, []);
 
   const showSaveError = useCallback(
-    async (res: Response) => {
-      let code: string | undefined;
-      try {
-        const body = (await res.json()) as { error?: string };
-        code = body.error;
-      } catch {
-        /* ignore */
+    async (res: Response, parsedError?: string) => {
+      let code = parsedError;
+      if (!code) {
+        try {
+          const body = (await res.json()) as { error?: string };
+          code = body.error;
+        } catch {
+          /* ignore */
+        }
       }
       let detail = t("workOrders.saveError");
       if (code === "invalid_asset") detail = t("workOrders.invalidAsset");
@@ -970,6 +1015,129 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
     },
     [t, toastRef],
+  );
+
+  const finalizeSavedOrder = useCallback(
+    async (saved: WorkOrder) => {
+      const pendingAssignIds = Array.from(new Set(assignmentEmployeeIds.filter(Boolean)));
+      if (pendingAssignIds.length > 0) {
+        const assignOk = await postAssignmentsForOrder(saved.id, pendingAssignIds, {
+          checkFormSavedWorkgroup: false,
+        });
+        if (!assignOk) {
+          return false;
+        }
+        setAssignmentEmployeeIds([]);
+        await loadAssignments(saved.id);
+      }
+      if (pendingFiles.length > 0) {
+        setUploading(true);
+        try {
+          const uploads = await Promise.all(pendingFiles.map((doc) => uploadDocument(saved.id, doc)));
+          if (uploads.some((ok) => !ok)) {
+            toastRef.current?.show({
+              severity: "warn",
+              summary: t("workOrders.documentsUploadPartialError"),
+              life: 5000,
+            });
+          } else {
+            toastRef.current?.show({ severity: "success", summary: t("workOrders.documentsUploaded"), life: 3000 });
+          }
+        } finally {
+          setUploading(false);
+        }
+      }
+      onOrderUpdated?.(saved);
+      closeDialog();
+      setPendingFiles([]);
+      await refreshExternal();
+      toastRef.current?.show({
+        severity: "success",
+        summary: editingId ? t("workOrders.saved") : t("workOrders.created"),
+        life: 3000,
+      });
+      return true;
+    },
+    [
+      assignmentEmployeeIds,
+      closeDialog,
+      editingId,
+      loadAssignments,
+      onOrderUpdated,
+      pendingFiles,
+      postAssignmentsForOrder,
+      refreshExternal,
+      t,
+      toastRef,
+      uploadDocument,
+    ],
+  );
+
+  const submitWorkOrderPayload = useCallback(
+    async (
+      payload: WorkOrderSavePayload,
+      allowAssetOverlap: boolean,
+    ): Promise<
+      | { ok: true; row: WorkOrder }
+      | { ok: false; kind: "asset_conflict"; conflict: WorkOrderAssetConflictPayload }
+      | { ok: false; kind: "error" }
+    > => {
+      const url = editingId ? `/api/work-orders/${editingId}` : "/api/work-orders";
+      const res = await apiFetch(url, {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(allowAssetOverlap ? { ...payload, allowAssetOverlap: true } : payload),
+      });
+      if (res.status === 409) {
+        let data: {
+          error?: string;
+          assetKey?: string;
+          assetName?: string;
+          conflicts?: WorkOrderPlanningConflict[];
+          sameDayConflict?: boolean;
+        } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+        if (data.error === "asset_conflict" && data.conflicts?.length) {
+          return {
+            ok: false,
+            kind: "asset_conflict",
+            conflict: {
+              assetKey: data.assetKey ?? "",
+              assetName: data.assetName ?? "",
+              conflicts: data.conflicts,
+              sameDayConflict: data.sameDayConflict ?? true,
+            },
+          };
+        }
+        await showSaveError(res, data.error);
+        return { ok: false, kind: "error" };
+      }
+      if (!res.ok) {
+        await showSaveError(res);
+        return { ok: false, kind: "error" };
+      }
+      return { ok: true, row: (await res.json()) as WorkOrder };
+    },
+    [editingId, showSaveError],
+  );
+
+  const confirmAssetConflictSave = useCallback(
+    (conflict: WorkOrderAssetConflictPayload) =>
+      new Promise<boolean>((resolve) => {
+        confirmDialog({
+          message: buildAssetConflictConfirmMessage(t, conflict),
+          header: t("workOrders.assetConflictConfirmTitle"),
+          acceptLabel: t("workOrders.saveDespiteAssetConflict"),
+          rejectLabel: t("workOrders.no"),
+          accept: () => resolve(true),
+          reject: () => resolve(false),
+        });
+      }),
+    [t],
   );
 
   const save = useCallback(async () => {
@@ -997,7 +1165,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     const plannedDurationMinutes = hours == null ? null : Math.round(hours * 60);
     setSaving(true);
     try {
-      const payload = {
+      const payload: WorkOrderSavePayload = {
         name,
         description: description || null,
         assetId: form.assetId,
@@ -1011,69 +1179,30 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         classificationId: form.classificationId.trim() || null,
         ...(editingId ? {} : { originalWo: form.originalWoId.trim() || null }),
       };
-      const url = editingId ? `/api/work-orders/${editingId}` : "/api/work-orders";
-      const res = await apiFetch(url, {
-        method: editingId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        await showSaveError(res);
-        return;
+
+      let result = await submitWorkOrderPayload(payload, false);
+      if (!result.ok && result.kind === "asset_conflict") {
+        setSaving(false);
+        const confirmed = await confirmAssetConflictSave(result.conflict);
+        if (!confirmed) return;
+        setSaving(true);
+        result = await submitWorkOrderPayload(payload, true);
       }
-      const saved = (await res.json()) as WorkOrder;
-      const pendingAssignIds = Array.from(new Set(assignmentEmployeeIds.filter(Boolean)));
-      if (pendingAssignIds.length > 0) {
-        const assignOk = await postAssignmentsForOrder(saved.id, pendingAssignIds, {
-          checkFormSavedWorkgroup: false,
-        });
-        if (!assignOk) {
-          return;
-        }
-        setAssignmentEmployeeIds([]);
-        await loadAssignments(saved.id);
-      }
-      if (pendingFiles.length > 0) {
-        setUploading(true);
-        try {
-          const uploads = await Promise.all(pendingFiles.map((doc) => uploadDocument(saved.id, doc)));
-          if (uploads.some((ok) => !ok)) {
-            toastRef.current?.show({ severity: "warn", summary: t("workOrders.documentsUploadPartialError"), life: 5000 });
-          } else {
-            toastRef.current?.show({ severity: "success", summary: t("workOrders.documentsUploaded"), life: 3000 });
-          }
-        } finally {
-          setUploading(false);
-        }
-      }
-      onOrderUpdated?.(saved);
-      closeDialog();
-      setPendingFiles([]);
-      await refreshExternal();
-      toastRef.current?.show({
-        severity: "success",
-        summary: editingId ? t("workOrders.saved") : t("workOrders.created"),
-        life: 3000,
-      });
+      if (!result.ok) return;
+      await finalizeSavedOrder(result.row);
     } catch {
       toastRef.current?.show({ severity: "error", summary: t("workOrders.saveError"), life: 6000 });
     } finally {
       setSaving(false);
     }
   }, [
-    assignmentEmployeeIds,
-    closeDialog,
+    confirmAssetConflictSave,
     editingId,
+    finalizeSavedOrder,
     form,
-    loadAssignments,
-    onOrderUpdated,
-    pendingFiles,
-    postAssignmentsForOrder,
-    refreshExternal,
-    showSaveError,
+    submitWorkOrderPayload,
     t,
     toastRef,
-    uploadDocument,
   ]);
 
   const removeAssignment = useCallback(

@@ -46,6 +46,18 @@ export type AtheneRescheduleMeta = {
   allowAssetOverlap?: boolean;
 };
 
+export type AtheneRescheduleShiftMeta = {
+  sourceRangeStart?: string;
+  sourceRangeEnd?: string;
+  sourceIsoWeek?: number;
+  sourceIsoWeekYear?: number;
+  targetRangeStart?: string;
+  targetIsoWeek?: number;
+  targetIsoWeekYear?: number;
+  allowAssetOverlap?: boolean;
+  ordersWithAssetConflicts?: number;
+};
+
 type AtheneMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
@@ -58,6 +70,7 @@ type AtheneMessage = {
     targetField?: "remark" | "pauseRemark";
     reschedule?: AtheneRescheduleMeta;
     rescheduleBatch?: AtheneRescheduleMeta[];
+    rescheduleShift?: AtheneRescheduleShiftMeta;
   };
 };
 
@@ -478,6 +491,46 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     [applyBusy, applyOneReschedule, t],
   );
 
+  const applyRescheduleShift = useCallback(
+    async (message: AtheneMessage, allowAssetOverlap = false) => {
+      const shift = message.meta?.rescheduleShift;
+      if (!shift || applyBusy) return;
+      setApplyBusy(true);
+      setApplyNotice(null);
+      try {
+        const res = await apiFetch("/api/assistant/apply-planning-shift", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...shift,
+            allowAssetOverlap: allowAssetOverlap || shift.allowAssetOverlap === true,
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; updatedCount?: number; error?: string };
+        if (!res.ok || !data.ok) {
+          if (data.error === "asset_conflict") {
+            const retry = window.confirm(t("assistant.applyRescheduleShiftOverlapConfirm"));
+            if (retry) {
+              setApplyBusy(false);
+              await applyRescheduleShift(message, true);
+              return;
+            }
+          }
+          throw new Error(data.error ?? "apply_failed");
+        }
+        setApplyNotice(
+          t("assistant.rescheduleShiftSuccess", { count: data.updatedCount ?? 0 }),
+        );
+        onRescheduleAppliedRef.current?.();
+      } catch {
+        setApplyNotice(t("assistant.rescheduleError"));
+      } finally {
+        setApplyBusy(false);
+      }
+    },
+    [applyBusy, t],
+  );
+
   const feedbackMode = isFeedbackUiContext(uiContext);
 
   const value = useMemo<AtheneAssistantContextValue>(
@@ -621,6 +674,28 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                         {t("assistant.applyRescheduleBatch", {
                           count: message.meta.rescheduleBatch.length,
                         })}
+                      </button>
+                    ) : null}
+                    {message.meta?.rescheduleShift ? (
+                      <button
+                        type="button"
+                        className="mt-2 rounded-sm border border-[var(--color-primary)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_12%,transparent)] disabled:opacity-50"
+                        disabled={applyBusy}
+                        onClick={() => {
+                          const shift = message.meta!.rescheduleShift!;
+                          if (
+                            (shift.ordersWithAssetConflicts ?? 0) > 0 &&
+                            !shift.allowAssetOverlap
+                          ) {
+                            if (window.confirm(t("assistant.applyRescheduleShiftOverlapConfirm"))) {
+                              void applyRescheduleShift(message, true);
+                            }
+                            return;
+                          }
+                          void applyRescheduleShift(message);
+                        }}
+                      >
+                        {t("assistant.applyRescheduleShift")}
                       </button>
                     ) : null}
                   </article>

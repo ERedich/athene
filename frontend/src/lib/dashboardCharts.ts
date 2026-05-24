@@ -1,7 +1,9 @@
 import type { TFunction } from "i18next";
 
 import { readThemeChartColors, readThemePrimaryChartColors } from "./workOrderOverviewCharts";
-import type { DayCount, StatusCount } from "../hooks/useDashboardMetrics";
+import type { ChartData, ChartOptions } from "chart.js";
+
+import type { DayCount, OrderTypeCount, StatusCount } from "../hooks/useDashboardMetrics";
 
 /** Chart bar/doughnut fills aligned with work-order status table colors. */
 export const WORK_ORDER_STATUS_CHART_COLORS: Record<string, string> = {
@@ -17,6 +19,70 @@ export const WORK_ORDER_STATUS_CHART_COLORS: Record<string, string> = {
 
 export function chartColorForWorkOrderStatus(status: string): string {
   return WORK_ORDER_STATUS_CHART_COLORS[status] ?? "rgba(148, 163, 184, 0.75)";
+}
+
+/** Bar fills for work-order type breakdown on the dashboard. */
+export const WORK_ORDER_TYPE_CHART_COLORS: Record<string, string> = {
+  maintenance: "rgba(59, 130, 246, 0.9)",
+  repair: "rgba(245, 158, 11, 0.9)",
+  breakdown: "rgba(248, 113, 113, 0.9)",
+};
+
+export function chartColorForWorkOrderType(orderType: string): string {
+  return WORK_ORDER_TYPE_CHART_COLORS[orderType] ?? "rgba(148, 163, 184, 0.75)";
+}
+
+export function orderTypeLabel(t: TFunction, orderType: string): string {
+  const key = `workOrders.typeValues.${orderType}`;
+  const translated = t(key);
+  return translated === key ? orderType : translated;
+}
+
+export function buildOrderTypeBarChartData(
+  rows: OrderTypeCount[],
+  t: TFunction,
+): ChartData<"bar"> {
+  const labels = rows.map((r) => orderTypeLabel(t, r.orderType));
+  return {
+    labels,
+    datasets: [
+      {
+        label: t("dashboard.chartCount"),
+        data: rows.map((r) => r.count),
+        backgroundColor: rows.map((r) => chartColorForWorkOrderType(r.orderType)),
+        borderRadius: 4,
+        maxBarThickness: 40,
+      },
+    ],
+  };
+}
+
+export function buildDashboardBarChartOptions(): ChartOptions<"bar"> {
+  const themeColors = readThemeChartColors();
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false },
+    },
+    scales: {
+      x: {
+        ticks: { color: themeColors.text, maxRotation: 0, font: { size: 10 } },
+        grid: { display: false },
+      },
+      y: {
+        ticks: {
+          color: themeColors.text,
+          font: { size: 10 },
+          precision: 0,
+        },
+        grid: { color: themeColors.grid },
+        beginAtZero: true,
+      },
+    },
+  };
 }
 
 export function statusLabel(t: TFunction, status: string): string {

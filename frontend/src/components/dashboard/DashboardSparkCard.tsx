@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 import { Chart } from "primereact/chart";
 import type { LucideProps } from "lucide-react";
 
+import type { DashboardKpiBarChart, DashboardKpiDisplay } from "../../lib/dashboardKpiRegistry";
 import {
   buildSparklineChart,
   type SparkAccent,
@@ -14,40 +15,56 @@ type IconComponent = ComponentType<LucideProps>;
 type Props = {
   icon: IconComponent;
   title: string;
-  value: number | null;
+  display?: DashboardKpiDisplay;
+  value: number | string | null;
   valueSuffix?: string;
+  detail?: string;
   locale: string;
   href?: string;
   series: number[];
+  chart?: DashboardKpiBarChart;
   loading?: boolean;
   accent?: SparkAccent;
   footer?: ReactNode;
+  headerActions?: ReactNode;
 };
+
+function formatDisplayValue(
+  value: number | string | null,
+  locale: string,
+): string {
+  if (value === null) return "—";
+  if (typeof value === "string") return value;
+  try {
+    return new Intl.NumberFormat(locale).format(value);
+  } catch {
+    return String(value);
+  }
+}
 
 export function DashboardSparkCard({
   icon: Icon,
   title,
+  display = "chart",
   value,
   valueSuffix = "",
+  detail,
   locale,
   href,
   series,
+  chart,
   loading = false,
   accent = "green",
   footer,
+  headerActions,
 }: Props) {
-  const formattedValue =
-    value === null
-      ? "—"
-      : (() => {
-          try {
-            return new Intl.NumberFormat(locale).format(value);
-          } catch {
-            return String(value);
-          }
-        })();
+  const isValueOnly = display === "value";
+  const formattedValue = formatDisplayValue(value, locale);
+  const isTextValue = typeof value === "string" && value.length > 0;
+  const isBarChart = !isValueOnly && chart?.type === "bar";
+  const showSparkline = !isValueOnly && !isBarChart;
 
-  const { data, options } = useMemo(
+  const sparkline = useMemo(
     () => buildSparklineChart(series, accent),
     [series, accent],
   );
@@ -64,7 +81,9 @@ export function DashboardSparkCard({
   );
 
   return (
-    <article className={`app-dashboard-spark-card app-dashboard-spark-card--${accent}`}>
+    <article
+      className={`app-dashboard-spark-card app-dashboard-spark-card--${accent}${isValueOnly ? " app-dashboard-spark-card--value-only" : ""}`}
+    >
       <header className="app-dashboard-spark-header">
         <div className="app-dashboard-spark-header-left">
           <span
@@ -75,20 +94,56 @@ export function DashboardSparkCard({
           </span>
           {titleEl}
         </div>
-        <p className="app-dashboard-spark-value" aria-live="polite">
-          {formattedValue}
-          {valueSuffix ? (
-            <span className="app-dashboard-spark-value-suffix">{valueSuffix}</span>
+        <div className="app-dashboard-spark-header-right">
+          {headerActions}
+          {!isValueOnly ? (
+            <p
+              className={`app-dashboard-spark-value${isTextValue ? " app-dashboard-spark-value--text" : ""}`}
+              aria-live="polite"
+              title={isTextValue ? formattedValue : undefined}
+            >
+              {formattedValue}
+              {valueSuffix ? (
+                <span className="app-dashboard-spark-value-suffix">{valueSuffix}</span>
+              ) : null}
+            </p>
           ) : null}
-        </p>
+        </div>
       </header>
-      <div className="app-dashboard-spark-chart">
-        {loading ? (
-          <div className="app-dashboard-spark-chart-skeleton" aria-hidden />
-        ) : (
-          <Chart type="line" data={data} options={options} />
-        )}
-      </div>
+      {isValueOnly ? (
+        <div className="app-dashboard-spark-value-body" aria-live="polite">
+          {loading ? (
+            <div className="app-dashboard-spark-value-body-skeleton" aria-hidden />
+          ) : (
+            <>
+              <p
+                className={`app-dashboard-spark-value-body__primary${isTextValue ? " app-dashboard-spark-value-body__primary--text" : ""}`}
+                title={isTextValue ? formattedValue : undefined}
+              >
+                {formattedValue}
+                {valueSuffix ? (
+                  <span className="app-dashboard-spark-value-body__suffix">{valueSuffix}</span>
+                ) : null}
+              </p>
+              {detail ? (
+                <p className="app-dashboard-spark-value-body__detail">{detail}</p>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : (
+        <div
+          className={`app-dashboard-spark-chart${isBarChart ? " app-dashboard-spark-chart--bar" : ""}`}
+        >
+          {loading ? (
+            <div className="app-dashboard-spark-chart-skeleton" aria-hidden />
+          ) : isBarChart ? (
+            <Chart type="bar" data={chart.data} options={chart.options} />
+          ) : showSparkline ? (
+            <Chart type="line" data={sparkline.data} options={sparkline.options} />
+          ) : null}
+        </div>
+      )}
       {footer ? <footer className="app-dashboard-spark-footer">{footer}</footer> : null}
     </article>
   );

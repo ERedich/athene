@@ -40,7 +40,6 @@ import {
   effectivePlannedEnd,
   getAssetPlanningConflicts,
   isBeforeLocalToday,
-  validateBatchPlanningAssignments,
   type PlanningConflict,
   type PlanningOrderRow,
 } from "./workOrderScheduling.js";
@@ -634,8 +633,17 @@ router.get("/:id/planning-conflicts", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
+  const assetIdRaw = typeof req.query.assetId === "string" ? req.query.assetId.trim() : "";
+  const assetIdOverride = isUuid(assetIdRaw) ? assetIdRaw : undefined;
   try {
-    const check = await checkWorkOrderAssetPlanningConflicts(userId, id, plannedStart, plannedEnd);
+    const check = await checkWorkOrderAssetPlanningConflicts(
+      userId,
+      id,
+      plannedStart,
+      plannedEnd,
+      [],
+      assetIdOverride ? { assetId: assetIdOverride } : undefined,
+    );
     if ("error" in check) {
       res.status(check.error === "not_found" ? 404 : 400).json({ error: check.error });
       return;
@@ -1655,6 +1663,8 @@ router.put("/:id", async (req: Request, res: Response) => {
         id,
         parsed.plannedStart,
         parsed.plannedEnd,
+        [],
+        { assetId: parsed.assetId },
       );
       if ("error" in check) {
         res.status(check.error === "not_found" ? 404 : 400).json({ error: check.error });
@@ -1969,6 +1979,7 @@ export async function checkWorkOrderAssetPlanningConflicts(
   plannedStartIso: string,
   plannedEndIso: string | null,
   excludeWorkOrderIds: string[] = [],
+  options?: { assetId?: string },
 ): Promise<WorkOrderPlanningConflictCheck | { error: "not_found" | "invalid_body" }> {
   if (!isUuid(workOrderId)) {
     return { error: "invalid_body" };
@@ -2001,6 +2012,29 @@ export async function checkWorkOrderAssetPlanningConflicts(
     return { error: "not_found" };
   }
 
+  const assetId =
+    options?.assetId && isUuid(options.assetId) ? options.assetId : row.assetId;
+  let assetKey = row.assetKey;
+  let assetName = row.assetName;
+  if (assetId !== row.assetId) {
+    const asset = await pool.query<{ key: string; name: string }>(
+      `
+      SELECT a."key", a."name"
+      FROM "asset" a
+      WHERE a."id" = $1::uuid
+        AND ${siteAccessSql('a."siteId"', "$2")}
+      LIMIT 1
+      `,
+      [assetId, userId],
+    );
+    const assetRow = asset.rows[0];
+    if (!assetRow) {
+      return { error: "invalid_body" };
+    }
+    assetKey = assetRow.key;
+    assetName = assetRow.name;
+  }
+
   const proposedStart = new Date(plannedStartIso);
   const proposedEnd = effectivePlannedEnd(plannedStartIso, plannedEndIso);
   if (Number.isNaN(proposedStart.getTime()) || Number.isNaN(proposedEnd.getTime())) {
@@ -2031,21 +2065,21 @@ export async function checkWorkOrderAssetPlanningConflicts(
       AND w."plannedStart" <= $4::timestamptz
       AND (w."plannedEnd" IS NULL OR w."plannedEnd" >= $3::timestamptz)
     `,
-    [userId, row.assetId, windowStart.toISOString(), windowEnd.toISOString()],
+    [userId, assetId, windowStart.toISOString(), windowEnd.toISOString()],
   );
   const excludeIds = new Set([workOrderId, ...excludeWorkOrderIds]);
   const conflicts = getAssetPlanningConflicts(
     overlapping,
-    row.assetId,
+    assetId,
     proposedStart,
     proposedEnd,
     excludeIds,
   );
 
   return {
-    assetId: row.assetId,
-    assetKey: row.assetKey,
-    assetName: row.assetName,
+    assetId,
+    assetKey,
+    assetName,
     conflicts,
     sameDayConflict: hasConflictOnSameCalendarDay(proposedStart, proposedEnd, conflicts),
   };
@@ -2355,8 +2389,7 @@ export async function updateWorkOrderPlanningBatch(
   }
 
   const excludeSet = new Set(ids);
-  let assetId: string | null = null;
-  const parsedAssignments: Array<{ id: string; plannedStart: string; plannedEnd: string }> = [];
+  const rows: WorkOrderRow[] = [];
 
   for (const item of assignments) {
     const plannedStart = parseIsoDatetime(item.plannedStart);
@@ -2367,85 +2400,12 @@ export async function updateWorkOrderPlanningBatch(
     if (!plannedStart || (item.plannedEnd !== null && item.plannedEnd !== undefined && !plannedEnd)) {
       return { ok: false, error: "invalid_body" };
     }
-    if (isBeforeLocalToday(plannedStart)) {
-      return { ok: false, error: "before_today" };
-    }
 
-    const existing = await pool.query<{ assetId: string; orderNumber: number }>(
-      `
-      SELECT w."assetId"::text AS "assetId", w."orderNumber"
-      FROM "workOrder" w
-      WHERE w."id" = $1::uuid
-        AND ${siteAccessSql('w."siteId"', "$2")}
-      LIMIT 1
-      `,
-      [item.workOrderId, userId],
-    );
-    const row = existing.rows[0];
-    if (!row) {
-      return { ok: false, error: "not_found", failedOrderNumber: undefined };
-    }
-    if (assetId === null) assetId = row.assetId;
-    if (assetId !== row.assetId) {
-      return { ok: false, error: "mixed_assets" };
-    }
-
-    const endDate = effectivePlannedEnd(plannedStart, plannedEnd);
-    parsedAssignments.push({
-      id: item.workOrderId,
-      plannedStart,
-      plannedEnd: endDate.toISOString(),
-    });
-  }
-
-  const windowStart = parsedAssignments.reduce(
-    (min, a) => Math.min(min, new Date(a.plannedStart).getTime()),
-    Number.POSITIVE_INFINITY,
-  );
-  const windowEnd = parsedAssignments.reduce(
-    (max, a) => Math.max(max, new Date(a.plannedEnd).getTime()),
-    Number.NEGATIVE_INFINITY,
-  );
-  const padMs = 14 * 24 * 60 * 60 * 1000;
-  const { rows: overlapping } = await pool.query<PlanningOrderRow>(
-    `
-    SELECT
-      w."id",
-      w."orderNumber",
-      w."name",
-      w."assetId",
-      a."key" AS "assetKey",
-      w."plannedStart",
-      w."plannedEnd"
-    FROM "workOrder" w
-    JOIN "asset" a ON a."id" = w."assetId"
-    WHERE ${siteAccessSql('w."siteId"', "$1")}
-      AND w."assetId" = $2::uuid
-      AND w."plannedStart" <= $4::timestamptz
-      AND (w."plannedEnd" IS NULL OR w."plannedEnd" >= $3::timestamptz)
-    `,
-    [
-      userId,
-      assetId,
-      new Date(windowStart - padMs).toISOString(),
-      new Date(windowEnd + padMs).toISOString(),
-    ],
-  );
-
-  if (!options?.allowAssetOverlap) {
-    const validation = validateBatchPlanningAssignments(assetId!, parsedAssignments, overlapping);
-    if (!validation.valid) {
-      return { ok: false, error: "asset_conflict", conflicts: validation.conflicts };
-    }
-  }
-
-  const rows: WorkOrderRow[] = [];
-  for (const item of assignments) {
     const result = await updateWorkOrderPlanning(
       userId,
       item.workOrderId,
-      item.plannedStart,
-      item.plannedEnd,
+      plannedStart,
+      plannedEnd,
       {
         source: options?.source ?? "assistant",
         excludeWorkOrderIds: [...excludeSet],
@@ -2453,12 +2413,11 @@ export async function updateWorkOrderPlanningBatch(
       },
     );
     if (!result.ok) {
-      const failed = overlapping.find((o) => o.id === item.workOrderId);
       return {
         ok: false,
         error: result.error,
         conflicts: result.conflicts,
-        failedOrderNumber: failed?.orderNumber,
+        failedOrderNumber: result.error === "not_found" ? undefined : undefined,
       };
     }
     rows.push(result.row);

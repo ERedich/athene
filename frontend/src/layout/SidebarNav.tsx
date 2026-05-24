@@ -116,7 +116,9 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
                 className={`app-sidebar-nav-submenu-inner space-y-0.5 ${
                   collapsed
                     ? "flex flex-col items-center pt-0.5"
-                    : "app-sidebar-nav-submenu-inner--expanded pt-0.5"
+                    : isOpen
+                      ? "app-sidebar-nav-submenu-inner--expanded pt-0.5"
+                      : "pt-0.5"
                 }`}
               >
                 {group.items.map((item) => {

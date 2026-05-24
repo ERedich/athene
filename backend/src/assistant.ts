@@ -25,9 +25,14 @@ import {
   findFreePlanningSlots,
   getAssetPlanningConflicts,
   isBeforeLocalToday,
+  computePlanningWindowShiftDeltaMs,
+  getIsoWeekRange,
   planSequentialWorkOrderSlots,
+  shiftPlannedRangeByDeltaMs,
   type OrderToPlanSequentially,
   type PlanningOrderRow,
+  attachAssetConflictsToShiftAssignments,
+  type ShiftedPlanningAssignment,
 } from "./workOrderScheduling.js";
 
 type AssistantRole = "user" | "assistant" | "system" | "tool";
@@ -650,7 +655,19 @@ function getFeedbackContextData(context: UiContext | null): FeedbackContextData 
 }
 
 const ATHENE_APPLY_META_RE =
-  /\n?\[ATHENE_APPLY:(remark|pauseRemark|reschedule|rescheduleBatch):([\s\S]*?)\]\s*$/;
+  /\n?\[ATHENE_APPLY:(remark|pauseRemark|reschedule|rescheduleBatch|rescheduleShift):([\s\S]*?)\]\s*$/;
+
+export type AssistantApplyRescheduleShiftMeta = {
+  sourceRangeStart?: string;
+  sourceRangeEnd?: string;
+  sourceIsoWeek?: number;
+  sourceIsoWeekYear?: number;
+  targetRangeStart?: string;
+  targetIsoWeek?: number;
+  targetIsoWeekYear?: number;
+  allowAssetOverlap?: boolean;
+  ordersWithAssetConflicts?: number;
+};
 
 export type AssistantApplyRescheduleMeta = {
   orderNumber?: number;
@@ -663,7 +680,8 @@ export type AssistantApplyRescheduleMeta = {
 type AssistantApplyMeta =
   | { correctedText: string; targetField: "remark" | "pauseRemark" }
   | { reschedule: AssistantApplyRescheduleMeta }
-  | { rescheduleBatch: AssistantApplyRescheduleMeta[] };
+  | { rescheduleBatch: AssistantApplyRescheduleMeta[] }
+  | { rescheduleShift: AssistantApplyRescheduleShiftMeta };
 
 function parseRescheduleApplyPayload(raw: unknown): AssistantApplyRescheduleMeta | null {
   if (raw === null || typeof raw !== "object") return null;
@@ -691,6 +709,59 @@ function parseRescheduleApplyPayloadJson(raw: string): AssistantApplyRescheduleM
   }
 }
 
+function parseRescheduleShiftApplyPayload(raw: unknown): AssistantApplyRescheduleShiftMeta | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const sourceIsoWeek =
+    typeof o.sourceIsoWeek === "number"
+      ? o.sourceIsoWeek
+      : typeof o.sourceIsoWeek === "string" && /^\d+$/.test(o.sourceIsoWeek.trim())
+        ? Number(o.sourceIsoWeek.trim())
+        : undefined;
+  const sourceIsoWeekYear =
+    typeof o.sourceIsoWeekYear === "number"
+      ? o.sourceIsoWeekYear
+      : typeof o.sourceIsoWeekYear === "string" && /^\d+$/.test(o.sourceIsoWeekYear.trim())
+        ? Number(o.sourceIsoWeekYear.trim())
+        : undefined;
+  const targetIsoWeek =
+    typeof o.targetIsoWeek === "number"
+      ? o.targetIsoWeek
+      : typeof o.targetIsoWeek === "string" && /^\d+$/.test(o.targetIsoWeek.trim())
+        ? Number(o.targetIsoWeek.trim())
+        : undefined;
+  const targetIsoWeekYear =
+    typeof o.targetIsoWeekYear === "number"
+      ? o.targetIsoWeekYear
+      : typeof o.targetIsoWeekYear === "string" && /^\d+$/.test(o.targetIsoWeekYear.trim())
+        ? Number(o.targetIsoWeekYear.trim())
+        : undefined;
+  const sourceRangeStart = parseIsoDatetime(o.sourceRangeStart);
+  const sourceRangeEnd = parseIsoDatetime(o.sourceRangeEnd);
+  const targetRangeStart = parseIsoDatetime(o.targetRangeStart);
+  const hasKw =
+    sourceIsoWeek !== undefined &&
+    sourceIsoWeekYear !== undefined &&
+    targetIsoWeek !== undefined &&
+    targetIsoWeekYear !== undefined;
+  const hasRange = Boolean(sourceRangeStart && sourceRangeEnd && targetRangeStart);
+  if (!hasKw && !hasRange) return null;
+  return {
+    ...(sourceRangeStart ? { sourceRangeStart } : {}),
+    ...(sourceRangeEnd ? { sourceRangeEnd } : {}),
+    ...(targetRangeStart ? { targetRangeStart } : {}),
+    ...(sourceIsoWeek !== undefined ? { sourceIsoWeek } : {}),
+    ...(sourceIsoWeekYear !== undefined ? { sourceIsoWeekYear } : {}),
+    ...(targetIsoWeek !== undefined ? { targetIsoWeek } : {}),
+    ...(targetIsoWeekYear !== undefined ? { targetIsoWeekYear } : {}),
+    allowAssetOverlap: o.allowAssetOverlap === true,
+    ordersWithAssetConflicts:
+      typeof o.ordersWithAssetConflicts === "number" && Number.isFinite(o.ordersWithAssetConflicts)
+        ? o.ordersWithAssetConflicts
+        : undefined,
+  };
+}
+
 function parseRescheduleBatchApplyPayload(raw: string): AssistantApplyRescheduleMeta[] | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -705,6 +776,28 @@ function parseRescheduleBatchApplyPayload(raw: string): AssistantApplyReschedule
   } catch {
     return null;
   }
+}
+
+function buildRescheduleShiftMetaFromToolArgs(
+  args: Record<string, unknown>,
+  ordersWithAssetConflicts = 0,
+): AssistantApplyRescheduleShiftMeta | null {
+  const parsed = parseRescheduleShiftApplyPayload(args);
+  if (!parsed) return null;
+  if (ordersWithAssetConflicts > 0) {
+    parsed.ordersWithAssetConflicts = ordersWithAssetConflicts;
+  }
+  return parsed;
+}
+
+function mergeAssistantApplyMeta(
+  fromContent: AssistantApplyMeta | null,
+  fromTools: AssistantApplyMeta | null,
+): AssistantApplyMeta | null {
+  if (!fromContent && !fromTools) return null;
+  if (!fromContent) return fromTools;
+  if (!fromTools) return fromContent;
+  return { ...fromContent, ...fromTools };
 }
 
 function parseAssistantApplyMeta(content: string): {
@@ -738,6 +831,20 @@ function parseAssistantApplyMeta(content: string): {
       meta: { rescheduleBatch },
     };
   }
+  if (field === "rescheduleShift") {
+    try {
+      const rescheduleShift = parseRescheduleShiftApplyPayload(JSON.parse(payload));
+      if (!rescheduleShift) {
+        return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+      }
+      return {
+        displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
+        meta: { rescheduleShift },
+      };
+    } catch {
+      return { displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(), meta: null };
+    }
+  }
   return {
     displayContent: content.replace(ATHENE_APPLY_META_RE, "").trimEnd(),
     meta: { correctedText: payload, targetField: field as "remark" | "pauseRemark" },
@@ -753,11 +860,11 @@ function calendarSystemPromptAppendix(locale: string, calendarData: CalendarCont
   const en = locale.toLowerCase().startsWith("en");
   const lines = [
     en
-      ? "The user is in the Kalendar (planning calendar) UI. Help find free slots and reschedule work orders on the same asset without overlapping planned times."
-      : "Der Benutzer ist in der Kalendar-Planungsansicht. Hilf bei freien Terminen und Verschieben von Aufträgen am gleichen Asset ohne überlappende Planungszeiten.",
+      ? "The user is in the Kalendar (planning calendar) UI. Help reschedule work orders. Same-asset overlaps are warnings — ask for confirmation, then allowAssetOverlap."
+      : "Der Benutzer ist in der Kalendar-Planungsansicht. Überlappungen am gleichen Asset sind Warnungen — Benutzer fragen, dann allowAssetOverlap.",
     en
-      ? "Planning collision rule: only the same asset counts. If analyzeWorkOrderPlanning reports conflicts, ask: 'There is already another order on asset {key} in that period — move anyway?' Only after yes use allowAssetOverlap: true."
-      : "Kollisionsregel: nur gleiches Asset. Bei Konflikten fragen: 'Am gleichen Tag gibt es bereits einen Auftrag für Asset {key} — trotzdem verschieben?' Erst nach Ja allowAssetOverlap: true.",
+      ? "Planning collision rule: only the same asset counts. Overlaps never block planning — show proposed dates for ALL orders, explain conflicts, ask 'move anyway?'. Only after yes use allowAssetOverlap: true. Never say orders could not be planned due to overlaps or missing slots when shiftWorkOrdersInPlanningWindow returned a full assignment list."
+      : "Kollisionsregel: nur gleiches Asset. Überlappungen blockieren nie — ALLE vorgeschlagenen Termine zeigen, Konflikte erklären, fragen 'trotzdem verschieben?'. Erst nach Ja allowAssetOverlap: true. Nie behaupten, Aufträge fehlten wegen Überlappung oder fehlender Slots, wenn shiftWorkOrdersInPlanningWindow alle Zuweisungen geliefert hat.",
     en
       ? "Never move plannedStart before today (local calendar day, Europe/Berlin). Preserve duration when shifting unless the user specifies new end times."
       : "plannedStart nie vor heute (Kalendertag Europe/Berlin). Bei Verschieben die Dauer beibehalten, außer der Benutzer nennt explizit neue Endzeiten.",
@@ -765,8 +872,11 @@ function calendarSystemPromptAppendix(locale: string, calendarData: CalendarCont
       ? "NEVER propose or confirm planned dates without calling a planning tool first (findPlanningSlots, planSequentialWorkOrderSlots, or analyzeWorkOrderPlanning). Never assign the same start time to multiple orders on the same asset."
       : "NIEMALS Termine vorschlagen oder bestätigen ohne vorher ein Planungs-Tool (findPlanningSlots, planSequentialWorkOrderSlots, analyzeWorkOrderPlanning). Nie mehreren Aufträgen am gleichen Asset dieselbe Startzeit geben.",
     en
-      ? "For TWO OR MORE orders on the same asset: always use planSequentialWorkOrderSlots first, present its assignments table, then append [ATHENE_APPLY:rescheduleBatch:[{...},{...}]] with the tool result (include id + orderNumber per row). After explicit confirmation, call rescheduleWorkOrdersBatch with the same assignments — not rescheduleWorkOrder in a loop."
-      : "Bei ZWEI ODER MEHR Aufträgen am gleichen Asset: zuerst planSequentialWorkOrderSlots, Tabelle zeigen, dann [ATHENE_APPLY:rescheduleBatch:[{...},{...}]] mit Tool-Ergebnis (id + orderNumber). Nach Bestätigung rescheduleWorkOrdersBatch — nicht rescheduleWorkOrder einzeln.",
+      ? "To move ALL orders in a calendar week or date range (e.g. KW 20 → KW 30), use shiftWorkOrdersInPlanningWindow — NOT planSequentialWorkOrderSlots (that tool is only for listed orders on ONE asset). After confirmation call rescheduleWorkOrdersBatch with shiftPlan (same parameters) so every order is moved."
+      : "Alle Aufträge einer Kalenderwoche / eines Zeitraums verschieben (z. B. KW 20 → KW 30): shiftWorkOrdersInPlanningWindow — NICHT planSequentialWorkOrderSlots (nur ein Asset + explizite Liste). Nach Bestätigung rescheduleWorkOrdersBatch mit shiftPlan (gleiche Parameter), damit wirklich alle Aufträge verschoben werden.",
+    en
+      ? "For TWO OR MORE orders on the SAME asset only: planSequentialWorkOrderSlots. Never claim all orders were moved unless updatedCount equals orderCount from the tool."
+      : "Nur bei mehreren Aufträgen am GLEICHEN Asset: planSequentialWorkOrderSlots. Behaupte nie, alle seien verschoben, wenn updatedCount < orderCount.",
     en
       ? "For ONE order: use findPlanningSlots or analyzeWorkOrderPlanning before suggesting; append [ATHENE_APPLY:reschedule:{...}] for a single validated slot."
       : "Für EINEN Auftrag: vor Vorschlag findPlanningSlots oder analyzeWorkOrderPlanning; bei einem Slot [ATHENE_APPLY:reschedule:{...}].",
@@ -836,10 +946,9 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: Warehouses (Lager) belong to a site. listWarehouseStock lists all materials and quantities stored in one warehouse. searchStock finds stock rows across warehouses and materials.",
     "Program logic: App parameter MT-ACSD (allowChangeStockdata) controls whether existing stock rows are editable in the spare-parts UI. When false (N), existing warehouse/storageLocation/quantity rows are read-only; new stock rows may still be added. Balance changes to existing rows happen only via transactions (RM/RT not fully implemented yet).",
     "Program logic: You have read-only access to spare parts and warehouses. Never create, update, or delete materials, warehouses, or stock lines.",
-    "Program logic: Calendar / planning — NEVER invent or guess plannedStart/plannedEnd. Always call tools first: listWorkOrdersInPlanningWindow (overview), analyzeWorkOrderPlanning (test one interval), findPlanningSlots (one order), planSequentialWorkOrderSlots (two+ orders on same asset, back-to-back). Only present dates returned by tools.",
-    "Program logic: Multiple orders on the same asset must use planSequentialWorkOrderSlots so they do not overlap each other. Then [ATHENE_APPLY:rescheduleBatch:[...]] or rescheduleWorkOrdersBatch after explicit user confirmation. Single order: findPlanningSlots + [ATHENE_APPLY:reschedule:{...}].",
-    "Program logic: Planning collisions apply only when two accessible work orders share the same assetId and their planned intervals overlap. Different assets do not collide. Overlaps are allowed after user confirmation — explain conflicts (asset key/name, conflicting order numbers) and ask e.g. whether to move anyway; on yes call rescheduleWorkOrder or rescheduleWorkOrdersBatch with allowAssetOverlap: true.",
-    "Program logic: Do not ask the user to pick raw slot rows when they already asked to move specific orders — run planSequentialWorkOrderSlots and show the concrete per-order schedule.",
+    "Program logic: Calendar / planning — NEVER invent dates. Whole calendar week / range moves (e.g. KW 20 → KW 30): shiftWorkOrdersInPlanningWindow, show ALL assignment rows (never a partial subset), then rescheduleWorkOrdersBatch with shiftPlan. planSequentialWorkOrderSlots is only for packing a short explicit list on ONE asset into free slots — NOT for KW moves.",
+    "Program logic: Same-asset overlap is never a hard failure. If shiftWorkOrdersInPlanningWindow reports ordersWithAssetConflicts > 0, explain overlaps and ask the user; on yes call rescheduleWorkOrdersBatch with the same shiftPlan AND allowAssetOverlap: true. Never claim orders were skipped because of overlaps or lack of slots.",
+    "Program logic: Never claim all orders were moved unless rescheduleWorkOrdersBatch returned ok:true with updatedCount equal to orderCount. shiftWorkOrdersInPlanningWindow is preview only — it does not save. The UI shows an apply button for whole-week shifts when the batch tool was not called.",
     "All answers and tool requests must respect the user's site restrictions.",
     "Use UI context when a row is selected. If context is missing or ambiguous, ask a short clarifying question.",
     `Known user context: ${JSON.stringify(profile)}`,
@@ -1447,6 +1556,139 @@ async function findPlanningSlotsTool(
   };
 }
 
+type PlanningRangeArgs = {
+  sourceRangeStart: string;
+  sourceRangeEnd: string;
+  targetRangeStart: string;
+};
+
+function resolvePlanningShiftRanges(args: Record<string, unknown>): PlanningRangeArgs | { error: string } {
+  let sourceRangeStart: string | null = null;
+  let sourceRangeEnd: string | null = null;
+  let targetRangeStart: string | null = null;
+
+  const sourceWeek =
+    typeof args.sourceIsoWeek === "number"
+      ? args.sourceIsoWeek
+      : typeof args.sourceIsoWeek === "string" && /^\d+$/.test(args.sourceIsoWeek.trim())
+        ? Number(args.sourceIsoWeek.trim())
+        : null;
+  const sourceYear =
+    typeof args.sourceIsoWeekYear === "number"
+      ? args.sourceIsoWeekYear
+      : typeof args.sourceIsoWeekYear === "string" && /^\d+$/.test(args.sourceIsoWeekYear.trim())
+        ? Number(args.sourceIsoWeekYear.trim())
+        : null;
+  if (sourceWeek !== null && sourceYear !== null) {
+    const range = getIsoWeekRange(sourceYear, sourceWeek);
+    sourceRangeStart = range.rangeStart.toISOString();
+    sourceRangeEnd = range.rangeEnd.toISOString();
+  } else {
+    sourceRangeStart = parseIsoDatetime(args.sourceRangeStart);
+    sourceRangeEnd = parseIsoDatetime(args.sourceRangeEnd);
+  }
+
+  const targetWeek =
+    typeof args.targetIsoWeek === "number"
+      ? args.targetIsoWeek
+      : typeof args.targetIsoWeek === "string" && /^\d+$/.test(args.targetIsoWeek.trim())
+        ? Number(args.targetIsoWeek.trim())
+        : null;
+  const targetYear =
+    typeof args.targetIsoWeekYear === "number"
+      ? args.targetIsoWeekYear
+      : typeof args.targetIsoWeekYear === "string" && /^\d+$/.test(args.targetIsoWeekYear.trim())
+        ? Number(args.targetIsoWeekYear.trim())
+        : null;
+  if (targetWeek !== null && targetYear !== null) {
+    const range = getIsoWeekRange(targetYear, targetWeek);
+    targetRangeStart = range.rangeStart.toISOString();
+  } else {
+    targetRangeStart = parseIsoDatetime(args.targetRangeStart);
+  }
+
+  if (!sourceRangeStart || !sourceRangeEnd || !targetRangeStart) {
+    return { error: "invalid_body" };
+  }
+  return { sourceRangeStart, sourceRangeEnd, targetRangeStart };
+}
+
+async function buildPlanningWindowShiftAssignments(
+  userId: string,
+  ranges: PlanningRangeArgs,
+): Promise<{
+  deltaDays: number;
+  orderCount: number;
+  assignments: ShiftedPlanningAssignment[];
+  assetGroups: number;
+  ordersWithAssetConflicts: number;
+}> {
+  const srcStart = new Date(ranges.sourceRangeStart);
+  const srcEnd = new Date(ranges.sourceRangeEnd);
+  const tgtStart = new Date(ranges.targetRangeStart);
+  const deltaMs = computePlanningWindowShiftDeltaMs(srcStart, tgtStart);
+  const deltaDays = Math.round(deltaMs / (24 * 60 * 60 * 1000));
+
+  const orders = await fetchPlanningOrdersInWindow(userId, srcStart, srcEnd, null);
+  const assignments: ShiftedPlanningAssignment[] = [];
+  const assetIds = new Set<string>();
+
+  for (const order of orders) {
+    const shifted = shiftPlannedRangeByDeltaMs(order.plannedStart, order.plannedEnd, deltaMs);
+    if (!shifted) continue;
+    assetIds.add(order.assetId);
+    const plannedStart = shifted.plannedStart.toISOString();
+    const plannedEnd = shifted.plannedEnd.toISOString();
+    assignments.push({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      name: order.name,
+      assetId: order.assetId,
+      assetKey: order.assetKey,
+      oldPlannedStart: order.plannedStart,
+      oldPlannedEnd: order.plannedEnd,
+      plannedStart,
+      plannedEnd,
+      beforeToday: isBeforeLocalToday(plannedStart),
+      assetConflictCount: 0,
+      assetConflicts: [],
+    });
+  }
+
+  assignments.sort((a, b) => a.orderNumber - b.orderNumber);
+
+  if (assignments.length > 0) {
+    let windowMin = Infinity;
+    let windowMax = -Infinity;
+    for (const row of assignments) {
+      const startMs = new Date(row.plannedStart).getTime();
+      const endMs = new Date(row.plannedEnd).getTime();
+      if (!Number.isNaN(startMs) && startMs < windowMin) windowMin = startMs;
+      if (!Number.isNaN(endMs) && endMs > windowMax) windowMax = endMs;
+    }
+    const padMs = 7 * 24 * 60 * 60 * 1000;
+    const targetOccupied = await fetchPlanningOrdersInWindow(
+      userId,
+      new Date(windowMin - padMs),
+      new Date(windowMax + padMs),
+      null,
+    );
+    const withConflicts = attachAssetConflictsToShiftAssignments(assignments, targetOccupied);
+    assignments.length = 0;
+    assignments.push(...withConflicts);
+  }
+
+  const ordersWithAssetConflicts = assignments.filter((a) => a.assetConflictCount > 0).length;
+
+  return {
+    deltaDays,
+    orderCount: assignments.length,
+    assignments,
+    assetGroups: assetIds.size,
+    ordersWithAssetConflicts,
+  };
+}
+
 function parseOrderNumberList(value: unknown): number[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
   const nums: number[] = [];
@@ -1460,6 +1702,39 @@ function parseOrderNumberList(value: unknown): number[] | null {
     }
   }
   return nums;
+}
+
+async function shiftWorkOrdersInPlanningWindowTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const ranges = resolvePlanningShiftRanges(args);
+  if ("error" in ranges) throw new Error(ranges.error);
+
+  const built = await buildPlanningWindowShiftAssignments(userId, ranges);
+  const beforeToday = built.assignments.filter((a) => a.beforeToday);
+  const hasConflicts = built.ordersWithAssetConflicts > 0;
+
+  return {
+    ok: true,
+    ...ranges,
+    deltaDays: built.deltaDays,
+    orderCount: built.orderCount,
+    assetGroups: built.assetGroups,
+    beforeTodayCount: beforeToday.length,
+    ordersWithAssetConflicts: built.ordersWithAssetConflicts,
+    requiresUserConfirmation: hasConflicts,
+    assignments: built.assignments,
+    hint:
+      built.orderCount === 0
+        ? "No work orders overlap the source range. Widen sourceRange or check KW/year."
+        : hasConflicts
+          ? `Show ALL ${built.orderCount} proposed rows (including orders with assetConflicts). Asset overlap is a warning only — ask whether to move anyway (same asset). On yes: rescheduleWorkOrdersBatch with shiftPlan (same KW/range params) AND allowAssetOverlap: true. Never claim orders were skipped due to missing slots.`
+          : `Preview only — not saved yet. Show all ${built.orderCount} rows. After user confirms you MUST call rescheduleWorkOrdersBatch with shiftPlan (same KW/range params) before saying anything was moved. Do not use planSequentialWorkOrderSlots for whole-week moves.`,
+    userConfirmationHint: hasConflicts
+      ? "Ask: some moved orders overlap existing orders on the same asset — move anyway? On yes use allowAssetOverlap: true with shiftPlan."
+      : undefined,
+  };
 }
 
 async function planSequentialWorkOrderSlotsTool(
@@ -1533,7 +1808,8 @@ async function planSequentialWorkOrderSlotsTool(
       assetKey,
       partialAssignments: plan.planned,
       unplannedOrderNumbers: plan.unplannedOrderNumbers,
-      hint: "Extend rangeEnd or reduce the number of orders; slots are packed sequentially without asset overlap.",
+      hint:
+        "For moving a whole calendar week (KW → KW) use shiftWorkOrdersInPlanningWindow — it shifts every order and reports asset overlaps as warnings (ask user, then allowAssetOverlap). planSequentialWorkOrderSlots only searches free slots in rangeEnd; widen rangeEnd or use shiftWorkOrdersInPlanningWindow to preserve each order's time-of-day.",
     };
   }
 
@@ -1552,34 +1828,54 @@ async function rescheduleWorkOrdersBatchTool(
   userId: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const raw = args.assignments;
-  if (!Array.isArray(raw) || raw.length === 0) throw new Error("invalid_body");
-
-  const batch: Array<{ workOrderId: string; plannedStart: string; plannedEnd: string | null }> =
+  const allowAssetOverlap = args.allowAssetOverlap === true;
+  let batch: Array<{ workOrderId: string; plannedStart: string; plannedEnd: string | null }> =
     [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== "object") throw new Error("invalid_body");
-    const row = entry as Record<string, unknown>;
-    let workOrderId =
-      typeof row.id === "string" && isUuid(row.id.trim()) ? row.id.trim() : undefined;
-    if (!workOrderId && row.orderNumber !== undefined) {
-      const resolved = await resolveWorkOrderAccess(userId, { orderNumber: row.orderNumber });
-      if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
-      workOrderId = resolved.id;
+
+  const shiftPlanRaw = args.shiftPlan;
+  if (shiftPlanRaw !== undefined && shiftPlanRaw !== null) {
+    if (typeof shiftPlanRaw !== "object") throw new Error("invalid_body");
+    const ranges = resolvePlanningShiftRanges(shiftPlanRaw as Record<string, unknown>);
+    if ("error" in ranges) throw new Error(ranges.error);
+    const built = await buildPlanningWindowShiftAssignments(userId, ranges);
+    if (built.orderCount === 0) {
+      return { error: "no_orders_in_source_range" };
     }
-    if (!workOrderId) throw new Error("invalid_body");
-    const plannedStart = parseIsoDatetime(row.plannedStart);
-    const plannedEnd =
-      row.plannedEnd === null || row.plannedEnd === undefined
-        ? null
-        : parseIsoDatetime(row.plannedEnd);
-    if (!plannedStart || (row.plannedEnd !== null && row.plannedEnd !== undefined && !plannedEnd)) {
-      throw new Error("invalid_body");
-    }
-    batch.push({ workOrderId, plannedStart, plannedEnd });
+    batch = built.assignments.map((a) => ({
+      workOrderId: a.id,
+      plannedStart: a.plannedStart,
+      plannedEnd: a.plannedEnd,
+    }));
   }
 
-  const allowAssetOverlap = args.allowAssetOverlap === true;
+  if (batch.length === 0) {
+    const raw = args.assignments;
+    if (!Array.isArray(raw) || raw.length === 0) throw new Error("invalid_body");
+    for (const entry of raw) {
+      if (entry === null || typeof entry !== "object") throw new Error("invalid_body");
+      const row = entry as Record<string, unknown>;
+      let workOrderId =
+        typeof row.id === "string" && isUuid(row.id.trim()) ? row.id.trim() : undefined;
+      if (!workOrderId && row.orderNumber !== undefined) {
+        const resolved = await resolveWorkOrderAccess(userId, { orderNumber: row.orderNumber });
+        if (!resolved.ok) return { error: resolved.error, matches: resolved.matches };
+        workOrderId = resolved.id;
+      }
+      if (!workOrderId) throw new Error("invalid_body");
+      const plannedStart = parseIsoDatetime(row.plannedStart);
+      const plannedEnd =
+        row.plannedEnd === null || row.plannedEnd === undefined
+          ? null
+          : parseIsoDatetime(row.plannedEnd);
+      if (!plannedStart || (row.plannedEnd !== null && row.plannedEnd !== undefined && !plannedEnd)) {
+        throw new Error("invalid_body");
+      }
+      batch.push({ workOrderId, plannedStart, plannedEnd });
+    }
+  }
+
+  if (batch.length === 0) throw new Error("invalid_body");
+
   const result = await updateWorkOrderPlanningBatch(userId, batch, {
     source: "assistant",
     allowAssetOverlap,
@@ -1591,13 +1887,14 @@ async function rescheduleWorkOrdersBatchTool(
       failedOrderNumber: result.failedOrderNumber,
       hint:
         result.error === "asset_conflict"
-          ? "Re-run planSequentialWorkOrderSlots and use its assignments verbatim."
+          ? "Same-asset overlap is allowed after user confirmation. Ask the user, then retry with allowAssetOverlap: true (shiftPlan or assignments unchanged)."
           : undefined,
     };
   }
   return {
     ok: true,
     updatedCount: result.rows.length,
+    orderCount: batch.length,
     workOrders: result.rows.map((row) => ({
       id: row.id,
       orderNumber: row.orderNumber,
@@ -1779,7 +2076,7 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
     const calendarView = getCalendarContextData(context);
     const calendarNotes = [
       "Calendar UI context: use planning tools for the visible window and selected work order when present.",
-      "Apply-meta [ATHENE_APPLY:reschedule:{...}] lets the user confirm a proposed plannedStart/plannedEnd in the UI.",
+      "Apply-meta [ATHENE_APPLY:reschedule:{...}] for one order; whole-week shifts get a UI button via rescheduleShift meta (shiftPlan) after shiftWorkOrdersInPlanningWindow preview.",
     ];
     if (context.id && isUuid(context.id)) {
       const workOrder = await getWorkOrderDetails(userId, context.id);
@@ -3000,9 +3297,33 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "shiftWorkOrdersInPlanningWindow",
+      description:
+        "Move ALL accessible work orders whose planned interval overlaps the source range by a constant day offset (e.g. KW 20 → KW 30). Preserves duration and time-of-day. Returns every order with proposed dates; assetConflicts are warnings (ask user, then batch with allowAssetOverlap). NOT for packing into free slots (planSequentialWorkOrderSlots).",
+      parameters: {
+        type: "object",
+        properties: {
+          sourceRangeStart: { type: ["string", "null"], description: "ISO start of source window." },
+          sourceRangeEnd: { type: ["string", "null"], description: "ISO end of source window." },
+          sourceIsoWeek: { type: ["integer", "null"], description: "ISO week number 1–53 (e.g. 20)." },
+          sourceIsoWeekYear: { type: ["integer", "null"], description: "Year for sourceIsoWeek (e.g. 2026)." },
+          targetRangeStart: {
+            type: ["string", "null"],
+            description: "ISO Monday (or first day) of target week.",
+          },
+          targetIsoWeek: { type: ["integer", "null"], description: "Target ISO week (e.g. 30)." },
+          targetIsoWeekYear: { type: ["integer", "null"], description: "Year for targetIsoWeek." },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "planSequentialWorkOrderSlots",
       description:
-        "REQUIRED before proposing dates for 2+ work orders on the same asset. Returns a validated back-to-back schedule (no mutual overlap, no conflict with other orders on that asset). Provide orderNumbers array, rangeStart, rangeEnd (ISO). Always use this instead of guessing the same start time for multiple orders.",
+        "Pack a SHORT explicit list of order numbers on the SAME asset back-to-back. NOT for moving a whole calendar week (use shiftWorkOrdersInPlanningWindow). Provide orderNumbers array, rangeStart, rangeEnd (ISO).",
       parameters: {
         type: "object",
         properties: {
@@ -3023,12 +3344,26 @@ const tools = [
     function: {
       name: "rescheduleWorkOrdersBatch",
       description:
-        "Apply plannedStart/plannedEnd for multiple work orders in one validated batch. Use assignments from planSequentialWorkOrderSlots after explicit user confirmation. Prefer this over multiple rescheduleWorkOrder calls.",
+        "Apply many work-order date changes at once. For whole-week moves after user confirmation, pass shiftPlan (same params as shiftWorkOrdersInPlanningWindow) — do not list dozens of assignments manually. Alternatively pass assignments array from a prior tool.",
       parameters: {
         type: "object",
         properties: {
+          shiftPlan: {
+            type: ["object", "null"],
+            description:
+              "Whole-window shift: sourceRange or sourceIsoWeek+Year, targetRangeStart or targetIsoWeek+Year. Moves every order in the source window.",
+            properties: {
+              sourceRangeStart: { type: ["string", "null"] },
+              sourceRangeEnd: { type: ["string", "null"] },
+              sourceIsoWeek: { type: ["integer", "null"] },
+              sourceIsoWeekYear: { type: ["integer", "null"] },
+              targetRangeStart: { type: ["string", "null"] },
+              targetIsoWeek: { type: ["integer", "null"] },
+              targetIsoWeekYear: { type: ["integer", "null"] },
+            },
+          },
           assignments: {
-            type: "array",
+            type: ["array", "null"],
             items: {
               type: "object",
               properties: {
@@ -3045,7 +3380,7 @@ const tools = [
             description: "Set true only after the user confirmed moving despite same-asset overlaps.",
           },
         },
-        required: ["assignments"],
+        required: [],
       },
     },
   },
@@ -3220,6 +3555,9 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
   if (name === "findPlanningSlots") {
     return findPlanningSlotsTool(userId, args);
   }
+  if (name === "shiftWorkOrdersInPlanningWindow") {
+    return shiftWorkOrdersInPlanningWindowTool(userId, args);
+  }
   if (name === "planSequentialWorkOrderSlots") {
     return planSequentialWorkOrderSlotsTool(userId, args);
   }
@@ -3239,6 +3577,7 @@ function createWorkOrderToolErrorPayload(toolName: string, message: string): Rec
   if (
     toolName === "rescheduleWorkOrder" ||
     toolName === "rescheduleWorkOrdersBatch" ||
+    toolName === "shiftWorkOrdersInPlanningWindow" ||
     toolName === "planSequentialWorkOrderSlots" ||
     toolName === "analyzeWorkOrderPlanning" ||
     toolName === "findPlanningSlots"
@@ -3253,7 +3592,10 @@ function createWorkOrderToolErrorPayload(toolName: string, message: string): Rec
     } else if (message === "mixed_assets") {
       payload.hint = "Split the request per asset and run planSequentialWorkOrderSlots for each asset.";
     } else if (message === "cannot_fit_all") {
-      payload.hint = "Widen rangeEnd or plan fewer orders per batch.";
+      payload.hint =
+        "For calendar-week moves use shiftWorkOrdersInPlanningWindow (all orders, overlaps as warnings). This tool only finds free sequential slots — widen rangeEnd or use shift tool.";
+    } else if (message === "no_orders_in_source_range") {
+      payload.hint = "No orders in source range; verify KW/year or sourceRangeStart/End.";
     }
     return payload;
   }
@@ -3342,6 +3684,46 @@ router.post(
   },
 );
 
+router.post("/apply-planning-shift", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const body = req.body as Record<string, unknown> | null | undefined;
+  if (!body || typeof body !== "object") {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const result = await rescheduleWorkOrdersBatchTool(userId, {
+      shiftPlan: body,
+      allowAssetOverlap: body.allowAssetOverlap === true,
+    });
+    const batch = result as {
+      ok?: boolean;
+      updatedCount?: number;
+      orderCount?: number;
+      error?: string;
+      conflicts?: unknown;
+    };
+    if (batch.ok && (batch.updatedCount ?? 0) > 0) {
+      res.json({
+        ok: true,
+        updatedCount: batch.updatedCount,
+        orderCount: batch.orderCount,
+      });
+      return;
+    }
+    const status =
+      batch.error === "asset_conflict" || batch.error === "before_today" ? 409 : 400;
+    res.status(status).json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -3427,6 +3809,9 @@ router.post("/", async (req: Request, res: Response) => {
       tool_choice: "auto",
     });
 
+    let planningShiftApplyMeta: AssistantApplyMeta | null = null;
+    let planningBatchPersisted = false;
+
     for (let i = 0; i < 8; i += 1) {
       const choice = completion.choices[0]?.message;
       const toolCalls = choice?.tool_calls ?? [];
@@ -3434,8 +3819,37 @@ router.post("/", async (req: Request, res: Response) => {
       openAiMessages.push(choice as unknown as Record<string, unknown>);
       for (const call of toolCalls) {
         if (call.type !== "function") continue;
+        let toolArgs: Record<string, unknown> = {};
+        try {
+          toolArgs = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
+        } catch {
+          toolArgs = {};
+        }
         try {
           const result = await runTool(userId, call.function.name, call.function.arguments);
+          if (call.function.name === "shiftWorkOrdersInPlanningWindow") {
+            const shift = result as {
+              ok?: boolean;
+              orderCount?: number;
+              ordersWithAssetConflicts?: number;
+            };
+            if (shift.ok && (shift.orderCount ?? 0) > 0) {
+              const shiftMeta = buildRescheduleShiftMetaFromToolArgs(
+                toolArgs,
+                shift.ordersWithAssetConflicts ?? 0,
+              );
+              if (shiftMeta) {
+                planningShiftApplyMeta = { rescheduleShift: shiftMeta };
+              }
+            }
+          }
+          if (call.function.name === "rescheduleWorkOrdersBatch") {
+            const batch = result as { ok?: boolean; updatedCount?: number };
+            if (batch.ok && (batch.updatedCount ?? 0) > 0) {
+              planningBatchPersisted = true;
+              planningShiftApplyMeta = null;
+            }
+          }
           openAiMessages.push({
             role: "tool",
             tool_call_id: call.id,
@@ -3463,7 +3877,10 @@ router.post("/", async (req: Request, res: Response) => {
       (locale.toLowerCase().startsWith("en")
         ? "I could not produce an answer."
         : "Ich konnte keine Antwort erzeugen.");
-    const { displayContent, meta } = parseAssistantApplyMeta(rawContent);
+    const { displayContent, meta: contentMeta } = parseAssistantApplyMeta(rawContent);
+    const toolMeta =
+      !planningBatchPersisted && planningShiftApplyMeta ? planningShiftApplyMeta : null;
+    const meta = mergeAssistantApplyMeta(contentMeta, toolMeta);
     const assistantMessage = await insertMessage(
       conversationId,
       "assistant",

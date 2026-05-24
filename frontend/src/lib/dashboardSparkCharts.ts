@@ -58,14 +58,6 @@ export function demoSparkSeries(endValue: number, days = 7): number[] {
   return out;
 }
 
-/** Fixed demo series for showcase metrics (stable across reloads). */
-export const DEMO_SPARK_SERIES = {
-  monitoring: [4, 6, 5, 9, 7, 11, 8],
-  bookingHours: [12, 18, 15, 22, 19, 28, 24],
-  newAssignments: [2, 3, 2, 5, 4, 6, 5],
-  breakdownOrders: [1, 2, 1, 3, 2, 4, 3],
-} as const;
-
 export function buildSparklineChart(
   series: number[],
   accent: SparkAccent = "green",
@@ -104,18 +96,7 @@ export function buildSparklineChart(
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          enabled: true,
-          displayColors: false,
-          backgroundColor: "rgba(15, 23, 42, 0.92)",
-          padding: 8,
-          titleFont: { size: 11 },
-          bodyFont: { size: 12 },
-          callbacks: {
-            title: () => "",
-            label: (ctx) => String(ctx.parsed.y ?? 0),
-          },
-        },
+        tooltip: { enabled: false },
       },
       scales: {
         x: { display: false },

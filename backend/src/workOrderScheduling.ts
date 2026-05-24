@@ -117,16 +117,97 @@ export function shiftPlannedRangeByDays(
   plannedEndIso: string | null,
   deltaDays: number,
 ): { plannedStart: Date; plannedEnd: Date } | null {
+  return shiftPlannedRangeByDeltaMs(plannedStartIso, plannedEndIso, deltaDays * MS_PER_DAY);
+}
+
+export function shiftPlannedRangeByDeltaMs(
+  plannedStartIso: string,
+  plannedEndIso: string | null,
+  deltaMs: number,
+): { plannedStart: Date; plannedEnd: Date } | null {
   const oldStart = new Date(plannedStartIso);
   let oldEnd = plannedEndIso ? new Date(plannedEndIso) : new Date(oldStart);
   if (Number.isNaN(oldStart.getTime())) return null;
   if (Number.isNaN(oldEnd.getTime())) oldEnd = new Date(oldStart);
 
-  const deltaMs = deltaDays * MS_PER_DAY;
   return {
     plannedStart: new Date(oldStart.getTime() + deltaMs),
     plannedEnd: new Date(oldEnd.getTime() + deltaMs),
   };
+}
+
+/** ISO week (Mon–Sun), Monday-based — matches frontend Kalendar. */
+export function getIsoWeekRange(isoWeekYear: number, isoWeek: number): {
+  rangeStart: Date;
+  rangeEnd: Date;
+} {
+  const jan4 = new Date(isoWeekYear, 0, 4);
+  jan4.setHours(0, 0, 0, 0);
+  const day = jan4.getDay();
+  const mondayWeek1 = new Date(jan4);
+  mondayWeek1.setDate(jan4.getDate() - ((day + 6) % 7));
+  const weekStart = new Date(mondayWeek1);
+  weekStart.setDate(mondayWeek1.getDate() + (isoWeek - 1) * 7);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return { rangeStart: weekStart, rangeEnd: weekEnd };
+}
+
+export type ShiftedPlanningAssignment = {
+  id: string;
+  orderNumber: number;
+  name: string;
+  assetId: string;
+  assetKey?: string;
+  oldPlannedStart: string;
+  oldPlannedEnd: string | null;
+  plannedStart: string;
+  plannedEnd: string;
+  beforeToday: boolean;
+  assetConflictCount: number;
+  assetConflicts: PlanningConflict[];
+};
+
+/** Detect same-asset overlaps with orders outside the moving batch (warnings, not blockers). */
+export function attachAssetConflictsToShiftAssignments(
+  assignments: Array<
+    Pick<
+      ShiftedPlanningAssignment,
+      "id" | "orderNumber" | "assetId" | "assetKey" | "plannedStart" | "plannedEnd"
+    >
+  >,
+  occupiedOrders: PlanningOrderRow[],
+): ShiftedPlanningAssignment[] {
+  const movingIds = new Set(assignments.map((a) => a.id));
+  return assignments.map((row) => {
+    const proposedStart = new Date(row.plannedStart);
+    const proposedEnd = effectivePlannedEnd(row.plannedStart, row.plannedEnd);
+    const assetConflicts = getAssetPlanningConflicts(
+      occupiedOrders,
+      row.assetId,
+      proposedStart,
+      proposedEnd,
+      movingIds,
+    );
+    return {
+      ...row,
+      assetConflictCount: assetConflicts.length,
+      assetConflicts,
+    } as ShiftedPlanningAssignment;
+  });
+}
+
+export function computePlanningWindowShiftDeltaMs(
+  sourceRangeStart: Date,
+  targetRangeStart: Date,
+  timeZone = DEFAULT_PLANNING_TIME_ZONE,
+): number {
+  return (
+    startOfCalendarDay(targetRangeStart, timeZone).getTime() -
+    startOfCalendarDay(sourceRangeStart, timeZone).getTime()
+  );
 }
 
 export function findFreePlanningSlots(params: {

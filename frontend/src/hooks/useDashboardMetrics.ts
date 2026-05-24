@@ -4,12 +4,24 @@ import { apiFetch } from "../lib/api";
 
 export type StatusCount = { status: string; count: number };
 export type DayCount = { date: string; count: number };
+export type OrderTypeCount = { orderType: string; count: number };
 
 export type DashboardMetrics = {
   openActive: { total: number; byStatus: StatusCount[] };
   completedLast7Days: { total: number; byDay: DayCount[] };
   myOrders: { total: number; byStatus: StatusCount[]; employeeLinked: boolean };
   transactionsLast7Days: { total: number; byDay: DayCount[] };
+  ordersByType: { total: number; byType: OrderTypeCount[] };
+  delayedOrders: { total: number };
+  avgDelayHours: { hours: number | null };
+  topAssetByOrders: {
+    assetId: string | null;
+    assetKey: string | null;
+    assetName: string | null;
+    count: number;
+  };
+  transactionsLast24h: { total: number };
+  transactionsLastMonth: { total: number };
 };
 
 export function useDashboardMetrics() {
