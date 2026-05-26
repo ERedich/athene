@@ -20,6 +20,7 @@ import { SitesPage } from "./pages/SitesPage";
 import { TableViewerPage } from "./pages/TableViewerPage";
 import { TranslationsPage } from "./pages/TranslationsPage";
 import { SearchPresetsPage } from "./pages/SearchPresetsPage";
+import { TableLayoutsPage } from "./pages/TableLayoutsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="kalendar" element={<KalendarPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
+          <Route path="tabellen-layouts" element={<TableLayoutsPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />

@@ -1163,6 +1163,23 @@ html.theme-crossfade-fallback #root {
   padding-bottom: 0.75rem;
 }
 
+.app-table-layout-editor-dialog .p-tabview-panels {
+  padding-top: 0.75rem;
+}
+
+.app-table-layout-editor-dialog .app-table-layout-editor-picklist.p-picklist {
+  width: 100%;
+}
+
+.app-table-layout-editor-dialog .app-table-layout-editor-picklist .p-picklist-list-wrapper {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.app-table-layout-editor-dialog .app-table-layout-editor-picklist .p-picklist-list {
+  min-height: 10rem;
+}
+
 .app-sticky-tabs .p-tabview-nav-container {
   position: sticky;
   top: 0;

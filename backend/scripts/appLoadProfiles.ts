@@ -62,6 +62,17 @@ const searchPresetBootstrap: LoadPhaseSpec[] = [
   },
 ];
 
+const tableLayoutBootstrap: LoadPhaseSpec[] = [
+  {
+    label: "table-layouts bootstrap",
+    mode: "parallel",
+    requests: [
+      { label: "table-layouts", path: "/api/table-layouts?tableKey=monitoring_work_orders" },
+      { label: "table-layouts/defaults", path: "/api/table-layouts/defaults" },
+    ],
+  },
+];
+
 export const APP_LOAD_PROFILES: Record<AppId, AppLoadProfile> = {
   monitoring: {
     id: "monitoring",
@@ -69,6 +80,7 @@ export const APP_LOAD_PROFILES: Record<AppId, AppLoadProfile> = {
     route: "/monitoring",
     phases: [
       ...searchPresetBootstrap,
+      ...tableLayoutBootstrap,
       {
         label: "main data (parallel)",
         mode: "parallel",

@@ -37,6 +37,7 @@ function headerTitleKey(pathname: string): string {
     kalendar: "kalendar.appName",
     monitoring: "monitoring.appName",
     suchkonfig: "suchkonfig.appName",
+    "tabellen-layouts": "tableLayouts.appName",
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",

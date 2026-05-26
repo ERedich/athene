@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -8,6 +9,7 @@ import {
 } from "react";
 import {
   CircleX,
+  Columns3,
   Copy,
   File,
   Filter,
@@ -56,6 +58,24 @@ import {
   fetchWorkOrderSearchPresets,
   isSamePresetId,
 } from "../lib/workOrderSearchPresetApi";
+import { useTableLayoutController } from "../hooks/useTableLayoutController";
+import { isSameLayoutId } from "../lib/tableLayoutApi";
+import { buildMultiSortMeta } from "../components/tableLayouts/MonitoringWorkOrdersColumns";
+import { TableLayoutEditorDialog } from "../components/tableLayouts/TableLayoutEditorDialog";
+import {
+  isValidMonitoringTablePersistedState,
+  MONITORING_TABLE_STATE_STORAGE_KEY,
+  repairMonitoringTableStateStorage,
+} from "../lib/monitoringTableState";
+import {
+  MONITORING_WORK_ORDERS_COLUMN_IDS,
+  originalMonitoringTableLayoutPayload,
+  visibleColumnIdsFromPayload,
+  sanitizeMonitoringTableLayoutPayload,
+  STANDARD_MONITORING_LAYOUT_NAME,
+  TABLE_KEY_MONITORING_WORK_ORDERS,
+  type MonitoringColumnId,
+} from "../lib/tableLayouts/tableLayoutPayload";
 import { workOrderStatusAllowsFeedbackTab } from "../lib/workOrderStatus";
 import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
@@ -118,6 +138,20 @@ export function MonitoringPage() {
   const [searchPresets, setSearchPresets] = useState<{ id: string; name: string; isOwner: boolean }[]>([]);
   const [headerPresetSelectionId, setHeaderPresetSelectionId] = useState<string | null>(null);
   const [searchBootstrapDone, setSearchBootstrapDone] = useState(false);
+  const [layoutEditorVisible, setLayoutEditorVisible] = useState(false);
+
+  const {
+    layouts: tableLayoutsList,
+    bootstrapDone: tableLayoutBootstrapDone,
+    activeLayoutId,
+    activePayload,
+    activeLayoutName,
+    monitoringDefaultLayoutId,
+    headerSelectionId: tableLayoutHeaderSelectionId,
+    reloadLayouts: reloadTableLayouts,
+    applyLayoutById,
+    setActiveFromDetail,
+  } = useTableLayoutController(TABLE_KEY_MONITORING_WORK_ORDERS);
 
   const cleverSearchEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_ENABLE_CLEVER_SEARCH]);
   const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
@@ -138,6 +172,16 @@ export function MonitoringPage() {
     () => searchPresets.map((p) => ({ label: p.name, value: p.id })),
     [searchPresets],
   );
+
+  const headerLayoutDropdownOptions = useMemo(
+    () => [
+      { label: t("tableLayouts.personal"), value: "__PERSONAL__" as const },
+      ...tableLayoutsList.map((l) => ({ label: l.name, value: l.id })),
+    ],
+    [tableLayoutsList, t],
+  );
+
+  const headerLayoutSelectionValue = tableLayoutHeaderSelectionId ?? "__PERSONAL__";
 
   const preloadRows = useMemo<WorkOrder[]>(
     () =>
@@ -285,6 +329,25 @@ export function MonitoringPage() {
     }
     setHeaderPresetSelectionId(null);
   }, [headerPresetSelectionId, resetSearchToUnconfiguredState, searchBootstrapDone, searchPresets]);
+
+  const applyHeaderTableLayout = useCallback(
+    async (value: string | null) => {
+      if (!value || value === "__PERSONAL__") {
+        await applyLayoutById(null);
+        return;
+      }
+      try {
+        await applyLayoutById(value);
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("tableLayouts.applyError"),
+          life: 6000,
+        });
+      }
+    },
+    [applyLayoutById, t],
+  );
 
   const applyHeaderSearchPreset = useCallback(
     async (presetId: string | null) => {
@@ -573,6 +636,26 @@ export function MonitoringPage() {
               appendTo={overlayAppendTo}
             />
           ) : null}
+          <Dropdown
+            aria-label={t("tableLayouts.headerLabel")}
+            value={headerLayoutSelectionValue}
+            options={headerLayoutDropdownOptions}
+            optionLabel="label"
+            optionValue="value"
+            onChange={(e) => void applyHeaderTableLayout((e.value as string | null) ?? "__PERSONAL__")}
+            className="app-header-preset-dropdown app-inline-icon-dropdown h-9 min-w-[14rem] w-60 shrink-0 text-sm"
+            panelClassName="app-header-preset-dropdown-panel"
+            appendTo={overlayAppendTo}
+          />
+          <button
+            type="button"
+            className={primaryActionNavItem}
+            onClick={() => setLayoutEditorVisible(true)}
+            title={t("tableLayouts.configure")}
+          >
+            <Columns3 className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("tableLayouts.configure")}</span>
+          </button>
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
             <InputText
@@ -591,7 +674,10 @@ export function MonitoringPage() {
   }, [
     appliedAdvanced,
     applyHeaderSearchPreset,
+    applyHeaderTableLayout,
     confirmDelete,
+    headerLayoutDropdownOptions,
+    headerLayoutSelectionValue,
     headerPresetDropdownOptions,
     headerPresetSelectionId,
     openCreate,
@@ -877,6 +963,60 @@ export function MonitoringPage() {
     [openFeedbackTab, startOrder, t],
   );
 
+  const effectiveLayoutPayload = useMemo(
+    () => (activePayload ? sanitizeMonitoringTableLayoutPayload(activePayload) : null),
+    [activePayload],
+  );
+
+  /** Persönlich or monitoring default / „Standard Monitoring“ — stateStorage + resize/reorder. */
+  const isMonitoringDefaultLayout = Boolean(
+    tableLayoutBootstrapDone &&
+      activeLayoutId &&
+      (activeLayoutName === STANDARD_MONITORING_LAYOUT_NAME ||
+        (monitoringDefaultLayoutId && isSameLayoutId(activeLayoutId, monitoringDefaultLayoutId))),
+  );
+  const useStatefulTable = activeLayoutId == null || isMonitoringDefaultLayout;
+
+  /** Custom (non-default) layouts: columns/sort/frozen from saved payload only. */
+  const [monitoringTableMountEpoch, setMonitoringTableMountEpoch] = useState(0);
+
+  const visibleMonitoringColumnIds = useMemo(() => {
+    if (useStatefulTable) return new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
+    if (!effectiveLayoutPayload) return new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
+    const ids = visibleColumnIdsFromPayload(effectiveLayoutPayload);
+    return ids.length > 0 ? new Set(ids) : new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
+  }, [effectiveLayoutPayload, useStatefulTable]);
+
+  const isMonitoringColumnVisible = useCallback(
+    (columnId: MonitoringColumnId) => visibleMonitoringColumnIds.has(columnId),
+    [visibleMonitoringColumnIds],
+  );
+
+  useLayoutEffect(() => {
+    if (!useStatefulTable) return;
+    const before = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
+    repairMonitoringTableStateStorage();
+    const after = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
+    if (before !== after) {
+      setMonitoringTableMountEpoch((epoch) => epoch + 1);
+    }
+  }, [useStatefulTable, activeLayoutId]);
+
+  const handleMonitoringTableStateSave = useCallback((state: Record<string, unknown>) => {
+    if (!isValidMonitoringTablePersistedState(state)) return;
+    window.localStorage.setItem(MONITORING_TABLE_STATE_STORAGE_KEY, JSON.stringify(state));
+  }, []);
+
+  const layoutMultiSortMeta = useMemo(() => {
+    if (useStatefulTable || !effectiveLayoutPayload) return undefined;
+    const meta = buildMultiSortMeta(effectiveLayoutPayload);
+    return meta.length > 0 ? meta : undefined;
+  }, [effectiveLayoutPayload, useStatefulTable]);
+
+  const editorInitialPayload = activePayload ?? originalMonitoringTableLayoutPayload();
+  const editorLayoutId = activeLayoutId;
+  const editorInitialName = activeLayoutName ?? "";
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
@@ -918,6 +1058,23 @@ export function MonitoringPage() {
         }}
       />
       <ConfirmDialog />
+      <TableLayoutEditorDialog
+        visible={layoutEditorVisible}
+        onHide={() => setLayoutEditorVisible(false)}
+        tableKey={TABLE_KEY_MONITORING_WORK_ORDERS}
+        layoutId={editorLayoutId}
+        initialName={editorInitialName}
+        initialPayload={editorInitialPayload}
+        onSaved={async (detail) => {
+          await reloadTableLayouts();
+          setActiveFromDetail(detail.id, detail.name, detail.payload);
+          toastRef.current?.show({
+            severity: "success",
+            summary: t("tableLayouts.editor.saveSuccess"),
+            life: 4000,
+          });
+        }}
+      />
       <WorkOrderOverviewOverlay order={overviewOrder} onHide={overview.onHide} />
       {!isPreloadMode ? tableCtx.ContextMenuEl : null}
 
@@ -927,6 +1084,11 @@ export function MonitoringPage() {
         {...(!isPreloadMode ? tableCtx.wrapperProps : {})}
       >
         <DataTable
+          key={
+            useStatefulTable
+              ? `stateful-monitoring-${monitoringTableMountEpoch}`
+              : `layout-${activeLayoutId ?? "none"}`
+          }
           className="app-data-table app-work-orders-data-grid w-full"
           value={tableRows}
           loading={loading}
@@ -953,13 +1115,30 @@ export function MonitoringPage() {
           stripedRows
           showGridlines
           scrollable
-          resizableColumns
-          reorderableColumns
+          resizableColumns={useStatefulTable}
+          reorderableColumns={useStatefulTable}
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "94rem" }}
-          stateStorage="local"
-          stateKey="athene-monitoring-table"
+          {...(useStatefulTable
+            ? {
+                stateStorage: "custom" as const,
+                customSaveState: handleMonitoringTableStateSave,
+                customRestoreState: () => {
+                  try {
+                    const raw = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
+                    if (!raw) return {};
+                    const parsed = JSON.parse(raw) as Record<string, unknown>;
+                    return isValidMonitoringTablePersistedState(parsed) ? parsed : {};
+                  } catch {
+                    return {};
+                  }
+                },
+              }
+            : {})}
+          {...(!useStatefulTable && layoutMultiSortMeta
+            ? { sortMode: "multiple" as const, multiSortMeta: layoutMultiSortMeta }
+            : {})}
           virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={t("workOrders.empty")}
           rowClassName={(row) =>
@@ -973,20 +1152,28 @@ export function MonitoringPage() {
           <Column
             field="orderNumber"
             header={t("workOrders.orderNumber")}
+            hidden={!isMonitoringColumnVisible("orderNumber")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => (isPreloadMode ? "…" : row.orderNumber)}
           />
           <Column
             field="originalWoOrderNumber"
             header={t("workOrders.originalWo")}
+            hidden={!isMonitoringColumnVisible("originalWoOrderNumber")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => (isPreloadMode ? "…" : formatOriginalWoCell(row))}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
           />
-          <Column field="name" header={t("workOrders.name")} sortable={!isPreloadMode} />
+          <Column
+            field="name"
+            header={t("workOrders.name")}
+            hidden={!isMonitoringColumnVisible("name")}
+            sortable={!isPreloadMode}
+          />
           <Column
             field="status"
             header={t("workOrders.status")}
+            hidden={!isMonitoringColumnVisible("status")}
             sortable={!isPreloadMode}
             body={statusBody}
             bodyClassName={statusCellClassName}
@@ -994,18 +1181,21 @@ export function MonitoringPage() {
           <Column
             field="assetName"
             header={t("workOrders.asset")}
+            hidden={!isMonitoringColumnVisible("assetName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => `${row.assetKey} - ${row.assetName}`}
           />
           <Column
             field="costCenterName"
             header={t("workOrders.costCenter")}
+            hidden={!isMonitoringColumnVisible("costCenterName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => `${row.costCenterKey} - ${row.costCenterName}`}
           />
           <Column
             field="classificationName"
             header={t("workOrders.classification")}
+            hidden={!isMonitoringColumnVisible("classificationName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) =>
               row.classificationId ? `${row.classificationKey} - ${row.classificationName ?? ""}` : "—"
@@ -1014,6 +1204,7 @@ export function MonitoringPage() {
           <Column
             field="workgroupKey"
             header={t("workOrders.workgroup")}
+            hidden={!isMonitoringColumnVisible("workgroupKey")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) =>
               row.workgroupKey ? `${row.workgroupKey} - ${row.workgroupName ?? ""}` : "—"
@@ -1022,6 +1213,7 @@ export function MonitoringPage() {
           <Column
             field="documentCount"
             header={t("workOrders.references")}
+            hidden={!isMonitoringColumnVisible("documentCount")}
             body={referencesBody}
             sortable={!isPreloadMode}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
@@ -1029,12 +1221,14 @@ export function MonitoringPage() {
           <Column
             field="orderType"
             header={t("workOrders.orderType")}
+            hidden={!isMonitoringColumnVisible("orderType")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => typeLabel(row.orderType)}
           />
           <Column
             field="plannedStart"
             header={t("workOrders.plannedStart")}
+            hidden={!isMonitoringColumnVisible("plannedStart")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => formatShortDt(row.plannedStart)}
             className="whitespace-nowrap"
@@ -1042,14 +1236,21 @@ export function MonitoringPage() {
           <Column
             field="plannedEnd"
             header={t("workOrders.plannedEnd")}
+            hidden={!isMonitoringColumnVisible("plannedEnd")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => formatShortDt(row.plannedEnd)}
             className="whitespace-nowrap"
           />
-          <Column columnKey="plannedDuration" header={t("workOrders.plannedDuration")} body={durationBody} />
+          <Column
+            columnKey="plannedDuration"
+            header={t("workOrders.plannedDuration")}
+            hidden={!isMonitoringColumnVisible("plannedDuration")}
+            body={durationBody}
+          />
           <Column
             columnKey="startStop"
             header={t("workOrders.startStop")}
+            hidden={!isMonitoringColumnVisible("startStop")}
             body={startStopBody}
             style={{ width: "7.5rem", minWidth: "7.5rem" }}
           />

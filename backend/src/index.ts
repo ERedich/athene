@@ -26,6 +26,7 @@ import { createWorkOrderWebSocketServer, registerWorkOrderRealtime } from "./wor
 import { workgroupsRouter } from "./workgroups.js";
 import { workOrdersRouter } from "./workOrders.js";
 import { workOrderSearchPresetsRouter } from "./workOrderSearchPresets.js";
+import { tableLayoutsRouter } from "./tableLayouts.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -74,6 +75,7 @@ app.use("/api/assets", requireAuth, assetsRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/work-orders", requireAuth, workOrdersRouter);
 app.use("/api/work-order-search-presets", requireAuth, workOrderSearchPresetsRouter);
+app.use("/api/table-layouts", requireAuth, tableLayoutsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
 app.use("/api/ui-translation-overrides", requireAuth, translationsRouter);
