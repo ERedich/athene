@@ -52,7 +52,7 @@ export const DASHBOARD_KPI_CATEGORIES: DashboardKpiCategory[] = [
   "warehouse",
 ];
 
-export const DASHBOARD_SLOT_COUNT = 12;
+export const DASHBOARD_SLOT_COUNT = 16;
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardKpiId[] = [
   "openActive",
@@ -64,9 +64,13 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardKpiId[] = [
   "avgDelayHours",
   "topAssetByOrders",
   "transactionsLast7Days",
+  "transactionsLastMonth",
   "openActive",
   "delayedOrders",
   "myOrders",
+  "transactionsLast24h",
+  "ordersByType",
+  "completedLast7Days",
 ];
 
 type IconComponent = ComponentType<LucideProps>;

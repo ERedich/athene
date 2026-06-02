@@ -10,6 +10,7 @@ import { CostCentersPage } from "./pages/CostCentersPage";
 import { SparePartsPage } from "./pages/SparePartsPage";
 import { WarehousesPage } from "./pages/WarehousesPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
+import { CalculatorPage } from "./pages/CalculatorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
@@ -31,6 +32,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="calculator" element={<CalculatorPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
           <Route path="kalendar" element={<KalendarPage />} />

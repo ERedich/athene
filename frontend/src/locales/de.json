@@ -69,6 +69,17 @@
     "retry": "Erneut versuchen",
     "noEmployee": "Ihrem Benutzer ist kein Mitarbeiter zugeordnet."
   },
+  "calculator": {
+    "appName": "Taschenrechner",
+    "navCalculator": "Taschenrechner",
+    "clear": "C",
+    "equals": "Gleich",
+    "decimal": "Dezimalpunkt",
+    "error": "Fehler",
+    "divideByZero": "Division durch null",
+    "displayAria": "Anzeige",
+    "keypadAria": "Tastenfeld"
+  },
   "shell": {
     "product": "Athene CMMS",
     "buildMeta": {

@@ -69,6 +69,17 @@
     "retry": "Retry",
     "noEmployee": "No employee linked to your user account."
   },
+  "calculator": {
+    "appName": "Calculator",
+    "navCalculator": "Calculator",
+    "clear": "C",
+    "equals": "Equals",
+    "decimal": "Decimal point",
+    "error": "Error",
+    "divideByZero": "Division by zero",
+    "displayAria": "Display",
+    "keypadAria": "Keypad"
+  },
   "shell": {
     "product": "Athene CMMS",
     "buildMeta": {
