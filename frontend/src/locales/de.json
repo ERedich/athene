@@ -54,6 +54,7 @@
     "hoursUnit": "h",
     "configureKpi": "KPI wählen",
     "configureKpiAria": "KPI für Kachel {{slot}} wählen",
+    "dragKpiAria": "KPI-Kachel {{slot}} verschieben",
     "kpiCategory": {
       "transactions": "Transaktionen",
       "workOrders": "Aufträge",
@@ -274,12 +275,15 @@
     "openWeekView": "Kalenderwoche {{week}} in der Wochenansicht öffnen",
     "openDayView": "{{date}} in der Tagesansicht öffnen",
     "moveConfirmIntro": "Möchten Sie den Auftrag verschieben?",
+    "moveTitle": "Auftrag verschieben?",
     "moveFrom": "Von",
     "moveTo": "Zu",
     "moveOldPlannedStart": "Altes Plan-Startdatum",
     "moveOldPlannedEnd": "Altes Plan-Enddatum",
     "moveNewPlannedStart": "Neues Plan-Startdatum",
     "moveNewPlannedEnd": "Neues Plan-Enddatum",
+    "moveOldRange": "Alter Planzeitraum",
+    "moveNewRange": "Neuer Planzeitraum",
     "moveConfirm": "Verschieben",
     "moveConfirmDespiteConflict": "Trotzdem verschieben",
     "moveAssetConflictSameDay": "Am gleichen Tag gibt es bereits einen Auftrag für Asset {{assetKey}} ({{assetName}}). Möchtest du trotzdem verschieben?",
@@ -960,6 +964,27 @@
   "monitoring": {
     "appName": "Auftragsmonitor",
     "navMonitoring": "Monitoring"
+  },
+  "abonnements": {
+    "appName": "Abonnements",
+    "subscribeOrder": "Auftrag abonnieren",
+    "unsubscribeOrder": "Abonnement beenden",
+    "subscriptionActionError": "Abonnement konnte nicht geändert werden.",
+    "loadError": "Meldungen konnten nicht geladen werden.",
+    "openWorkOrderError": "Auftrag konnte nicht geöffnet werden.",
+    "searchPlaceholder": "Meldungen durchsuchen",
+    "empty": "Keine Meldungen vorhanden.",
+    "createdAt": "Zeitpunkt",
+    "order": "Auftrag",
+    "site": "Buchungskreis",
+    "changeKinds": "Änderungen",
+    "openOrder": "Auftrag öffnen",
+    "changeKind": {
+      "status": "Status",
+      "temporal": "Zeit",
+      "data": "Daten",
+      "references": "Referenzen"
+    }
   },
   "suchkonfig": {
     "appName": "Suchkonfig",

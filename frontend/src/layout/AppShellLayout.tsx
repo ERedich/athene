@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ChevronsLeft,
   ChevronsRight,
+  Bell,
   LogOut,
   Moon,
   Star,
@@ -18,6 +19,7 @@ import { apiFetch } from "../lib/api";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
+import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
 import { SidebarBuildMeta } from "./SidebarBuildMeta";
 import { SidebarNav } from "./SidebarNav";
 
@@ -52,6 +54,7 @@ function headerTitleKey(pathname: string): string {
     "audit-log": "auditLog.appName",
     "table-viewer": "tableViewer.appName",
     translations: "translations.appName",
+    abonnements: "abonnements.appName",
   };
   if (!seg) return "dashboard.appName";
   return map[seg.toLowerCase()] ?? "dashboard.appName";
@@ -77,6 +80,7 @@ export function AppShellLayout() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const subscriptions = useWorkOrderSubscriptions();
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [headerRowCount, setHeaderRowCount] = useState<number | null>(null);
   const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
@@ -203,6 +207,17 @@ export function AppShellLayout() {
                 <Moon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
               )}
             </button>
+            <Button
+              type="button"
+              icon={<Bell className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />}
+              aria-label={t("abonnements.appName")}
+              title={t("abonnements.appName")}
+              text
+              className="h-9 w-9 !relative !p-0"
+              badge={subscriptions.unreadCount > 0 ? String(subscriptions.unreadCount) : undefined}
+              badgeClassName="!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0"
+              onClick={() => navigate("/abonnements")}
+            />
             <button
               type="button"
               className={`${toggleBtn} font-semibold`}

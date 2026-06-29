@@ -1,6 +1,7 @@
 import type { ChartData, ChartOptions } from "chart.js";
 
 import type { DayCount } from "../hooks/useDashboardMetrics";
+import { mergeInitialLineChartAnimation } from "./chartAnimation";
 
 const SPARK_GREEN = {
   line: "rgb(34, 197, 94)",
@@ -89,26 +90,28 @@ export function buildSparklineChart(
         },
       ],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false },
-      },
-      scales: {
-        x: { display: false },
-        y: {
-          display: false,
-          min: 0,
-          grace: "5%",
+    options: mergeInitialLineChartAnimation(
+      {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            display: false,
+            min: 0,
+            grace: "5%",
+          },
+        },
+        elements: {
+          line: { borderCapStyle: "round", borderJoinStyle: "round" },
         },
       },
-      elements: {
-        line: { borderCapStyle: "round", borderJoinStyle: "round" },
-      },
-    },
+    ),
   };
 }

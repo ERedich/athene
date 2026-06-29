@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
 
@@ -9,7 +10,17 @@ import { DASHBOARD_SLOT_COUNT } from "../lib/dashboardKpiRegistry";
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const { data, loading, error, refetch } = useDashboardMetrics();
-  const { layout, setSlotKpi } = useDashboardLayout();
+  const { layout, setSlotKpi, swapSlots } = useDashboardLayout();
+
+  const [armedSlot, setArmedSlot] = useState<number | null>(null);
+  const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
+  const [dropTargetSlot, setDropTargetSlot] = useState<number | null>(null);
+
+  const resetDrag = useCallback(() => {
+    setArmedSlot(null);
+    setDraggingSlot(null);
+    setDropTargetSlot(null);
+  }, []);
 
   if (error) {
     return (
@@ -31,18 +42,63 @@ export function DashboardPage() {
   return (
     <div className="app-dashboard-page min-h-0 flex-1 overflow-hidden">
       <div className="app-dashboard-grid" role="list">
-        {Array.from({ length: DASHBOARD_SLOT_COUNT }, (_, slotIndex) => (
-          <div key={slotIndex} className="app-dashboard-grid-cell" role="listitem">
-            <DashboardGridCell
-              slotIndex={slotIndex}
-              kpiId={layout[slotIndex]}
-              metrics={data}
-              loading={loading}
-              locale={i18n.language}
-              onSelectKpi={(id) => setSlotKpi(slotIndex, id)}
-            />
-          </div>
-        ))}
+        {Array.from({ length: DASHBOARD_SLOT_COUNT }, (_, slotIndex) => {
+          const isDragging = draggingSlot === slotIndex;
+          const isDropTarget =
+            draggingSlot !== null &&
+            draggingSlot !== slotIndex &&
+            dropTargetSlot === slotIndex;
+          const cellClassName = [
+            "app-dashboard-grid-cell",
+            "app-card-cascade",
+            isDragging ? "app-dashboard-grid-cell--dragging" : "",
+            isDropTarget ? "app-dashboard-grid-cell--drop-target" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return (
+            <div
+              key={slotIndex}
+              className={cellClassName}
+              style={{ ["--app-cascade-index" as string]: slotIndex }}
+              role="listitem"
+              draggable={armedSlot === slotIndex}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                setDraggingSlot(slotIndex);
+              }}
+              onDragEnd={resetDrag}
+              onDragOver={(e) => {
+                if (draggingSlot === null) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDragEnter={() => {
+                if (draggingSlot === null || draggingSlot === slotIndex) return;
+                setDropTargetSlot(slotIndex);
+              }}
+              onDrop={(e) => {
+                if (draggingSlot === null) return;
+                e.preventDefault();
+                if (draggingSlot !== slotIndex) {
+                  swapSlots(draggingSlot, slotIndex);
+                }
+                resetDrag();
+              }}
+            >
+              <DashboardGridCell
+                slotIndex={slotIndex}
+                kpiId={layout[slotIndex]}
+                metrics={data}
+                loading={loading}
+                locale={i18n.language}
+                onSelectKpi={(id) => setSlotKpi(slotIndex, id)}
+                onArm={() => setArmedSlot(slotIndex)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

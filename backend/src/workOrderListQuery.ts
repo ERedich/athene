@@ -20,6 +20,9 @@ type WorkOrderStatus =
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Hours past planned end before a work order counts as delayed. Keep in sync with `dashboard.ts`. */
+const DELAY_TOLERANCE_HOURS = 0.05;
+
 const allowedOrderTypes: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "open",
@@ -268,6 +271,31 @@ export async function buildWorkOrderListFilters(
   const classUnassigned = parseOptionalTrimmedString(q.classificationUnassigned);
   if (classUnassigned === "1" || classUnassigned === "true") {
     pushCond(`w."classificationId" IS NULL`);
+  }
+
+  // Overdue / delayed: past planned end beyond tolerance. Matches dashboard "delayedOrders" KPI:
+  // for finished orders compare the first ended/done timestamp, otherwise compare against now().
+  const overdue = parseOptionalTrimmedString(q.overdue);
+  if (overdue === "1" || overdue === "true") {
+    pushCond(`(
+      w."status" != 'cancelled'
+      AND w."plannedEnd" IS NOT NULL
+      AND EXTRACT(EPOCH FROM (
+        COALESCE(
+          (
+            SELECT h."occurredAt" FROM "workOrderStatusHistory" h
+            WHERE h."workOrderId" = w."id" AND h."status" = 'ended'
+            ORDER BY h."occurredAt" ASC LIMIT 1
+          ),
+          (
+            SELECT h."occurredAt" FROM "workOrderStatusHistory" h
+            WHERE h."workOrderId" = w."id" AND h."status" = 'done'
+            ORDER BY h."occurredAt" ASC LIMIT 1
+          ),
+          now()
+        ) - w."plannedEnd"
+      )) / 3600.0 > ${DELAY_TOLERANCE_HOURS}
+    )`);
   }
 
   // Workgroup IDs + pseudo

@@ -2239,6 +2239,18 @@ html.theme-crossfade-fallback #root {
   opacity: 1;
 }
 
+.app-dashboard-grid-cell--dragging {
+  opacity: 0.4;
+}
+
+.app-dashboard-grid-cell--drop-target {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 .app-dashboard-spark-header {
   display: flex;
   flex-shrink: 0;
@@ -2288,31 +2300,39 @@ html.theme-crossfade-fallback #root {
   outline: none;
 }
 
-.app-dashboard-spark-icon {
+.app-dashboard-kpi-drag-handle {
   display: flex;
-  shrink: 0;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
   border-radius: 0.375rem;
-  color: rgb(255 255 255);
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  cursor: grab;
+  opacity: 0.45;
+  touch-action: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.app-dashboard-spark-icon--green {
-  background: rgb(34 197 94);
+.app-dashboard-spark-card:hover .app-dashboard-kpi-drag-handle,
+.app-dashboard-spark-card:focus-within .app-dashboard-kpi-drag-handle {
+  opacity: 1;
 }
 
-.app-dashboard-spark-icon--blue {
-  background: rgb(59 130 246);
+.app-dashboard-kpi-drag-handle:hover,
+.app-dashboard-kpi-drag-handle:focus-visible {
+  opacity: 1;
+  color: var(--color-on-surface);
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  outline: none;
 }
 
-.app-dashboard-spark-icon--amber {
-  background: rgb(245 158 11);
-}
-
-.app-dashboard-spark-icon--teal {
-  background: rgb(20 184 166);
+.app-dashboard-kpi-drag-handle:active {
+  cursor: grabbing;
 }
 
 .app-dashboard-spark-title {
@@ -2352,6 +2372,29 @@ html.theme-crossfade-fallback #root {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-on-surface-variant);
+}
+
+@keyframes app-dashboard-value-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.app-dashboard-spark-value--revealed,
+.app-dashboard-spark-value-body__primary--revealed {
+  animation: app-dashboard-value-reveal 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-dashboard-spark-value--revealed,
+  .app-dashboard-spark-value-body__primary--revealed {
+    animation: none;
+  }
 }
 
 .app-dashboard-spark-chart {
@@ -2826,50 +2869,31 @@ button.app-calendar-day__num:focus-visible {
   cursor: not-allowed;
 }
 
-.app-calendar-move-panel.p-overlaypanel {
-  max-width: 22rem;
+.app-calendar-move-panel.p-dialog {
+  width: 24rem;
+  max-width: calc(100vw - 2rem);
 }
 
 .app-calendar-move-content {
   padding: 0.125rem 0.25rem;
 }
 
-.app-calendar-move-intro {
-  margin: 0 0 0.75rem;
+.app-calendar-move-section-label {
+  margin: 0 0 0.25rem;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-on-surface);
 }
 
-.app-calendar-move-dl {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+.app-calendar-move-section-label--spaced {
+  margin-top: 1rem;
 }
 
-.app-calendar-move-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  gap: 0.5rem;
-  align-items: baseline;
-}
-
-.app-calendar-move-label {
+.app-calendar-move-range {
   margin: 0;
-  font-size: 0.6875rem;
+  font-size: 0.9375rem;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--color-on-surface-variant);
-}
-
-.app-calendar-move-value {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-on-surface);
-  text-align: right;
 }
 
 .app-calendar-overflow-hint__icon {

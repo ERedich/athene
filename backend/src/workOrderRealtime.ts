@@ -4,8 +4,9 @@ import { WebSocket, WebSocketServer } from "ws";
 import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
 import { readSessionUserIdFromCookieHeader } from "./sessionToken.js";
+import { notifyWorkOrderSubscribers, type WorkOrderSubscriptionChangeKind } from "./workOrderSubscriptionNotify.js";
 
-type WorkOrderRealtimePayload = {
+export type WorkOrderRealtimePayload = {
   id: string;
   orderNumber: number;
   name: string;
@@ -34,9 +35,13 @@ type WorkOrderRealtimePayload = {
   doneBy: string | null;
   doneByEmployeeKey: string | null;
   doneByEmployeeName: string | null;
+  pauseRemark?: string | null;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
+  originalWo?: string | null;
+  originalWoOrderNumber?: number | null;
+  originalWoName?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -44,6 +49,7 @@ type WorkOrderRealtimePayload = {
   documentCount: number;
   assetDocumentCount: number;
   assignedEmployeeCount: number;
+  transactionCount?: number;
 };
 
 const sockets = new Map<WebSocket, string>();
@@ -73,7 +79,42 @@ export async function broadcastWorkOrderUpdated(
   siteId: string,
   workOrder: WorkOrderRealtimePayload,
 ): Promise<void> {
+  const notifications = await notifyWorkOrderSubscribers(workOrder);
+  await Promise.all(
+    notifications.map((notification) =>
+      broadcastSubscriptionNotification(notification.userId, notification),
+    ),
+  );
   await broadcastWorkOrderEvent(siteId, "work_order_updated", workOrder);
+}
+
+type SubscriptionNotificationPayload = {
+  id: string;
+  userId: string;
+  workOrderId: string;
+  orderNumber: number;
+  workOrderName: string;
+  siteKey: string;
+  siteName: string;
+  changeKinds: WorkOrderSubscriptionChangeKind[];
+  createdAt: string;
+  readAt: string | null;
+};
+
+export async function broadcastSubscriptionNotification(
+  userId: string,
+  notification: SubscriptionNotificationPayload,
+): Promise<void> {
+  if (sockets.size === 0) return;
+  const message = JSON.stringify({
+    type: "subscription_notification",
+    notification,
+  });
+  for (const [socket, socketUserId] of sockets.entries()) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    if (socketUserId !== userId) continue;
+    socket.send(message);
+  }
 }
 
 async function broadcastWorkOrderEvent(

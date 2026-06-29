@@ -35,6 +35,8 @@ export type WorkOrderAdvancedSearchState = {
   costCenterId: string[];
   classificationId: string[];
   classificationUnassigned: boolean;
+  /** Past planned end beyond tolerance (matches dashboard "delayedOrders" KPI). */
+  overdue: boolean;
   workgroupId: string[];
   /** Responsible only (`w.responsibleEmployeeId`); distinct from assignment filter */
   responsibleEmployeeId: string[];
@@ -72,6 +74,7 @@ export function emptyWorkOrderAdvancedSearch(): WorkOrderAdvancedSearchState {
     costCenterId: [],
     classificationId: [],
     classificationUnassigned: false,
+    overdue: false,
     workgroupId: [],
     responsibleEmployeeId: [],
     employeeId: [],
@@ -92,6 +95,7 @@ function appendEach(p: URLSearchParams, key: string, values: string[]) {
 
 export function hasActiveWorkOrderAdvancedSearch(a: WorkOrderAdvancedSearchState): boolean {
   if (a.classificationUnassigned) return true;
+  if (a.overdue) return true;
   const keys = Object.keys(a) as (keyof WorkOrderAdvancedSearchState)[];
   for (const k of keys) {
     const v = a[k];
@@ -143,9 +147,89 @@ export function buildWorkOrderListQueryString(quickSearch: string, adv: WorkOrde
   appendEach(p, "costCenterId", adv.costCenterId);
   appendEach(p, "classificationId", adv.classificationId);
   if (adv.classificationUnassigned) p.set("classificationUnassigned", "1");
+  if (adv.overdue) p.set("overdue", "1");
   appendEach(p, "workgroupId", adv.workgroupId);
   appendEach(p, "responsibleEmployeeId", adv.responsibleEmployeeId);
   appendEach(p, "employeeId", adv.employeeId);
 
   return p.toString();
+}
+
+/**
+ * Inverse of {@link buildWorkOrderListQueryString}: turns deeplink URL params
+ * (e.g. dashboard KPI links like `?assetId=…`, `?status=open&status=assigned`,
+ * `?employeeId=__ME__`) back into the search state. Returns `null` when no
+ * recognised filter params are present.
+ */
+export function parseWorkOrderDeeplinkParams(
+  params: URLSearchParams,
+): { quickSearch: string; advanced: WorkOrderAdvancedSearchState } | null {
+  const advanced = emptyWorkOrderAdvancedSearch();
+  let hasAny = false;
+
+  const single = (key: string, assign: (value: string) => void) => {
+    const raw = params.get(key);
+    if (raw == null) return;
+    const value = raw.trim();
+    if (!value) return;
+    assign(value);
+    hasAny = true;
+  };
+
+  const multi = (key: string, assign: (values: string[]) => void) => {
+    const values = params.getAll(key).map((v) => v.trim()).filter(Boolean);
+    if (values.length === 0) return;
+    assign(values);
+    hasAny = true;
+  };
+
+  let quickSearch = "";
+  single("search", (v) => {
+    quickSearch = v;
+  });
+
+  single("orderNumberFrom", (v) => (advanced.orderNumberFrom = v));
+  single("orderNumberTo", (v) => (advanced.orderNumberTo = v));
+  single("plannedDurationFrom", (v) => (advanced.plannedDurationFrom = v));
+  single("plannedDurationTo", (v) => (advanced.plannedDurationTo = v));
+  single("documentCountFrom", (v) => (advanced.documentCountFrom = v));
+  single("documentCountTo", (v) => (advanced.documentCountTo = v));
+  single("assetDocumentCountFrom", (v) => (advanced.assetDocumentCountFrom = v));
+  single("assetDocumentCountTo", (v) => (advanced.assetDocumentCountTo = v));
+  single("assignedEmployeeCountFrom", (v) => (advanced.assignedEmployeeCountFrom = v));
+  single("assignedEmployeeCountTo", (v) => (advanced.assignedEmployeeCountTo = v));
+
+  single("name", (v) => (advanced.name = v));
+  single("description", (v) => (advanced.description = v));
+  multi("createdBy", (v) => (advanced.createdBy = v));
+  multi("updatedBy", (v) => (advanced.updatedBy = v));
+
+  single("plannedStartFrom", (v) => (advanced.plannedStartFrom = v));
+  single("plannedStartTo", (v) => (advanced.plannedStartTo = v));
+  single("plannedEndFrom", (v) => (advanced.plannedEndFrom = v));
+  single("plannedEndTo", (v) => (advanced.plannedEndTo = v));
+  single("createdAtFrom", (v) => (advanced.createdAtFrom = v));
+  single("createdAtTo", (v) => (advanced.createdAtTo = v));
+  single("updatedAtFrom", (v) => (advanced.updatedAtFrom = v));
+  single("updatedAtTo", (v) => (advanced.updatedAtTo = v));
+
+  multi("orderType", (v) => (advanced.orderType = v));
+  multi("status", (v) => (advanced.status = v));
+  multi("siteId", (v) => (advanced.siteId = v));
+  multi("assetId", (v) => (advanced.assetId = v));
+  multi("costCenterId", (v) => (advanced.costCenterId = v));
+  multi("classificationId", (v) => (advanced.classificationId = v));
+  if (params.get("classificationUnassigned") === "1") {
+    advanced.classificationUnassigned = true;
+    hasAny = true;
+  }
+  if (params.get("overdue") === "1") {
+    advanced.overdue = true;
+    hasAny = true;
+  }
+  multi("workgroupId", (v) => (advanced.workgroupId = v));
+  multi("responsibleEmployeeId", (v) => (advanced.responsibleEmployeeId = v));
+  multi("employeeId", (v) => (advanced.employeeId = v));
+
+  return hasAny ? { quickSearch, advanced } : null;
 }

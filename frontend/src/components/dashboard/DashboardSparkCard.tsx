@@ -1,19 +1,17 @@
 import "chart.js/auto";
-import { useMemo, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { Chart } from "primereact/chart";
-import type { LucideProps } from "lucide-react";
 
 import type { DashboardKpiBarChart, DashboardKpiDisplay } from "../../lib/dashboardKpiRegistry";
+import { mergeStaticBarChartAnimation, mergeStaticLineChartAnimation } from "../../lib/chartAnimation";
 import {
   buildSparklineChart,
   type SparkAccent,
 } from "../../lib/dashboardSparkCharts";
 
-type IconComponent = ComponentType<LucideProps>;
-
 type Props = {
-  icon: IconComponent;
+  dragHandle?: ReactNode;
   title: string;
   display?: DashboardKpiDisplay;
   value: number | string | null;
@@ -23,6 +21,7 @@ type Props = {
   href?: string;
   series: number[];
   chart?: DashboardKpiBarChart;
+  chartAnimationKey?: string;
   loading?: boolean;
   accent?: SparkAccent;
   footer?: ReactNode;
@@ -43,7 +42,7 @@ function formatDisplayValue(
 }
 
 export function DashboardSparkCard({
-  icon: Icon,
+  dragHandle,
   title,
   display = "chart",
   value,
@@ -53,6 +52,7 @@ export function DashboardSparkCard({
   href,
   series,
   chart,
+  chartAnimationKey,
   loading = false,
   accent = "green",
   footer,
@@ -63,10 +63,42 @@ export function DashboardSparkCard({
   const isTextValue = typeof value === "string" && value.length > 0;
   const isBarChart = !isValueOnly && chart?.type === "bar";
   const showSparkline = !isValueOnly && !isBarChart;
+  const showRevealedValue = !loading;
+
+  const animateOnceRef = useRef(true);
+  const prevAnimationKeyRef = useRef(chartAnimationKey);
+
+  if (chartAnimationKey !== undefined && prevAnimationKeyRef.current !== chartAnimationKey) {
+    prevAnimationKeyRef.current = chartAnimationKey;
+    animateOnceRef.current = true;
+  }
+
+  const shouldAnimateChart = animateOnceRef.current;
+
+  useEffect(() => {
+    if (!loading) {
+      animateOnceRef.current = false;
+    }
+  }, [loading]);
 
   const sparkline = useMemo(
     () => buildSparklineChart(series, accent),
     [series, accent],
+  );
+
+  const barChartOptions = useMemo(() => {
+    if (!chart?.options) return undefined;
+    return shouldAnimateChart
+      ? chart.options
+      : mergeStaticBarChartAnimation(chart.options);
+  }, [chart?.options, shouldAnimateChart]);
+
+  const sparklineOptions = useMemo(
+    () =>
+      shouldAnimateChart
+        ? sparkline.options
+        : mergeStaticLineChartAnimation(sparkline.options),
+    [sparkline.options, shouldAnimateChart],
   );
 
   const titleEl = href ? (
@@ -86,19 +118,14 @@ export function DashboardSparkCard({
     >
       <header className="app-dashboard-spark-header">
         <div className="app-dashboard-spark-header-left">
-          <span
-            className={`app-dashboard-spark-icon app-dashboard-spark-icon--${accent}`}
-            aria-hidden
-          >
-            <Icon className="h-4 w-4" strokeWidth={2} />
-          </span>
+          {dragHandle}
           {titleEl}
         </div>
         <div className="app-dashboard-spark-header-right">
           {headerActions}
           {!isValueOnly ? (
             <p
-              className={`app-dashboard-spark-value${isTextValue ? " app-dashboard-spark-value--text" : ""}`}
+              className={`app-dashboard-spark-value${isTextValue ? " app-dashboard-spark-value--text" : ""}${showRevealedValue ? " app-dashboard-spark-value--revealed" : ""}`}
               aria-live="polite"
               title={isTextValue ? formattedValue : undefined}
             >
@@ -117,7 +144,7 @@ export function DashboardSparkCard({
           ) : (
             <>
               <p
-                className={`app-dashboard-spark-value-body__primary${isTextValue ? " app-dashboard-spark-value-body__primary--text" : ""}`}
+                className={`app-dashboard-spark-value-body__primary${isTextValue ? " app-dashboard-spark-value-body__primary--text" : ""}${showRevealedValue ? " app-dashboard-spark-value-body__primary--revealed" : ""}`}
                 title={isTextValue ? formattedValue : undefined}
               >
                 {formattedValue}
@@ -137,10 +164,20 @@ export function DashboardSparkCard({
         >
           {loading ? (
             <div className="app-dashboard-spark-chart-skeleton" aria-hidden />
-          ) : isBarChart ? (
-            <Chart type="bar" data={chart.data} options={chart.options} />
+          ) : isBarChart && barChartOptions ? (
+            <Chart
+              key={chartAnimationKey}
+              type="bar"
+              data={chart.data}
+              options={barChartOptions}
+            />
           ) : showSparkline ? (
-            <Chart type="line" data={sparkline.data} options={sparkline.options} />
+            <Chart
+              key={chartAnimationKey}
+              type="line"
+              data={sparkline.data}
+              options={sparklineOptions}
+            />
           ) : null}
         </div>
       )}

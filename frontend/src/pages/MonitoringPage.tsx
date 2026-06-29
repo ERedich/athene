@@ -8,6 +8,8 @@ import {
   type PointerEvent,
 } from "react";
 import {
+  Bell,
+  BellOff,
   CircleX,
   Columns3,
   Copy,
@@ -22,7 +24,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -49,6 +51,7 @@ import {
   buildWorkOrderListQueryString,
   emptyWorkOrderAdvancedSearch,
   hasActiveWorkOrderAdvancedSearch,
+  parseWorkOrderDeeplinkParams,
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
 import {
@@ -79,6 +82,7 @@ import {
 import { workOrderStatusAllowsFeedbackTab } from "../lib/workOrderStatus";
 import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
+import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import {
   AppPauseIcon,
@@ -109,12 +113,6 @@ function supportsOrdersVirtualScroller(): boolean {
   return !firefox && !chromium;
 }
 
-function monitoringEventsWsUrl(): string {
-  const url = new URL("/api/work-orders/events", window.location.origin);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return url.toString();
-}
-
 export function MonitoringPage() {
   const { t, i18n } = useTranslation();
   const athene = useAtheneAssistant();
@@ -123,7 +121,15 @@ export function MonitoringPage() {
   const toastRef = useRef<Toast>(null);
   const overview = useWorkOrderOverviewPanel();
   const woDialog = useWorkOrderDialog();
+  const subscriptions = useWorkOrderSubscriptions();
   const refData = useWorkOrderSearchReferenceData();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  /** Deeplink filters (e.g. dashboard KPI links) captured once on mount; takes precedence over the default preset. */
+  const initialDeeplinkRef = useRef<ReturnType<typeof parseWorkOrderDeeplinkParams> | undefined>(undefined);
+  if (initialDeeplinkRef.current === undefined) {
+    initialDeeplinkRef.current = parseWorkOrderDeeplinkParams(searchParams);
+  }
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [newlyCreatedOrderIds, setNewlyCreatedOrderIds] = useState<Record<string, number>>({});
@@ -281,9 +287,19 @@ export function MonitoringPage() {
   }, []);
 
   const bootstrapSearchPresets = useCallback(async () => {
+    const deeplink = initialDeeplinkRef.current;
+    if (deeplink) {
+      setSearchTerm(deeplink.quickSearch);
+      setDebouncedSearch(deeplink.quickSearch.trim());
+      setAppliedAdvanced(deeplink.advanced);
+      setPanelDraft(deeplink.advanced);
+      setHeaderPresetSelectionId(null);
+      setSearchParams({}, { replace: true });
+    }
     try {
       const [rows, defaults] = await Promise.all([fetchWorkOrderSearchPresets(), fetchWorkOrderSearchPresetDefaults()]);
       setSearchPresets(rows);
+      if (deeplink) return;
       const defaultId = defaults.monitoringPresetId;
       const match = defaultId ? rows.find((p) => isSamePresetId(p.id, defaultId)) : undefined;
       if (match) {
@@ -300,7 +316,7 @@ export function MonitoringPage() {
     } finally {
       setSearchBootstrapDone(true);
     }
-  }, []);
+  }, [setSearchParams]);
 
   useEffect(() => {
     void bootstrapSearchPresets();
@@ -438,28 +454,9 @@ export function MonitoringPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    let reconnectTimer: number | undefined;
-    let ws: WebSocket | undefined;
-    let reconnectAttempt = 0;
-
-    const connect = () => {
-      if (cancelled) return;
-      ws = new WebSocket(monitoringEventsWsUrl());
-      ws.onopen = () => {
-        reconnectAttempt = 0;
-      };
-      ws.onmessage = (event) => {
-        let payload: unknown;
-        try {
-          payload = JSON.parse(event.data as string);
-        } catch {
-          return;
-        }
-        if (!payload || typeof payload !== "object") return;
-        const message = payload as { type?: string; workOrder?: WorkOrder };
-        if ((message.type !== "work_order_created" && message.type !== "work_order_updated") || !message.workOrder?.id) return;
+  useEffect(
+    () =>
+      subscriptions.onWorkOrderEvent((message) => {
         const incoming = message.workOrder;
         if (shouldRefetchOrdersOnWsRef.current) {
           if (wsReloadTimerRef.current) window.clearTimeout(wsReloadTimerRef.current);
@@ -480,25 +477,9 @@ export function MonitoringPage() {
           return;
         }
         setUpdatedOrderIds((current) => ({ ...current, [incoming.id]: Date.now() }));
-      };
-      ws.onclose = () => {
-        if (cancelled) return;
-        const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttempt);
-        reconnectAttempt += 1;
-        reconnectTimer = window.setTimeout(connect, delay);
-      };
-      ws.onerror = () => {
-        ws?.close();
-      };
-    };
-
-    connect();
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      ws?.close();
-    };
-  }, []);
+      }),
+    [subscriptions],
+  );
 
   const onDialogSaved = useCallback(() => {
     void loadData();
@@ -836,6 +817,7 @@ export function MonitoringPage() {
       if (!row) return [];
       const canOpenFeedbackTab = workOrderStatusAllowsFeedbackTab(row.status);
       const canCancel = row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
+      const isSubscribed = subscriptions.isSubscribed(row.id);
       return [
         {
           label: t("workOrders.contextMenuCopyOrder"),
@@ -858,6 +840,31 @@ export function MonitoringPage() {
           command: () => openFeedbackTab(row, "create"),
         },
         {
+          label: isSubscribed ? t("abonnements.unsubscribeOrder") : t("abonnements.subscribeOrder"),
+          icon: isSubscribed ? (
+            <BellOff className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+          ) : (
+            <Bell className={lucidePrimeBtnIcon} strokeWidth={1.75} />
+          ),
+          command: () => {
+            void (async () => {
+              try {
+                if (isSubscribed) {
+                  await subscriptions.unsubscribe(row.id);
+                } else {
+                  await subscriptions.subscribe(row.id);
+                }
+              } catch {
+                toastRef.current?.show({
+                  severity: "error",
+                  summary: t("abonnements.subscriptionActionError"),
+                  life: 6000,
+                });
+              }
+            })();
+          },
+        },
+        {
           label: t("workOrders.contextMenuCancelOrder"),
           icon: <CircleX className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           disabled: !canCancel,
@@ -865,7 +872,7 @@ export function MonitoringPage() {
         },
       ];
     },
-    [confirmCancelWorkOrder, onDialogSaved, openFeedbackTab, openPlanningTab, t, woDialog],
+    [confirmCancelWorkOrder, onDialogSaved, openFeedbackTab, openPlanningTab, subscriptions, t, woDialog],
   );
 
   const atheneContextMenuItems = useCallback(

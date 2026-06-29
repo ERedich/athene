@@ -54,6 +54,7 @@
     "hoursUnit": "h",
     "configureKpi": "Choose KPI",
     "configureKpiAria": "Choose KPI for tile {{slot}}",
+    "dragKpiAria": "Drag KPI tile {{slot}}",
     "kpiCategory": {
       "transactions": "Transactions",
       "workOrders": "Work orders",
@@ -274,12 +275,15 @@
     "openWeekView": "Open calendar week {{week}} in week view",
     "openDayView": "Open {{date}} in day view",
     "moveConfirmIntro": "Do you want to move this order?",
+    "moveTitle": "Move order?",
     "moveFrom": "From",
     "moveTo": "To",
     "moveOldPlannedStart": "Previous planned start",
     "moveOldPlannedEnd": "Previous planned end",
     "moveNewPlannedStart": "New planned start",
     "moveNewPlannedEnd": "New planned end",
+    "moveOldRange": "Previous planned period",
+    "moveNewRange": "New planned period",
     "moveConfirm": "Move",
     "moveConfirmDespiteConflict": "Move anyway",
     "moveAssetConflictSameDay": "There is already another order on asset {{assetKey}} ({{assetName}}) on that day. Move anyway?",
@@ -963,6 +967,27 @@
   "monitoring": {
     "appName": "Work Order Monitor",
     "navMonitoring": "Monitoring"
+  },
+  "abonnements": {
+    "appName": "Subscriptions",
+    "subscribeOrder": "Subscribe to order",
+    "unsubscribeOrder": "End subscription",
+    "subscriptionActionError": "Could not update subscription.",
+    "loadError": "Could not load notifications.",
+    "openWorkOrderError": "Could not open work order.",
+    "searchPlaceholder": "Search notifications",
+    "empty": "No notifications available.",
+    "createdAt": "Created",
+    "order": "Work order",
+    "site": "Site",
+    "changeKinds": "Changes",
+    "openOrder": "Open work order",
+    "changeKind": {
+      "status": "Status",
+      "temporal": "Schedule",
+      "data": "Data",
+      "references": "References"
+    }
   },
   "suchkonfig": {
     "appName": "Search configs",

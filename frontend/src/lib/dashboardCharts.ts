@@ -4,6 +4,7 @@ import { readThemeChartColors, readThemePrimaryChartColors } from "./workOrderOv
 import type { ChartData, ChartOptions } from "chart.js";
 
 import type { DayCount, OrderTypeCount, StatusCount } from "../hooks/useDashboardMetrics";
+import { mergeInitialBarChartAnimation } from "./chartAnimation";
 
 /** Chart bar/doughnut fills aligned with work-order status table colors. */
 export const WORK_ORDER_STATUS_CHART_COLORS: Record<string, string> = {
@@ -59,30 +60,32 @@ export function buildOrderTypeBarChartData(
 
 export function buildDashboardBarChartOptions(): ChartOptions<"bar"> {
   const themeColors = readThemeChartColors();
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
-    plugins: {
-      legend: { display: false },
-      tooltip: { enabled: false },
-    },
-    scales: {
-      x: {
-        ticks: { color: themeColors.text, maxRotation: 0, font: { size: 10 } },
-        grid: { display: false },
+  return mergeInitialBarChartAnimation(
+    {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
       },
-      y: {
-        ticks: {
-          color: themeColors.text,
-          font: { size: 10 },
-          precision: 0,
+      scales: {
+        x: {
+          ticks: { color: themeColors.text, maxRotation: 0, font: { size: 10 } },
+          grid: { display: false },
         },
-        grid: { color: themeColors.grid },
-        beginAtZero: true,
+        y: {
+          ticks: {
+            color: themeColors.text,
+            font: { size: 10 },
+            precision: 0,
+          },
+          grid: { color: themeColors.grid },
+          beginAtZero: true,
+        },
       },
     },
-  };
+  );
 }
 
 export function statusLabel(t: TFunction, status: string): string {
@@ -257,5 +260,5 @@ export function workOrdersActiveStatusHref(): string {
     p.append("status", s);
   }
   const qs = p.toString();
-  return qs ? `/workorders?${qs}` : "/workorders";
+  return qs ? `/monitoring?${qs}` : "/monitoring";
 }

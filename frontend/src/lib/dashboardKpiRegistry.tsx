@@ -143,7 +143,7 @@ function formatAvgDelay(hours: number | null, locale: string): number | string |
 function workOrdersAssetHref(assetId: string): string {
   const p = new URLSearchParams();
   p.append("assetId", assetId);
-  return `/workorders?${p.toString()}`;
+  return `/monitoring?${p.toString()}`;
 }
 
 export function resolveKpiView(
@@ -186,11 +186,11 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.completedLast7Days.total,
         series: seriesFromByDay(metrics.completedLast7Days.byDay),
-        href: "/workorders",
+        href: "/monitoring",
       };
 
     case "myOrders": {
-      const myOrdersHref = `/workorders?employeeId=${encodeURIComponent(EMPLOYEE_PSEUDO_ME)}`;
+      const myOrdersHref = `/monitoring?employeeId=${encodeURIComponent(EMPLOYEE_PSEUDO_ME)}`;
       return {
         title,
         icon: def.icon,
@@ -229,7 +229,7 @@ export function resolveKpiView(
           data: buildOrderTypeBarChartData(metrics.ordersByType.byType, t),
           options: buildDashboardBarChartOptions(),
         },
-        href: "/workorders",
+        href: "/monitoring",
       };
 
     case "delayedOrders":
@@ -240,7 +240,7 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.delayedOrders.total,
         series: demoSparkSeries(metrics.delayedOrders.total),
-        href: "/workorders",
+        href: "/monitoring?overdue=1",
       };
 
     case "avgDelayHours":
@@ -252,7 +252,7 @@ export function resolveKpiView(
         value: formatAvgDelay(metrics.avgDelayHours.hours, locale),
         valueSuffix: metrics.avgDelayHours.hours != null ? t("dashboard.hoursUnit") : undefined,
         series: [],
-        href: "/workorders",
+        href: "/monitoring",
       };
 
     case "topAssetByOrders": {

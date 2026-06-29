@@ -58,5 +58,16 @@ export function useDashboardLayout() {
     });
   }, []);
 
-  return { layout, setSlotKpi };
+  const swapSlots = useCallback((a: number, b: number) => {
+    if (a < 0 || a >= DASHBOARD_SLOT_COUNT) return;
+    if (b < 0 || b >= DASHBOARD_SLOT_COUNT) return;
+    if (a === b) return;
+    setLayout((prev) => {
+      const next = [...prev];
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
+  }, []);
+
+  return { layout, setSlotKpi, swapSlots };
 }

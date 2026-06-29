@@ -24,6 +24,7 @@ import { SearchPresetsPage } from "./pages/SearchPresetsPage";
 import { TableLayoutsPage } from "./pages/TableLayoutsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AbonnementsPage } from "./pages/AbonnementsPage";
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />
           <Route path="translations" element={<TranslationsPage />} />
+          <Route path="abonnements" element={<AbonnementsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

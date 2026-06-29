@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Settings } from "lucide-react";
+import { GripVertical, Settings } from "lucide-react";
 import { OverlayPanel } from "primereact/overlaypanel";
 import { PanelMenu } from "primereact/panelmenu";
 
@@ -18,6 +18,7 @@ type Props = {
   loading: boolean;
   locale: string;
   onSelectKpi: (kpiId: DashboardKpiId) => void;
+  onArm: () => void;
 };
 
 export function DashboardGridCell({
@@ -27,6 +28,7 @@ export function DashboardGridCell({
   loading,
   locale,
   onSelectKpi,
+  onArm,
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<OverlayPanel>(null);
@@ -47,6 +49,17 @@ export function DashboardGridCell({
   const menuModel = useMemo(
     () => buildDashboardKpiMenuModel(kpiId, selectKpi, t),
     [kpiId, selectKpi, t],
+  );
+
+  const dragHandle = (
+    <button
+      type="button"
+      className="app-dashboard-kpi-drag-handle"
+      aria-label={t("dashboard.dragKpiAria", { slot: slotIndex + 1 })}
+      onPointerDown={onArm}
+    >
+      <GripVertical className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+    </button>
   );
 
   const configureButton = (
@@ -72,7 +85,7 @@ export function DashboardGridCell({
 
   return (
     <DashboardSparkCard
-      icon={view.icon}
+      dragHandle={dragHandle}
       title={view.title}
       display={view.display}
       value={loading ? null : view.value}
@@ -82,6 +95,7 @@ export function DashboardGridCell({
       href={view.href}
       series={view.series}
       chart={view.chart}
+      chartAnimationKey={kpiId}
       loading={loading}
       accent={view.accent}
       footer={loading ? null : view.footer}

@@ -7,10 +7,7 @@ import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
-import {
-  CalendarMoveConfirmPanel,
-  type CalendarMoveConfirmPanelHandle,
-} from "../components/calendar/CalendarMoveConfirmPanel";
+import { CalendarMoveConfirmPanel } from "../components/calendar/CalendarMoveConfirmPanel";
 import { CalendarDayTimeline } from "../components/calendar/CalendarDayTimeline";
 import { CalendarGrid } from "../components/calendar/CalendarGrid";
 import { CalendarToolbar } from "../components/calendar/CalendarToolbar";
@@ -50,7 +47,6 @@ export function KalendarPage() {
   const woDialog = useWorkOrderDialog();
   const athene = useAtheneAssistant();
   const toastRef = useRef<Toast>(null);
-  const movePanelRef = useRef<CalendarMoveConfirmPanelHandle>(null);
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
@@ -62,7 +58,6 @@ export function KalendarPage() {
   const [draggingWorkOrderId, setDraggingWorkOrderId] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingCalendarMove | null>(null);
   const [moveSaving, setMoveSaving] = useState(false);
-  const moveShowEventRef = useRef<React.SyntheticEvent | null>(null);
 
   const weeks = useMemo(() => {
     if (viewMode === "month") return buildMonthGrid(anchorDate);
@@ -95,9 +90,15 @@ export function KalendarPage() {
     [langDe],
   );
 
-  const formatDateFromDate = useCallback(
-    (d: Date) => formatDateTime(d.toISOString()),
-    [formatDateTime],
+  const formatDateOnly = useCallback(
+    (d: Date) => {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      if (langDe) {
+        return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+      }
+      return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+    },
+    [langDe],
   );
 
   const loadData = useCallback(async () => {
@@ -201,17 +202,8 @@ export function KalendarPage() {
   }, []);
 
   const handleMoveReject = useCallback(() => {
-    moveShowEventRef.current = null;
     setPendingMove(null);
-    movePanelRef.current?.hide();
   }, []);
-
-  useEffect(() => {
-    if (!pendingMove || !moveShowEventRef.current) return;
-    const event = moveShowEventRef.current;
-    moveShowEventRef.current = null;
-    movePanelRef.current?.show(event);
-  }, [pendingMove]);
 
   useEffect(() => {
     if (!pendingMove) return;
@@ -245,7 +237,7 @@ export function KalendarPage() {
   }, [pendingMove?.workOrder.id, pendingMove?.newStart, pendingMove?.newEnd]);
 
   const handleMoveProposal = useCallback(
-    (wo: CalendarWorkOrder, targetDay: Date, event: React.SyntheticEvent) => {
+    (wo: CalendarWorkOrder, targetDay: Date) => {
       const pending = buildPendingMove(wo, targetDay);
       if (!pending) {
         if (isBeforeToday(targetDay)) {
@@ -257,7 +249,6 @@ export function KalendarPage() {
         }
         return;
       }
-      moveShowEventRef.current = event;
       setPendingMove(pending);
     },
     [t],
@@ -336,9 +327,9 @@ export function KalendarPage() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
       <Toast ref={toastRef} position="top-right" />
       <CalendarMoveConfirmPanel
-        ref={movePanelRef}
+        visible={pendingMove != null}
         pending={pendingMove}
-        formatDateTime={formatDateFromDate}
+        formatDate={formatDateOnly}
         saving={moveSaving}
         onAccept={() => void handleMoveAccept()}
         onReject={handleMoveReject}
