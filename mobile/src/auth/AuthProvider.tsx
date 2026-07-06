@@ -14,6 +14,7 @@ type MeResponse = {
   user: AuthUser;
   appParameterBooleans?: Record<string, boolean>;
   appParameterDefaultWorkgroupId?: string | null;
+  appParameterDefaultShiftHours?: number;
   appParameterAssetKeyMode?: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath?: boolean;
   appParameterAssetKeyPathSeparator?: string;
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
   const [appParameterDefaultWorkgroupId, setAppParameterDefaultWorkgroupId] = useState<string | null>(null);
+  const [appParameterDefaultShiftHours, setAppParameterDefaultShiftHours] = useState(8);
   const [appParameterAssetKeyMode, setAppParameterAssetKeyMode] = useState<AppParameterAssetKeyMode>("manual");
   const [appParameterShowAssetKeyPath, setAppParameterShowAssetKeyPath] = useState(false);
   const [appParameterAssetKeyPathSeparator, setAppParameterAssetKeyPathSeparator] = useState(".");
@@ -45,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setAppParameterBooleans({});
         setAppParameterDefaultWorkgroupId(null);
+        setAppParameterDefaultShiftHours(8);
         setAppParameterAssetKeyMode("manual");
         setAppParameterShowAssetKeyPath(false);
         setAppParameterAssetKeyPathSeparator(".");
@@ -54,6 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       setAppParameterBooleans(data.appParameterBooleans ?? {});
       setAppParameterDefaultWorkgroupId(data.appParameterDefaultWorkgroupId ?? null);
+      setAppParameterDefaultShiftHours(
+        typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
+          ? data.appParameterDefaultShiftHours
+          : 8,
+      );
       setAppParameterAssetKeyMode(data.appParameterAssetKeyMode ?? "manual");
       setAppParameterShowAssetKeyPath(data.appParameterShowAssetKeyPath ?? false);
       setAppParameterAssetKeyPathSeparator(data.appParameterAssetKeyPathSeparator ?? ".");
@@ -63,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setAppParameterBooleans({});
       setAppParameterDefaultWorkgroupId(null);
+      setAppParameterDefaultShiftHours(8);
       setAppParameterAssetKeyMode("manual");
       setAppParameterShowAssetKeyPath(false);
       setAppParameterAssetKeyPathSeparator(".");
@@ -133,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setAppParameterBooleans({});
     setAppParameterDefaultWorkgroupId(null);
+    setAppParameterDefaultShiftHours(8);
     setAppParameterAssetKeyMode("manual");
     setAppParameterShowAssetKeyPath(false);
     setAppParameterAssetKeyPathSeparator(".");
@@ -143,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       appParameterBooleans,
       appParameterDefaultWorkgroupId,
+      appParameterDefaultShiftHours,
       appParameterAssetKeyMode,
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,
@@ -155,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       appParameterBooleans,
       appParameterDefaultWorkgroupId,
+      appParameterDefaultShiftHours,
       appParameterAssetKeyMode,
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,

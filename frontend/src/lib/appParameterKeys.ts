@@ -19,4 +19,7 @@ export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP" as const;
 /** Must match backend `APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA` (MT-ACSD). */
 export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD" as const;
 
+/** Must match backend `APP_PARAM_KEY_DEFAULT_SHIFT_HOURS` (SH-DSH). */
+export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH" as const;
+
 export type AppParameterAssetKeyMode = "manual" | "auto_incremental";

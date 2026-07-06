@@ -7,6 +7,7 @@ export type AuthSession = {
   user: AuthUser | null;
   appParameterBooleans: Record<string, boolean>;
   appParameterDefaultWorkgroupId: string | null;
+  appParameterDefaultShiftHours: number;
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;

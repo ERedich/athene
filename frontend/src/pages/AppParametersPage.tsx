@@ -17,6 +17,7 @@ import { ColorPicker } from "primereact/colorpicker";
 import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
+import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
@@ -30,6 +31,7 @@ import {
   APP_PARAM_KEY_ASSET_KEY_GEN,
   APP_PARAM_KEY_ASSET_TYPES,
   APP_PARAM_KEY_DEFAULT_WORKGROUP,
+  APP_PARAM_KEY_DEFAULT_SHIFT_HOURS,
   APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
   type AppParameterAssetKeyMode,
 } from "../lib/appParameterKeys";
@@ -56,6 +58,7 @@ type AppParameterRow = {
   boolValue: boolean;
   jsonValue: unknown | null;
   uuidValue: string | null;
+  numValue: number;
   updatedAt: string;
 };
 
@@ -94,9 +97,15 @@ function storedFromPickerValue(raw: string): string {
   return `#${h}`;
 }
 
+function normalizeNumValue(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 8;
+}
+
 function parameterRowDirty(a: AppParameterRow, b: AppParameterRow): boolean {
   if (a.boolValue !== b.boolValue) return true;
   if ((a.uuidValue ?? null) !== (b.uuidValue ?? null)) return true;
+  if (a.numValue !== b.numValue) return true;
   return JSON.stringify(a.jsonValue) !== JSON.stringify(b.jsonValue);
 }
 
@@ -157,7 +166,11 @@ export function AppParametersPage() {
       const res = await apiFetch("/api/app-parameters");
       if (!res.ok) throw new Error("load");
       const data = (await res.json()) as AppParameterRow[];
-      const normalized = data.map((r) => ({ ...r, uuidValue: r.uuidValue ?? null }));
+      const normalized = data.map((r) => ({
+        ...r,
+        uuidValue: r.uuidValue ?? null,
+        numValue: normalizeNumValue(r.numValue),
+      }));
       setPersistedRows(normalized);
       setDraftRows(normalized.map((r) => ({ ...r })));
     } catch {
@@ -211,6 +224,7 @@ export function AppParametersPage() {
       const jsonBlob =
         r.jsonValue === null || r.jsonValue === undefined ? "" : JSON.stringify(r.jsonValue);
       const uuidBlob = r.uuidValue ?? "";
+      const numBlob = String(r.numValue);
       const blob = [
         r.key,
         r.codeSuffix,
@@ -222,6 +236,7 @@ export function AppParametersPage() {
         r.valueType,
         jsonBlob,
         uuidBlob,
+        numBlob,
       ]
         .join("\n")
         .toLowerCase();
@@ -284,6 +299,10 @@ export function AppParametersPage() {
     setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, jsonValue } : r)));
   }, []);
 
+  const updateDraftNum = useCallback((key: string, numValue: number) => {
+    setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, numValue } : r)));
+  }, []);
+
   const hasUnsavedChanges = useMemo(() => {
     const pmap = new Map(persistedRows.map((r) => [r.key, r]));
     return draftRows.some((d) => {
@@ -314,6 +333,8 @@ export function AppParametersPage() {
           body = { uuidValue: row.uuidValue };
         } else if (row.valueType === "json") {
           body = { jsonValue: row.jsonValue };
+        } else if (row.valueType === "number") {
+          body = { numValue: row.numValue };
         } else {
           continue;
         }
@@ -325,7 +346,13 @@ export function AppParametersPage() {
         if (!res.ok) throw new Error("patch");
         const updated = (await res.json()) as AppParameterRow;
         nextPersisted = nextPersisted.map((r) =>
-          r.key === updated.key ? { ...updated, uuidValue: updated.uuidValue ?? null } : r,
+          r.key === updated.key
+            ? {
+                ...updated,
+                uuidValue: updated.uuidValue ?? null,
+                numValue: normalizeNumValue(updated.numValue),
+              }
+            : r,
         );
       }
       setPersistedRows(nextPersisted);
@@ -546,6 +573,23 @@ export function AppParametersPage() {
                     appendTo={overlayAppendTo}
                   />
                 </div>
+              ) : row.key === APP_PARAM_KEY_DEFAULT_SHIFT_HOURS && row.valueType === "number" ? (
+                <div className="max-w-md" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                  <InputNumber
+                    inputId={`app-param-${row.key}`}
+                    value={row.numValue}
+                    min={0.01}
+                    minFractionDigits={0}
+                    maxFractionDigits={2}
+                    step={0.5}
+                    className="w-full"
+                    disabled={savingAll}
+                    onValueChange={(e) => {
+                      const next = typeof e.value === "number" && e.value > 0 ? e.value : row.numValue;
+                      updateDraftNum(row.key, next);
+                    }}
+                  />
+                </div>
               ) : (
                 <span className="text-sm text-on-surface-variant">—</span>
               )}
@@ -562,6 +606,7 @@ export function AppParametersPage() {
       savingAll,
       updateDraftBool,
       updateDraftJson,
+      updateDraftNum,
       updateDraftUuid,
       t,
     ],

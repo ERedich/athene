@@ -4,6 +4,7 @@ import {
   fetchAppParameterBooleans,
   getAssetKeyGenerationMode,
   getAssetTypeDisplayConfig,
+  getDefaultShiftHours,
   getDefaultWorkOrderWorkgroupId,
   getShowAssetKeyPath,
 } from "./appParameters.js";
@@ -125,6 +126,7 @@ router.get("/me", async (req: Request, res: Response) => {
     let appParameterBooleans: Record<string, boolean> = {};
     let appParameterAssetTypes: Awaited<ReturnType<typeof getAssetTypeDisplayConfig>> = null;
     let appParameterDefaultWorkgroupId: string | null = null;
+    let appParameterDefaultShiftHours = 8;
     let appParameterAssetKeyMode: Awaited<ReturnType<typeof getAssetKeyGenerationMode>> = "manual";
     let appParameterShowAssetKeyPath = false;
     let appParameterAssetKeyPathSeparator = ".";
@@ -144,6 +146,11 @@ router.get("/me", async (req: Request, res: Response) => {
       console.warn("[athene-backend] WO-DWG load skipped:", dwgErr);
     }
     try {
+      appParameterDefaultShiftHours = await getDefaultShiftHours(pool);
+    } catch (dshErr) {
+      console.warn("[athene-backend] SH-DSH load skipped:", dshErr);
+    }
+    try {
       appParameterAssetKeyMode = await getAssetKeyGenerationMode(pool);
     } catch (aakgErr) {
       console.warn("[athene-backend] GN-AAKG load skipped:", aakgErr);
@@ -160,6 +167,7 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterBooleans,
       appParameterAssetTypes,
       appParameterDefaultWorkgroupId,
+      appParameterDefaultShiftHours,
       appParameterAssetKeyMode,
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,

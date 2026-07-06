@@ -18,6 +18,7 @@ type MeResponse = {
   appParameterBooleans?: Record<string, boolean>;
   appParameterAssetTypes?: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId?: string | null;
+  appParameterDefaultShiftHours?: number;
   appParameterAssetKeyMode?: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath?: boolean;
   appParameterAssetKeyPathSeparator?: string;
@@ -28,6 +29,7 @@ type SessionBase = {
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;
+  appParameterDefaultShiftHours: number;
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;
@@ -51,6 +53,10 @@ export function RequireAuth() {
       appParameterBooleans: data.appParameterBooleans ?? {},
       appParameterAssetTypes: data.appParameterAssetTypes ?? null,
       appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
+      appParameterDefaultShiftHours:
+        typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
+          ? data.appParameterDefaultShiftHours
+          : 8,
       appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
       appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
       appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
@@ -73,6 +79,10 @@ export function RequireAuth() {
           appParameterBooleans: data.appParameterBooleans ?? {},
           appParameterAssetTypes: data.appParameterAssetTypes ?? null,
           appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
+          appParameterDefaultShiftHours:
+            typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
+              ? data.appParameterDefaultShiftHours
+              : 8,
           appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
           appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
           appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
@@ -138,6 +148,7 @@ export function RequireAuth() {
     appParameterBooleans: sessionBase.appParameterBooleans,
     appParameterAssetTypes: sessionBase.appParameterAssetTypes,
     appParameterDefaultWorkgroupId: sessionBase.appParameterDefaultWorkgroupId,
+    appParameterDefaultShiftHours: sessionBase.appParameterDefaultShiftHours,
     appParameterAssetKeyMode: sessionBase.appParameterAssetKeyMode,
     appParameterShowAssetKeyPath: sessionBase.appParameterShowAssetKeyPath,
     appParameterAssetKeyPathSeparator: sessionBase.appParameterAssetKeyPathSeparator,

@@ -24,6 +24,9 @@ export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP";
 /** Material: Lagerdaten in der Ersatzteil-App nachträglich bearbeiten. */
 export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD";
 
+/** Schichten: Standard-Schichtstunden wenn Mitarbeiter keine Schichtangaben hat. */
+export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH";
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
 
 export type AssetKeyGenerationMode = "manual" | "auto_incremental";
@@ -56,6 +59,7 @@ export type AppParameterRow = {
   boolValue: boolean;
   jsonValue: unknown | null;
   uuidValue: string | null;
+  numValue: number;
   updatedAt: string;
 };
 
@@ -120,6 +124,17 @@ export function parseGnSakpJsonValue(raw: unknown): ShowAssetKeyPathConfig | nul
   }
   if (sepRaw.length !== 1) return null;
   return { show: true, separator: sepRaw };
+}
+
+function parseNumValueBody(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw > 0 ? raw : null;
+  }
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
 }
 
 /** Accept JSON booleans only (no Boolean() coercion — e.g. Boolean("false") === true). */
@@ -207,6 +222,25 @@ export async function getShowAssetKeyPath(client: DbQueryable): Promise<ShowAsse
   }
 }
 
+export async function getDefaultShiftHours(client: DbQueryable): Promise<number> {
+  try {
+    const { rows } = await client.query<{ numValue: string | number }>(
+      `
+      SELECT "numValue"
+      FROM "appParameter"
+      WHERE "key" = $1 AND "valueType" = 'number'
+      LIMIT 1
+      `,
+      [APP_PARAM_KEY_DEFAULT_SHIFT_HOURS],
+    );
+    const raw = rows[0]?.numValue;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 8;
+  } catch {
+    return 8;
+  }
+}
+
 export async function getDefaultWorkOrderWorkgroupId(client: DbQueryable): Promise<string | null> {
   try {
     const { rows } = await client.query<{ uuidValue: string | null }>(
@@ -238,6 +272,7 @@ const selectRowSql = `
     "boolValue",
     "jsonValue",
     "uuidValue"::text AS "uuidValue",
+    "numValue",
     "updatedAt"::text AS "updatedAt"
 `;
 
@@ -254,6 +289,7 @@ const returningRowColumns = `
   "boolValue",
   "jsonValue",
   "uuidValue"::text AS "uuidValue",
+  "numValue",
   "updatedAt"::text AS "updatedAt"
 `;
 
@@ -421,6 +457,34 @@ router.patch("/:key", async (req: Request, res: Response) => {
         RETURNING ${returningRowColumns}
         `,
         [nextUuid, key],
+      );
+      const row = rows[0];
+      if (!row) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json(row);
+      return;
+    }
+
+    if (vt === "number") {
+      if (key !== APP_PARAM_KEY_DEFAULT_SHIFT_HOURS) {
+        res.status(400).json({ error: "unsupported_number_parameter" });
+        return;
+      }
+      const numValue = parseNumValueBody(body.numValue);
+      if (numValue === null) {
+        res.status(400).json({ error: "invalid_num_value" });
+        return;
+      }
+      const { rows } = await pool.query<AppParameterRow>(
+        `
+        UPDATE "appParameter"
+        SET "numValue" = $1, "updatedAt" = now()
+        WHERE "key" = $2 AND "valueType" = 'number'
+        RETURNING ${returningRowColumns}
+        `,
+        [numValue, key],
       );
       const row = rows[0];
       if (!row) {

@@ -21,6 +21,8 @@ export type AuthSession = {
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   /** WO-DWG: default work group UUID for new work orders, or null if unset. */
   appParameterDefaultWorkgroupId: string | null;
+  /** SH-DSH: default shift hours when employee has no shift details. */
+  appParameterDefaultShiftHours: number;
   /** GN-AAKG */
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   /** GN-SAKP */
