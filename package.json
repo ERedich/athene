@@ -10,6 +10,7 @@
     "dev": "concurrently -n backend,frontend,mobile -c blue,green,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run web -w mobile\"",
     "dev:mobile": "npm run web -w mobile",
     "build": "npm run build -w backend && npm run build -w frontend",
+    "start": "concurrently -n backend,frontend -c blue,green \"npm run start -w backend\" \"npm run preview -w frontend\"",
     "migrate": "npm run migrate -w backend",
     "athene:reindex": "npm run athene:reindex-embeddings -w backend",
     "athene:reindex-embeddings": "npm run athene:reindex-embeddings -w backend",

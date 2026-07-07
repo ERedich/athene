@@ -70,6 +70,36 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
         const groupActive = isNavGroupActive(pathname, group);
         const { Icon: GroupIcon } = group;
 
+        if (group.items.length === 0 && group.to) {
+          return (
+            <div key={group.id} className="app-sidebar-nav-group">
+              <NavLink
+                to={group.to}
+                end={group.end}
+                title={collapsed ? groupLabel : undefined}
+                aria-label={collapsed ? groupLabel : undefined}
+                className={({ isActive }) =>
+                  `${navBtnBase} ${
+                    collapsed ? navBtnCollapsed : "gap-3 px-3 py-2.5"
+                  } ${isActive ? activeNavBtn : ""}`
+                }
+              >
+                <GroupIcon
+                  className={navIconClass}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                {collapsed ? null : (
+                  <span className="min-w-0 flex-1 text-left leading-snug">
+                    {groupLabel}
+                  </span>
+                )}
+                <Ripple />
+              </NavLink>
+            </div>
+          );
+        }
+
         return (
           <div key={group.id} className="app-sidebar-nav-group">
             <button

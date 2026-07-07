@@ -45,6 +45,7 @@ import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
+import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
@@ -190,19 +191,8 @@ type Asset = {
   keyPath?: string | null;
 };
 
-const ASSETS_TABLE_VIRTUAL_ROW_PX = 38;
-
-function supportsAssetsTableVirtualScroller(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  const firefox = /firefox\//i.test(ua) || /fxios/i.test(ua);
-  const chromium =
-    /chrome\//i.test(ua) ||
-    /crios/i.test(ua) ||
-    /edg\//i.test(ua) ||
-    /opr\//i.test(ua);
-  return !firefox && !chromium;
-}
+const ASSETS_TABLE_ROWS_PER_PAGE = 50;
+const ASSETS_TABLE_ROWS_PER_PAGE_OPTIONS = [25, 50, 100, 200];
 
 type CostCenterListRow = {
   id: string;
@@ -701,8 +691,10 @@ export function AssetsPage() {
   const [documentEditCategory, setDocumentEditCategory] =
     useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
-  const [assetsGridScrollHeight, setAssetsGridScrollHeight] = useState("60vh");
-  const assetsGridHostRef = useRef<HTMLDivElement | null>(null);
+  const [page, setPage] = useState(0);
+  const [limit, setLimit] = useState(ASSETS_TABLE_ROWS_PER_PAGE);
+  const [sortField, setSortField] = useState<string>("key");
+  const [sortOrder, setSortOrder] = useState<1 | -1>(1);
   const debouncedSearchTerm = useDebouncedValue(searchTermInput, 180);
 
   const dateTimeFormatter = useMemo(
@@ -712,14 +704,6 @@ export function AssetsPage() {
         timeStyle: "short",
       }),
     [i18n.language],
-  );
-
-  const assetsTableVirtualScrollerOptions = useMemo(
-    () =>
-      supportsAssetsTableVirtualScroller()
-        ? { itemSize: ASSETS_TABLE_VIRTUAL_ROW_PX, showLoader: true }
-        : undefined,
-    [],
   );
 
   const editingIdRef = useRef<string | null>(null);
@@ -1136,19 +1120,47 @@ export function AssetsPage() {
     );
   }, [assetSearchHaystacks, assets, debouncedSearchTerm]);
 
-  useLayoutEffect(() => {
-    const recalcAssetsGridHeight = () => {
-      const host = assetsGridHostRef.current;
-      if (!host) return;
-      const top = host.getBoundingClientRect().top;
-      // Keep a small bottom gap so paginator/scrollbars do not touch viewport edge.
-      const next = Math.max(280, Math.floor(window.innerHeight - top - 12));
-      setAssetsGridScrollHeight(`${next}px`);
-    };
-    recalcAssetsGridHeight();
-    window.addEventListener("resize", recalcAssetsGridHeight);
-    return () => window.removeEventListener("resize", recalcAssetsGridHeight);
-  }, []);
+  const sortedAssets = useMemo(() => {
+    const arr = [...filteredAssets];
+    const field = sortField as keyof Asset;
+    arr.sort((a, b) => {
+      const av = a[field];
+      const bv = b[field];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * sortOrder;
+      }
+      return (
+        String(av).localeCompare(String(bv), i18n.language, { numeric: true }) *
+        sortOrder
+      );
+    });
+    return arr;
+  }, [filteredAssets, i18n.language, sortField, sortOrder]);
+
+  const pagedAssets = useMemo(
+    () => sortedAssets.slice(page * limit, page * limit + limit),
+    [sortedAssets, page, limit],
+  );
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(sortedAssets.length / limit) - 1);
+    if (page > maxPage) setPage(maxPage);
+  }, [sortedAssets.length, limit, page]);
+
+  const onAssetsPageChange = useCallback(
+    (e: PaginatorPageChangeEvent) => {
+      if (e.rows !== limit) {
+        setLimit(e.rows);
+        setPage(0);
+        return;
+      }
+      setPage(e.page);
+    },
+    [limit],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -2078,17 +2090,14 @@ export function AssetsPage() {
       <ConfirmDialog />
       {tableCtx.ContextMenuEl}
 
-      <div
-        ref={assetsGridHostRef}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-      >
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col"
           {...tableCtx.wrapperProps}
         >
           <DataTable
             className="app-data-table flex min-h-0 min-w-0 w-full flex-1"
-            value={filteredAssets}
+            value={pagedAssets}
             loading={loading}
             dataKey="id"
             selection={selectedAsset}
@@ -2105,8 +2114,14 @@ export function AssetsPage() {
             resizableColumns
             reorderableColumns
             columnResizeMode="expand"
-            scrollHeight={assetsGridScrollHeight}
-            virtualScrollerOptions={assetsTableVirtualScrollerOptions}
+            scrollHeight="flex"
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={(e) => {
+              setSortField(e.sortField);
+              setSortOrder((e.sortOrder === -1 ? -1 : 1) as 1 | -1);
+              setPage(0);
+            }}
             tableStyle={{ minWidth: "118rem" }}
             stateStorage="local"
             stateKey="athene-assets-table"
@@ -2217,6 +2232,14 @@ export function AssetsPage() {
             />
           </DataTable>
         </div>
+        <Paginator
+          first={page * limit}
+          rows={limit}
+          totalRecords={sortedAssets.length}
+          onPageChange={onAssetsPageChange}
+          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+          rowsPerPageOptions={ASSETS_TABLE_ROWS_PER_PAGE_OPTIONS}
+        />
       </div>
       <Dialog
         header={editingId ? t("assets.editTitle") : t("assets.createTitle")}

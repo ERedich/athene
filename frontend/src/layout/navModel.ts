@@ -19,6 +19,7 @@ import {
   SlidersHorizontal,
   Table,
   Tags,
+  Truck,
   type LucideIcon,
   Users,
   Warehouse,
@@ -36,31 +37,26 @@ export type NavGroup = {
   labelKey: string;
   Icon: LucideIcon;
   items: NavRouteItem[];
+  /** Direct navigation without submenu when `items` is empty. */
+  to?: string;
+  end?: boolean;
 };
 
 export const navGroups: NavGroup[] = [
+  {
+    id: "dashboard",
+    labelKey: "dashboard.navDashboard",
+    Icon: LayoutGrid,
+    items: [],
+    to: "/dashboard",
+    end: true,
+  },
   {
     id: "system",
     labelKey: "shell.navSystem",
     Icon: Settings,
     items: [
-      {
-        to: "/dashboard",
-        end: true,
-        Icon: LayoutGrid,
-        labelKey: "dashboard.navDashboard",
-      },
-      {
-        to: "/monitoring",
-        Icon: Monitor,
-        labelKey: "monitoring.navMonitoring",
-      },
       { to: "/audit-log", Icon: History, labelKey: "auditLog.navAudit" },
-      {
-        to: "/table-viewer",
-        Icon: Table,
-        labelKey: "tableViewer.navTableViewer",
-      },
       {
         to: "/app-parameters",
         Icon: SlidersHorizontal,
@@ -70,16 +66,6 @@ export const navGroups: NavGroup[] = [
         to: "/translations",
         Icon: Languages,
         labelKey: "translations.navTranslations",
-      },
-      {
-        to: "/suchkonfig",
-        Icon: Share2,
-        labelKey: "suchkonfig.navSuchkonfig",
-      },
-      {
-        to: "/tabellen-layouts",
-        Icon: Columns3,
-        labelKey: "tableLayouts.navTableLayouts",
       },
       {
         to: "/calculator",
@@ -94,12 +80,22 @@ export const navGroups: NavGroup[] = [
     Icon: Shield,
     items: [
       { to: "/users", Icon: Users, labelKey: "users.navUsers" },
-      {
-        to: "/workgroups",
-        Icon: Network,
-        labelKey: "workgroups.navWorkgroups",
-      },
       { to: "/sites", Icon: MapPin, labelKey: "sites.navSites" },
+      {
+        to: "/tabellen-layouts",
+        Icon: Columns3,
+        labelKey: "tableLayouts.navTableLayouts",
+      },
+      {
+        to: "/suchkonfig",
+        Icon: Share2,
+        labelKey: "suchkonfig.navSuchkonfig",
+      },
+      {
+        to: "/table-viewer",
+        Icon: Table,
+        labelKey: "tableViewer.navTableViewer",
+      },
     ],
   },
   {
@@ -123,6 +119,16 @@ export const navGroups: NavGroup[] = [
         Icon: Tags,
         labelKey: "classifications.navClassifications",
       },
+      {
+        to: "/workgroups",
+        Icon: Network,
+        labelKey: "workgroups.navWorkgroups",
+      },
+      {
+        to: "/suppliers",
+        Icon: Truck,
+        labelKey: "suppliers.navSuppliers",
+      },
     ],
   },
   {
@@ -144,6 +150,11 @@ export const navGroups: NavGroup[] = [
         to: "/transactions",
         Icon: ArrowLeftRight,
         labelKey: "transactions.navTransactions",
+      },
+      {
+        to: "/monitoring",
+        Icon: Monitor,
+        labelKey: "monitoring.navMonitoring",
       },
     ],
   },
@@ -180,6 +191,9 @@ export function isNavRouteActive(
 }
 
 export function isNavGroupActive(pathname: string, group: NavGroup): boolean {
+  if (group.items.length === 0 && group.to) {
+    return isNavRouteActive(pathname, group.to, group.end);
+  }
   return group.items.some((item) =>
     isNavRouteActive(pathname, item.to, item.end),
   );

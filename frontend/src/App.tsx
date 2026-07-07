@@ -7,6 +7,7 @@ import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { ClassificationsPage } from "./pages/ClassificationsPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
+import { SuppliersPage } from "./pages/SuppliersPage";
 import { SparePartsPage } from "./pages/SparePartsPage";
 import { WarehousesPage } from "./pages/WarehousesPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="cost-centers" element={<CostCentersPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="spare-parts" element={<SparePartsPage />} />
           <Route path="classifications" element={<ClassificationsPage />} />
