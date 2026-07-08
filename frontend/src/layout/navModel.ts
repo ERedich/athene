@@ -4,6 +4,8 @@ import {
   Briefcase,
   Calculator,
   CalendarDays,
+  CalendarClock,
+  Clock,
   History,
   IdCard,
   Languages,
@@ -129,6 +131,11 @@ export const navGroups: NavGroup[] = [
         Icon: Truck,
         labelKey: "suppliers.navSuppliers",
       },
+      {
+        to: "/shifts",
+        Icon: Clock,
+        labelKey: "shifts.navShifts",
+      },
     ],
   },
   {
@@ -145,6 +152,11 @@ export const navGroups: NavGroup[] = [
         to: "/kalendar",
         Icon: CalendarDays,
         labelKey: "kalendar.navKalendar",
+      },
+      {
+        to: "/schichtplaner",
+        Icon: CalendarClock,
+        labelKey: "schichtplaner.nav",
       },
       {
         to: "/transactions",

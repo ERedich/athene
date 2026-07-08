@@ -18,6 +18,8 @@ import { MonitoringPage } from "./pages/MonitoringPage";
 import { KalendarPage } from "./pages/KalendarPage";
 import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
+import { ShiftsPage } from "./pages/ShiftsPage";
+import { ShiftPlannerPage } from "./pages/ShiftPlannerPage";
 import { SitesPage } from "./pages/SitesPage";
 import { TableViewerPage } from "./pages/TableViewerPage";
 import { TranslationsPage } from "./pages/TranslationsPage";
@@ -38,6 +40,7 @@ export default function App() {
           <Route path="assets" element={<AssetsPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
           <Route path="kalendar" element={<KalendarPage />} />
+          <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="tabellen-layouts" element={<TableLayoutsPage />} />
@@ -51,6 +54,7 @@ export default function App() {
           <Route path="spare-parts" element={<SparePartsPage />} />
           <Route path="classifications" element={<ClassificationsPage />} />
           <Route path="workgroups" element={<WorkgroupsPage />} />
+          <Route path="shifts" element={<ShiftsPage />} />
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />

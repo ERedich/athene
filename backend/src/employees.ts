@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import type { QueryResult } from "pg";
 
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
@@ -17,13 +18,21 @@ export type EmployeeRow = {
   siteName: string;
   siteColorHex: string;
   isActive: boolean;
+  isShiftPlanning: boolean;
+  hasPhoto: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
 };
 
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PHOTO_MAX_BYTES },
+});
 
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -32,15 +41,18 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
 
-function parseBody(body: unknown): { key: string; name: string; siteId: string; isActive: boolean } | null {
+function parseBody(
+  body: unknown,
+): { key: string; name: string; siteId: string; isActive: boolean; isShiftPlanning: boolean } | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
   const key = typeof o.key === "string" ? o.key.trim() : "";
   const name = typeof o.name === "string" ? o.name.trim() : "";
   const siteId = typeof o.siteId === "string" ? o.siteId.trim() : "";
   const isActive = o.isActive === undefined ? true : Boolean(o.isActive);
+  const isShiftPlanning = o.isShiftPlanning === undefined ? false : Boolean(o.isShiftPlanning);
   if (!key || !name || !isUuid(siteId)) return null;
-  return { key, name, siteId, isActive };
+  return { key, name, siteId, isActive, isShiftPlanning };
 }
 
 function sendPgError(res: Response, err: unknown) {
@@ -82,6 +94,8 @@ const selectEmployeesSql = `
     s."name" AS "siteName",
     s."colorHex" AS "siteColorHex",
     e."isActive",
+    e."isShiftPlanning",
+    (e."photoContent" IS NOT NULL) AS "hasPhoto",
     e."createdAt",
     e."updatedAt",
     COALESCE(created_by."loginName", e."createdBy"::text) AS "createdBy",
@@ -91,6 +105,10 @@ const selectEmployeesSql = `
   LEFT JOIN "users" created_by ON created_by."id" = e."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = e."updatedBy"
 `;
+
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("image/");
+}
 
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
@@ -119,7 +137,7 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { key, name, siteId, isActive } = parsed;
+  const { key, name, siteId, isActive, isShiftPlanning } = parsed;
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
@@ -129,8 +147,8 @@ router.post("/", async (req: Request, res: Response) => {
       const { rows } = await client.query<EmployeeRow>(
         `
         WITH inserted AS (
-          INSERT INTO "employee" ("key", "name", "siteId", "isActive")
-          VALUES ($1, $2, $3::uuid, $4)
+          INSERT INTO "employee" ("key", "name", "siteId", "isActive", "isShiftPlanning")
+          VALUES ($1, $2, $3::uuid, $4, $5)
           RETURNING *
         )
         SELECT
@@ -142,6 +160,8 @@ router.post("/", async (req: Request, res: Response) => {
           s."name" AS "siteName",
           s."colorHex" AS "siteColorHex",
           i."isActive",
+          i."isShiftPlanning",
+          (i."photoContent" IS NOT NULL) AS "hasPhoto",
           i."createdAt",
           i."updatedAt",
           COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
@@ -151,7 +171,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         `,
-        [key, name, effectiveSiteId, isActive],
+        [key, name, effectiveSiteId, isActive, isShiftPlanning],
       );
       return rows[0];
     });
@@ -188,7 +208,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { key, name, siteId, isActive } = parsed;
+  const { key, name, siteId, isActive, isShiftPlanning } = parsed;
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
@@ -212,8 +232,8 @@ router.put("/:id", async (req: Request, res: Response) => {
         `
         WITH updated AS (
           UPDATE "employee"
-          SET "key" = $1, "name" = $2, "siteId" = $3::uuid, "isActive" = $4
-          WHERE "id" = $5::uuid
+          SET "key" = $1, "name" = $2, "siteId" = $3::uuid, "isActive" = $4, "isShiftPlanning" = $5
+          WHERE "id" = $6::uuid
           RETURNING *
         )
         SELECT
@@ -225,6 +245,8 @@ router.put("/:id", async (req: Request, res: Response) => {
           s."name" AS "siteName",
           s."colorHex" AS "siteColorHex",
           u."isActive",
+          u."isShiftPlanning",
+          (u."photoContent" IS NOT NULL) AS "hasPhoto",
           u."createdAt",
           u."updatedAt",
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
@@ -234,7 +256,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         `,
-        [key, name, effectiveSiteId, isActive, id],
+        [key, name, effectiveSiteId, isActive, isShiftPlanning, id],
       );
       return rows[0] ?? null;
     });
@@ -254,6 +276,134 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if ((err as Error).message === "site_access_denied") {
       res.status(403).json({ error: "site_access_denied" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/photo", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{
+      photoMimeType: string | null;
+      photoContent: Buffer | null;
+    }>(
+      `
+      SELECT e."photoMimeType", e."photoContent"
+      FROM "employee" e
+      WHERE e."id" = $1::uuid
+        AND e."photoContent" IS NOT NULL
+        AND ${siteAccessSql('e."siteId"', "$2")}
+      `,
+      [id, userId],
+    );
+    const row = rows[0];
+    if (!row?.photoContent) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const mimeType = row.photoMimeType?.trim() || "application/octet-stream";
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", String(row.photoContent.length));
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(row.photoContent);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/photo", upload.single("file"), async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "missing_file" });
+    return;
+  }
+  const mimeType = req.file.mimetype?.trim() || "application/octet-stream";
+  if (!isImageMimeType(mimeType)) {
+    res.status(400).json({ error: "invalid_mime_type" });
+    return;
+  }
+  const content = req.file.buffer;
+  try {
+    const meta = auditMeta(req);
+    const updated = await withAuditContext(meta, async (client) => {
+      const result = await client.query(
+        `
+        UPDATE "employee"
+        SET "photoMimeType" = $1, "photoContent" = $2
+        WHERE "id" = $3::uuid
+          AND ${siteAccessSql('"siteId"', "$4")}
+        `,
+        [mimeType, content, id, meta.userId],
+      );
+      return result.rowCount ?? 0;
+    });
+    if (updated === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.delete("/:id/photo", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const updated = await withAuditContext(meta, async (client) => {
+      const result = await client.query(
+        `
+        UPDATE "employee"
+        SET "photoMimeType" = NULL, "photoContent" = NULL
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      return result.rowCount ?? 0;
+    });
+    if (updated === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
       return;
     }
     sendPgError(res, err);

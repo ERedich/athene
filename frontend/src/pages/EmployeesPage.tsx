@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Check, Pencil, Plus, Trash2, TriangleAlert, Upload, User } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -42,6 +42,8 @@ type Employee = {
   siteName: string;
   siteColorHex: string;
   isActive: boolean;
+  isShiftPlanning: boolean;
+  hasPhoto: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -53,6 +55,7 @@ type FormState = {
   name: string;
   siteId: string;
   isActive: boolean;
+  isShiftPlanning: boolean;
 };
 
 const emptyForm = (): FormState => ({
@@ -60,6 +63,7 @@ const emptyForm = (): FormState => ({
   name: "",
   siteId: "",
   isActive: true,
+  isShiftPlanning: false,
 });
 
 const actionNavItem =
@@ -78,6 +82,8 @@ export function EmployeesPage() {
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoPreviewUrlRef = useRef<string | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,6 +93,10 @@ export function EmployeesPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [hasStoredPhoto, setHasStoredPhoto] = useState(false);
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
@@ -183,25 +193,94 @@ export function EmployeesPage() {
     void loadData();
   }, [loadData]);
 
+  const clearPhotoPreview = useCallback(() => {
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current);
+      photoPreviewUrlRef.current = null;
+    }
+    setPhotoPreviewUrl(null);
+  }, []);
+
+  const resetPhotoState = useCallback(() => {
+    clearPhotoPreview();
+    setPendingPhotoFile(null);
+    setPhotoUploading(false);
+    setHasStoredPhoto(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [clearPhotoPreview]);
+
+  const closeDialog = useCallback(() => {
+    resetPhotoState();
+    setDialogVisible(false);
+  }, [resetPhotoState]);
+
+  const loadEmployeePhoto = useCallback(
+    async (employeeId: string) => {
+      clearPhotoPreview();
+      try {
+        const res = await apiFetch(`/api/employees/${employeeId}/photo`);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        photoPreviewUrlRef.current = blobUrl;
+        setPhotoPreviewUrl(blobUrl);
+        setHasStoredPhoto(true);
+      } catch {
+        /* ignore preview load errors */
+      }
+    },
+    [clearPhotoPreview],
+  );
+
+  const uploadEmployeePhoto = useCallback(
+    async (employeeId: string, file: File): Promise<boolean> => {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      const res = await apiFetch(`/api/employees/${employeeId}/photo`, {
+        method: "POST",
+        body: fd,
+      });
+      return res.ok;
+    },
+    [],
+  );
+
+  const removeEmployeePhoto = useCallback(async (employeeId: string): Promise<boolean> => {
+    const res = await apiFetch(`/api/employees/${employeeId}/photo`, { method: "DELETE" });
+    return res.ok || res.status === 204;
+  }, []);
+
   const openCreate = useCallback(() => {
+    resetPhotoState();
     setEditingId(null);
     setForm({
       ...emptyForm(),
       ...(siteFieldLocked ? { siteId: user.workingSiteId } : {}),
     });
     setDialogVisible(true);
-  }, [siteFieldLocked, user.workingSiteId]);
+  }, [resetPhotoState, siteFieldLocked, user.workingSiteId]);
 
-  const openEdit = useCallback((row: Employee) => {
-    setEditingId(row.id);
-    setForm({
-      key: row.key,
-      name: row.name,
-      siteId: row.siteId,
-      isActive: row.isActive,
-    });
-    setDialogVisible(true);
-  }, []);
+  const openEdit = useCallback(
+    (row: Employee) => {
+      resetPhotoState();
+      setEditingId(row.id);
+      setForm({
+        key: row.key,
+        name: row.name,
+        siteId: row.siteId,
+        isActive: row.isActive,
+        isShiftPlanning: row.isShiftPlanning,
+      });
+      setHasStoredPhoto(row.hasPhoto);
+      setDialogVisible(true);
+      if (row.hasPhoto) {
+        void loadEmployeePhoto(row.id);
+      }
+    },
+    [loadEmployeePhoto, resetPhotoState],
+  );
 
   const showSaveError = async (res: Response) => {
     let code: string | undefined;
@@ -236,6 +315,7 @@ export function EmployeesPage() {
         name,
         siteId,
         isActive: form.isActive,
+        isShiftPlanning: form.isShiftPlanning,
       };
       const url = editingId ? `/api/employees/${editingId}` : "/api/employees";
       const res = await apiFetch(url, {
@@ -247,7 +327,18 @@ export function EmployeesPage() {
         await showSaveError(res);
         return;
       }
-      setDialogVisible(false);
+      const savedEmployee = (await res.json()) as Employee;
+      if (pendingPhotoFile) {
+        const uploaded = await uploadEmployeePhoto(savedEmployee.id, pendingPhotoFile);
+        if (!uploaded) {
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("employees.photoUploadError"),
+            life: 6000,
+          });
+        }
+      }
+      closeDialog();
       await loadData();
       toastRef.current?.show({
         severity: "success",
@@ -263,6 +354,86 @@ export function EmployeesPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePickPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toastRef.current?.show({
+        severity: "error",
+        summary: t("employees.photoUploadError"),
+        life: 6000,
+      });
+      return;
+    }
+
+    clearPhotoPreview();
+    const previewUrl = URL.createObjectURL(file);
+    photoPreviewUrlRef.current = previewUrl;
+    setPhotoPreviewUrl(previewUrl);
+
+    if (editingId) {
+      setPhotoUploading(true);
+      try {
+        const uploaded = await uploadEmployeePhoto(editingId, file);
+        if (!uploaded) {
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("employees.photoUploadError"),
+            life: 6000,
+          });
+          return;
+        }
+        setPendingPhotoFile(null);
+        setHasStoredPhoto(true);
+        toastRef.current?.show({
+          severity: "success",
+          summary: t("employees.saved"),
+          life: 3000,
+        });
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("employees.photoUploadError"),
+          life: 6000,
+        });
+      } finally {
+        setPhotoUploading(false);
+      }
+      return;
+    }
+
+    setPendingPhotoFile(file);
+    setHasStoredPhoto(false);
+  };
+
+  const handleRemovePhoto = async () => {
+    if (editingId && hasStoredPhoto) {
+      setPhotoUploading(true);
+      try {
+        const removed = await removeEmployeePhoto(editingId);
+        if (!removed) {
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("employees.photoRemoveError"),
+            life: 6000,
+          });
+          return;
+        }
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("employees.photoRemoveError"),
+          life: 6000,
+        });
+        return;
+      } finally {
+        setPhotoUploading(false);
+      }
+    }
+    resetPhotoState();
   };
 
   const deleteRow = useCallback(
@@ -412,14 +583,15 @@ export function EmployeesPage() {
         label={t("employees.cancel")}
         severity="secondary"
         outlined
-        disabled={saving}
-        onClick={() => setDialogVisible(false)}
+        disabled={saving || photoUploading}
+        onClick={closeDialog}
       />
       <Button
         type="button"
         label={t("employees.save")}
         icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={saving}
+        disabled={photoUploading}
         onClick={() => void save()}
       />
     </div>
@@ -496,15 +668,60 @@ export function EmployeesPage() {
       <Dialog
         header={editingId ? t("employees.editTitle") : t("employees.createTitle")}
         visible={dialogVisible}
-        style={{ width: "min(32rem, 95vw)" }}
-        onHide={() => setDialogVisible(false)}
+        className="app-big-modal-window"
+        onHide={closeDialog}
         footer={dialogFooter}
         modal
         dismissableMask
         draggable={false}
         resizable={false}
       >
-        <div className="flex flex-col gap-4 pt-1">
+        <div className="flex gap-6 pt-1">
+          <div className="flex w-44 shrink-0 flex-col items-stretch gap-3">
+            <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-sm border border-outline-variant bg-surface-container-low">
+              {photoPreviewUrl ? (
+                <img
+                  src={photoPreviewUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <User
+                  className="h-16 w-16 text-on-surface-variant/40"
+                  strokeWidth={1.25}
+                  aria-hidden
+                />
+              )}
+            </div>
+            <Button
+              type="button"
+              icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+              label={t("employees.photoUpload")}
+              className="w-full min-w-0 justify-center !h-9 min-h-9 max-h-9 py-0"
+              loading={photoUploading}
+              disabled={saving}
+              onClick={() => fileInputRef.current?.click()}
+            />
+            {photoPreviewUrl ? (
+              <Button
+                type="button"
+                label={t("employees.photoRemove")}
+                severity="secondary"
+                outlined
+                className="w-full min-w-0 justify-center !h-9 min-h-9 max-h-9 py-0"
+                disabled={saving || photoUploading}
+                onClick={() => void handleRemovePhoto()}
+              />
+            ) : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void handlePickPhoto(e)}
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
           <div className="space-y-2">
             <label
               htmlFor="employee-key"
@@ -576,6 +793,18 @@ export function EmployeesPage() {
               {t("employees.active")}
             </span>
           </label>
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <Checkbox
+              inputId="employee-isShiftPlanning"
+              checked={form.isShiftPlanning}
+              onChange={(e) => setForm((f) => ({ ...f, isShiftPlanning: Boolean(e.checked) }))}
+              className="rounded-none"
+            />
+            <span className="text-[11px] text-on-surface-variant uppercase tracking-wide">
+              {t("employees.shiftPlanning")}
+            </span>
+          </label>
+          </div>
         </div>
       </Dialog>
     </div>

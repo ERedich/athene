@@ -2989,3 +2989,365 @@ button.app-calendar-day__num:focus-visible {
   overflow: hidden;
   pointer-events: none;
 }
+
+/* Shift planner — week grid (available shifts per day) */
+.app-shift-planner-calendar {
+  min-height: 0;
+}
+
+.app-shift-planner-toolbar-title {
+  font-size: 0.875rem;
+}
+
+.app-shift-planner-week-scroll {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-shift-planner-week-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 48rem;
+}
+
+.app-shift-planner-week-head {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface);
+}
+
+.app-shift-planner-day-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.5rem 0.25rem;
+  background: color-mix(in srgb, var(--color-surface-container-low) 80%, transparent);
+}
+
+.app-shift-planner-day-header--today .app-shift-planner-day-header__date {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.app-shift-planner-day-header__weekday {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-day-header__date {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-week-body {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: stretch;
+  min-height: 0;
+}
+
+.app-shift-planner-week-body--drag-active .app-shift-planner-block:not(.app-shift-planner-block--drop-target) {
+  opacity: 0.92;
+}
+
+.app-shift-planner-day-col {
+  min-width: 0;
+  min-height: 8rem;
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 60%, transparent);
+}
+
+.app-shift-planner-day-col--today {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));
+}
+
+.app-shift-planner-day-shifts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  min-height: 100%;
+}
+
+.app-shift-planner-day-empty {
+  display: none;
+}
+
+.app-shift-planner-block {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.125rem;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  padding-right: 1.625rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+}
+
+.app-shift-planner-block--add {
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.5rem;
+  border: 1px dashed color-mix(in srgb, var(--color-on-surface) 22%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-low) 70%, transparent);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.app-shift-planner-block--add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-container-low));
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  color: var(--color-primary);
+}
+
+.app-shift-planner-block--add:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.app-shift-planner-add-panel {
+  min-width: 10rem;
+  max-width: 14rem;
+}
+
+.app-shift-planner-add-panel__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-add-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shift-planner-add-panel__option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-shift-planner-add-panel__option:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.app-shift-planner-add-panel__option:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.app-shift-planner-add-panel__code {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.app-shift-planner-add-panel__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shift-planner-block:hover {
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+}
+
+.app-shift-planner-block__remove {
+  position: absolute;
+  top: 0.1875rem;
+  right: 0.1875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.1875rem;
+  background: color-mix(in srgb, var(--color-on-surface) 24%, transparent);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.app-shift-planner-block:hover .app-shift-planner-block__remove {
+  opacity: 0.92;
+}
+
+.app-shift-planner-block__remove:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-on-surface) 38%, transparent);
+}
+
+.app-shift-planner-block__remove:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.app-shift-planner-block__code {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.app-shift-planner-block__time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shift-planner-block--drop-target {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 85%, transparent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+.app-shift-planner-block__assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-top: 0.125rem;
+}
+
+.app-shift-planner-assigned-employee {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0.1875rem;
+  background: color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+  font-size: 0.625rem;
+  line-height: 1.2;
+}
+
+.app-shift-planner-assigned-employee__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shift-planner-assigned-employee__remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.125rem;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.app-shift-planner-assigned-employee:hover .app-shift-planner-assigned-employee__remove,
+.app-shift-planner-assigned-employee:focus-within .app-shift-planner-assigned-employee__remove {
+  opacity: 0.85;
+}
+
+.app-shift-planner-assigned-employee__remove:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-on-surface) 28%, transparent);
+}
+
+.app-shift-planner-assigned-employee__remove:disabled {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.app-shift-planner-employees {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-outline) 35%, transparent);
+}
+
+.app-shift-planner-employees__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-employees__empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-employees__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.app-shift-planner-employee-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 4.5rem;
+  max-width: 10rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-outline) 45%, transparent);
+  border-radius: 0.25rem;
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.app-shift-planner-employee-chip:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.app-shift-planner-employee-chip--dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.app-shift-planner-employee-chip__key {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.app-shift-planner-employee-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-on-surface-variant);
+}
