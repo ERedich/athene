@@ -1,4 +1,12 @@
 import type { ShiftAssignment, ShiftCalendarBlock } from "./shiftCalendarTypes";
+import { addDaysIso } from "./shiftCalendarExpand";
+
+function assignmentDateForBlock(block: Pick<ShiftCalendarBlock, "date" | "shiftId" | "segmentKind">): string {
+  if (block.segmentKind === "morning") {
+    return addDaysIso(block.date, -1);
+  }
+  return block.date;
+}
 
 export function attachAssignmentsToBlocks(
   blocks: Omit<ShiftCalendarBlock, "assignments">[],
@@ -13,12 +21,15 @@ export function attachAssignmentsToBlocks(
     byBlockKey.set(key, list);
   }
 
-  return blocks.map((block) => ({
-    ...block,
-    assignments: (byBlockKey.get(`${block.shiftId}:${block.date}`) ?? []).sort((a, b) =>
-      a.employeeName.localeCompare(b.employeeName),
-    ),
-  }));
+  return blocks.map((block) => {
+    const assignmentDate = assignmentDateForBlock(block);
+    return {
+      ...block,
+      assignments: (byBlockKey.get(`${block.shiftId}:${assignmentDate}`) ?? []).sort((a, b) =>
+        a.employeeName.localeCompare(b.employeeName),
+      ),
+    };
+  });
 }
 
 export function buildBlocksWithAssignments(

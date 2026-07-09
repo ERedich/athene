@@ -15,7 +15,7 @@ export function ShiftWeekCalendarToolbar({ periodTitle, onPrev, onNext, onToday 
   const { t } = useTranslation();
 
   return (
-    <div className="app-shift-planner-toolbar flex min-w-0 flex-wrap items-center gap-2">
+    <div className="app-shift-planner-toolbar flex min-w-0 flex-1 items-center gap-2">
       <div className="flex shrink-0 items-center gap-1">
         <Button
           type="button"

@@ -151,3 +151,37 @@ export async function putWorkOrder(
   if (!res.ok) throw new Error(`work_order_put_failed_${res.status}`);
   return (await res.json()) as WorkOrder;
 }
+
+export type WorkOrderAssignmentError =
+  | "assignment_locked_by_status"
+  | "employee_not_in_workgroup"
+  | "employee_site_mismatch"
+  | "invalid_employee"
+  | "unknown";
+
+export async function postWorkOrderAssignment(
+  orderId: string,
+  employeeId: string,
+): Promise<{ ok: true } | { ok: false; error: WorkOrderAssignmentError }> {
+  const res = await apiFetch(`/api/work-orders/${encodeURIComponent(orderId)}/assignments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeId }),
+  });
+  if (res.ok) return { ok: true };
+  let code: string | undefined;
+  try {
+    code = ((await res.json()) as { error?: string }).error;
+  } catch {
+    /* ignore */
+  }
+  if (
+    code === "assignment_locked_by_status" ||
+    code === "employee_not_in_workgroup" ||
+    code === "employee_site_mismatch" ||
+    code === "invalid_employee"
+  ) {
+    return { ok: false, error: code };
+  }
+  return { ok: false, error: "unknown" };
+}

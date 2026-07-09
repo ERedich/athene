@@ -432,6 +432,49 @@ html.theme-crossfade-fallback #root {
   border-radius: var(--app-header-toolbar-radius, 0.125rem) !important;
 }
 
+/* Shell header toolbar buttons (view toggles, etc.) — h-9, shared radius */
+.app-header-toolbar-btn.p-button {
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  border-radius: var(--app-header-toolbar-radius, 0.125rem) !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+/* Shell header text actions (Neu / Bearbeiten pattern) */
+.app-header-action-nav-item {
+  display: inline-flex;
+  height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: var(--app-header-toolbar-radius, 0.125rem);
+  padding: 0 0.75rem;
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.app-header-action-nav-item:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+
+.app-header-action-nav-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.app-header-action-nav-item--active {
+  color: var(--color-primary);
+}
+
 .p-dropdown:not(.p-disabled).p-focus,
 .p-multiselect:not(.p-disabled).p-focus {
   box-shadow: none !important;
@@ -2852,6 +2895,25 @@ button.app-calendar-day__num:focus-visible {
   cursor: grabbing;
 }
 
+.app-calendar-event-bar--employee-drop-denied {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+}
+
+.app-calendar-event-bar--drop-target {
+  outline: 2px dashed color-mix(in srgb, var(--color-primary) 55%, transparent);
+  outline-offset: -1px;
+  filter: brightness(1.12);
+  z-index: 2;
+}
+
+.app-calendar-event-bar--drop-denied {
+  outline: 2px dashed color-mix(in srgb, rgb(220 38 38) 45%, transparent);
+  outline-offset: -1px;
+  cursor: not-allowed;
+}
+
 .app-calendar-week-row--drag-active .app-calendar-event-layer {
   pointer-events: none;
 }
@@ -2867,6 +2929,91 @@ button.app-calendar-day__num:focus-visible {
   outline: 1px dashed color-mix(in srgb, rgb(220 38 38) 35%, transparent);
   outline-offset: -1px;
   cursor: not-allowed;
+}
+
+.app-calendar-layout {
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.app-calendar-layout__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-calendar-employees {
+  flex-shrink: 0;
+  width: 18rem;
+  max-width: 40%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--surface-overlay);
+}
+
+.app-calendar-employees__head {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.75rem 0.625rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-outline) 35%, transparent);
+}
+
+.app-calendar-employees__title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-calendar-employees__head-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.app-calendar-employees__count {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface-variant);
+}
+
+.app-calendar-employees__search {
+  width: 100%;
+}
+
+.app-calendar-employees__search-input.p-inputtext {
+  width: 100%;
+  height: 2rem;
+  font-size: 0.75rem;
+}
+
+.app-calendar-employees__empty {
+  margin: 0;
+  padding: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-calendar-employees__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.375rem;
+  padding: 0.75rem;
+}
+
+.app-calendar-week-row--employee-drag-active .app-calendar-event-bar--employee-drop-denied {
+  pointer-events: none;
 }
 
 .app-calendar-move-panel.p-dialog {
@@ -2999,16 +3146,67 @@ button.app-calendar-day__num:focus-visible {
   font-size: 0.875rem;
 }
 
-.app-shift-planner-week-scroll {
+.app-shift-planner-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.75rem;
+  margin: 0 0.25rem;
+  background: color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+  flex-shrink: 0;
+}
+
+.app-shift-planner-calendar-content {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.app-shift-planner-week-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+}
+
+.app-shift-planner-week-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  min-width: 48rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+
+.app-shift-planner-week-layout--simple {
+  grid-template-columns: 1fr;
+}
+
+.app-shift-planner-week-layout--simple .app-shift-planner-week-head {
+  grid-column: 1;
+}
+
+.app-shift-planner-week-layout--simple .app-shift-planner-week-body {
+  grid-column: 1;
+}
+
+.app-shift-planner-week-layout__corner {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  width: 2.75rem;
+  background: var(--color-surface);
+  border-right: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
 }
 
 .app-shift-planner-week-grid {
   display: flex;
   flex-direction: column;
   min-width: 48rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  border-radius: 0.25rem;
+  overflow: hidden;
 }
 
 .app-shift-planner-week-head {
@@ -3018,15 +3216,94 @@ button.app-calendar-day__num:focus-visible {
   top: 0;
   z-index: 2;
   background: var(--color-surface);
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .app-shift-planner-day-header {
+  position: relative;
   display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 3rem;
+  border-right: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-low) 80%, transparent);
+}
+
+.app-shift-planner-day-header__select {
+  display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.125rem;
-  padding: 0.5rem 0.25rem;
-  background: color-mix(in srgb, var(--color-surface-container-low) 80%, transparent);
+  min-width: 0;
+  padding: 0.5rem 2.25rem 0.5rem 0.25rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.app-shift-planner-day-header:hover .app-shift-planner-day-header__select,
+.app-shift-planner-day-header:focus-within .app-shift-planner-day-header__select {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface-container-low));
+}
+
+.app-shift-planner-day-header--selected .app-shift-planner-day-header__select {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-container-low));
+}
+
+.app-shift-planner-day-header--selected {
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.app-shift-planner-day-header:last-child {
+  border-right: none;
+}
+
+.app-shift-planner-day-header__add {
+  position: absolute;
+  top: 50%;
+  right: 0.375rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--color-surface-container-high) 85%, transparent);
+  color: var(--color-primary);
+  opacity: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.app-shift-planner-day-header:hover .app-shift-planner-day-header__add,
+.app-shift-planner-day-header:focus-within .app-shift-planner-day-header__add {
+  opacity: 1;
+}
+
+.app-shift-planner-day-header__add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface-container-high));
+}
+
+.app-shift-planner-day-header__add:disabled {
+  opacity: 0;
+  cursor: not-allowed;
+  color: var(--color-on-surface-variant);
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-shift-planner-day-header:hover .app-shift-planner-day-header__add:disabled,
+.app-shift-planner-day-header:focus-within .app-shift-planner-day-header__add:disabled {
+  opacity: 0.55;
 }
 
 .app-shift-planner-day-header--today .app-shift-planner-day-header__date {
@@ -3053,6 +3330,36 @@ button.app-calendar-day__num:focus-visible {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: stretch;
   min-height: 0;
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.app-shift-planner-time-axis {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 2.75rem;
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-right: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.app-shift-planner-time-axis__track {
+  position: relative;
+  height: 100%;
+}
+
+.app-shift-planner-time-axis__label {
+  position: absolute;
+  right: 0.375rem;
+  transform: translateY(-50%);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-on-surface-variant);
+  font-variant-numeric: tabular-nums;
 }
 
 .app-shift-planner-week-body--drag-active .app-shift-planner-block:not(.app-shift-planner-block--drop-target) {
@@ -3061,12 +3368,80 @@ button.app-calendar-day__num:focus-visible {
 
 .app-shift-planner-day-col {
   min-width: 0;
-  min-height: 8rem;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
   background: color-mix(in srgb, var(--color-surface-container-lowest) 60%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-shift-planner-day-col:last-child {
+  border-right: none;
 }
 
 .app-shift-planner-day-col--today {
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));
+}
+
+.app-shift-planner-day-col--selected {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-container-lowest));
+}
+
+.app-shift-planner-day-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.app-shift-planner-day-hour-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: repeat(24, 1fr);
+  pointer-events: none;
+}
+
+.app-shift-planner-day-hour-grid__line {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+}
+
+.app-shift-planner-day-hour-grid__line:last-child {
+  border-bottom: none;
+}
+
+.app-shift-planner-day-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 0;
+  border-top: 2px solid var(--color-danger);
+  pointer-events: none;
+}
+
+.app-shift-planner-day-now::before {
+  content: "";
+  position: absolute;
+  left: -0.25rem;
+  top: -0.3125rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-danger);
+}
+
+.app-shift-planner-day-blocks {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.app-shift-planner-day-footer {
+  display: none;
+}
+
+.app-shift-planner-day-col--simple {
+  min-height: auto;
 }
 
 .app-shift-planner-day-shifts {
@@ -3082,18 +3457,51 @@ button.app-calendar-day__num:focus-visible {
 }
 
 .app-shift-planner-block {
-  position: relative;
+  position: absolute;
+  left: 0.375rem;
+  right: 0.375rem;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.125rem;
-  min-height: 2.75rem;
-  padding: 0.375rem 0.5rem;
-  padding-right: 1.625rem;
-  border-radius: 0.25rem;
+  padding: 0.25rem 0.375rem;
+  padding-right: 1.5rem;
   font-size: 0.6875rem;
   line-height: 1.25;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.app-shift-planner-block--compact {
+  justify-content: center;
+  padding: 0.125rem 0.375rem;
+  padding-right: 0.375rem;
+}
+
+.app-shift-planner-block--compact .app-shift-planner-block__code {
+  text-align: center;
+  width: 100%;
+}
+
+.app-shift-planner-block--continues-before {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+.app-shift-planner-block--continues-after {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.app-shift-planner-block--stacked {
+  position: relative;
+  left: auto;
+  right: auto;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.375rem;
+  padding-right: 1.5rem;
+  border-radius: 0.25rem;
 }
 
 .app-shift-planner-block--add {
@@ -3174,8 +3582,310 @@ button.app-calendar-day__num:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.app-shift-planner-rollout-panel {
+  min-width: 16rem;
+  max-width: 20rem;
+}
+
+.app-shift-planner-rollout-panel__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.app-shift-planner-rollout-panel__prompt {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-rollout-panel__employee {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-rollout-panel__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-rollout-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.app-shift-planner-assignments-panel {
+  min-width: 12rem;
+  max-width: 18rem;
+}
+
+.app-shift-planner-assignments-panel__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-assignments-panel__meta {
+  margin: 0 0 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-assignments-panel__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-assignments-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shift-planner-assignments-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--color-surface-container-low) 85%, transparent);
+}
+
+.app-shift-planner-assignments-panel__key {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-assignments-panel__name {
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
 .app-shift-planner-block:hover {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+}
+
+.app-shift-planner-block--selected {
+  outline: 2px solid color-mix(in srgb, var(--color-on-surface) 72%, transparent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-on-surface) 16%, transparent);
+  cursor: pointer;
+}
+
+.app-shift-planner-assignments-panel__name {
+  font-size: 0.75rem;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-info-modal.p-dialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: 90vh;
+}
+
+.app-shift-planner-info-modal .p-dialog-header {
+  align-items: flex-start;
+  padding: 1rem 1.25rem 0.75rem;
+}
+
+.app-shift-planner-info-modal .p-dialog-content {
+  padding: 0.875rem 1.25rem 1.25rem;
+  overflow-y: auto;
+}
+
+.app-shift-planner-info-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  padding-right: 0.5rem;
+}
+
+.app-shift-planner-info-modal__duration {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+
+.app-shift-planner-info-modal__duration-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.app-shift-planner-info-modal__duration-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-info-modal__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.875rem;
+  align-items: stretch;
+}
+
+.app-shift-planner-info-modal__section {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.app-shift-planner-info-modal__divider-v {
+  width: 1px;
+  align-self: stretch;
+  background: color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+}
+
+.app-shift-planner-info-modal__status {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-info-modal__status--error {
+  color: var(--color-error, #b3261e);
+}
+
+.app-shift-planner-info-modal__section-title {
+  margin: 0 0 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-info-modal__empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-info-modal__orders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 12rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.app-shift-planner-info-modal__order {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.app-shift-planner-info-modal__order-label {
+  min-width: 0;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-info-modal__order-duration {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-info-modal__workgroups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-shift-planner-info-modal__workgroup {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.375rem;
+  align-items: baseline;
+  font-size: 0.75rem;
+}
+
+.app-shift-planner-info-modal__workgroup-key {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-info-modal__workgroup-name {
+  min-width: 0;
+  color: var(--color-on-surface);
+}
+
+.app-shift-planner-info-modal__workgroup-count {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-info-modal__hint {
+  margin: 0.375rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-block:not(.app-shift-planner-block--add) {
+  background-color: color-mix(in srgb, var(--shift-block-bg) 90%, transparent);
+  cursor: pointer;
+}
+
+.app-shift-planner-block__info {
+  position: absolute;
+  top: 0.1875rem;
+  right: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.1875rem;
+  background: color-mix(in srgb, var(--color-on-surface) 24%, transparent);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.app-shift-planner-block:hover .app-shift-planner-block__info {
+  opacity: 0.92;
+}
+
+.app-shift-planner-block__info:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-on-surface) 38%, transparent);
 }
 
 .app-shift-planner-block__remove {
@@ -3228,6 +3938,13 @@ button.app-calendar-day__num:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
+.app-shift-planner-block--drop-denied {
+  outline: 2px solid color-mix(in srgb, var(--color-danger) 70%, transparent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 18%, transparent);
+  cursor: not-allowed;
+}
+
 .app-shift-planner-block__assignments {
   display: flex;
   flex-direction: column;
@@ -3236,11 +3953,12 @@ button.app-calendar-day__num:focus-visible {
 }
 
 .app-shift-planner-assigned-employee {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.25rem;
-  max-width: 100%;
-  padding: 0.0625rem 0.25rem;
+  gap: 0.375rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.125rem 0.25rem 0.125rem 0.375rem;
   border-radius: 0.1875rem;
   background: color-mix(in srgb, var(--color-on-surface) 18%, transparent);
   font-size: 0.625rem;
@@ -3248,6 +3966,8 @@ button.app-calendar-day__num:focus-visible {
 }
 
 .app-shift-planner-assigned-employee__label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3258,8 +3978,9 @@ button.app-calendar-day__num:focus-visible {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-left: auto;
   padding: 0;
   border: none;
   border-radius: 0.125rem;
@@ -3285,19 +4006,114 @@ button.app-calendar-day__num:focus-visible {
   opacity: 0.45;
 }
 
+.app-shift-planner-assigned-employee-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.375rem;
+  padding: 0.125rem 0.375rem;
+  border: none;
+  border-radius: 0.1875rem;
+  background: color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.app-shift-planner-assigned-employee-more:hover {
+  background: color-mix(in srgb, var(--color-on-surface) 28%, transparent);
+}
+
 .app-shift-planner-employees {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-outline) 35%, transparent);
+  flex-shrink: 0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-outline) 35%, transparent);
+}
+
+.app-shift-planner-employees__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.625rem;
 }
 
 .app-shift-planner-employees__title {
-  margin: 0 0 0.5rem;
+  margin: 0;
+  flex-shrink: 0;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-on-surface-variant);
+}
+
+.app-shift-planner-employees__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.app-shift-planner-employees__count {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.app-shift-planner-employees__search {
+  flex: 0 1 14rem;
+  width: 14rem;
+  max-width: 100%;
+  min-width: 10rem;
+}
+
+.app-shift-planner-employees__search-input.p-inputtext {
+  width: 100%;
+  height: 2rem;
+  font-size: 0.75rem;
+}
+
+.app-shift-planner-employees__availability {
+  display: inline-flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 0.25rem;
+  padding: 0.125rem;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--color-surface-container-low) 80%, transparent);
+}
+
+.app-shift-planner-employees__filter-btn {
+  min-height: 1.625rem;
+  padding: 0.25rem 0.625rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.app-shift-planner-employees__filter-btn:hover {
+  color: var(--color-on-surface);
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-shift-planner-employees__filter-btn--active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-container-low));
 }
 
 .app-shift-planner-employees__empty {
@@ -3338,6 +4154,18 @@ button.app-calendar-day__num:focus-visible {
 .app-shift-planner-employee-chip--dragging {
   opacity: 0.55;
   cursor: grabbing;
+}
+
+.app-shift-planner-employee-chip--disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--color-surface-container-low) 55%, transparent);
+}
+
+.app-shift-planner-employee-chip--disabled:hover {
+  border-color: color-mix(in srgb, var(--color-outline) 45%, transparent);
+  box-shadow: none;
 }
 
 .app-shift-planner-employee-chip__key {

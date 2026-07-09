@@ -18,16 +18,22 @@ type Props = {
   anchorDate: Date;
   events: CalendarEvent[];
   formatDateTime: (iso: string) => string;
+  draggingEmployeeId?: string | null;
+  droppableWorkOrderIds?: ReadonlySet<string> | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 export function CalendarDayTimeline({
   anchorDate,
   events,
   formatDateTime,
+  draggingEmployeeId,
+  droppableWorkOrderIds,
   onEventClick,
   onAskAthene,
+  onAssignEmployee,
 }: Props) {
   const { t } = useTranslation();
 
@@ -57,7 +63,11 @@ export function CalendarDayTimeline({
   };
 
   return (
-    <div className="app-calendar-day-timeline" role="grid" aria-label={t("kalendar.viewDay")}>
+    <div
+      className={`app-calendar-day-timeline${draggingEmployeeId ? " app-calendar-day-timeline--employee-drag-active" : ""}`}
+      role="grid"
+      aria-label={t("kalendar.viewDay")}
+    >
       <div className="app-calendar-day-timeline-scroll">
         <div
           className="app-calendar-day-timeline-inner"
@@ -76,6 +86,8 @@ export function CalendarDayTimeline({
                   key={`${seg.eventId}-${seg.startMinute}-${seg.laneIndex}`}
                   segment={seg}
                   tooltip={segmentTooltip(seg)}
+                  draggingEmployeeId={draggingEmployeeId}
+                  employeeDropAllowed={droppableWorkOrderIds?.has(seg.eventId) ?? false}
                   onClick={() => handleSegmentClick(seg)}
                   onAskAthene={
                     onAskAthene
@@ -85,6 +97,7 @@ export function CalendarDayTimeline({
                         }
                       : undefined
                   }
+                  onAssignEmployee={onAssignEmployee}
                 />
               ))}
             </div>

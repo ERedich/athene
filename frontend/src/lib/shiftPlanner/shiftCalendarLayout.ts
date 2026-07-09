@@ -1,10 +1,5 @@
 import type { ShiftCalendarBlock } from "./shiftCalendarTypes";
-
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  if (time === "24:00") return 24 * 60;
-  return h * 60 + m;
-}
+import { timeToMinutes } from "./shiftDayTimelineLayout";
 
 export function groupShiftsByDate(
   blocks: ShiftCalendarBlock[],
@@ -28,8 +23,13 @@ export function groupShiftsByDate(
   return byDate;
 }
 
+export function normalizeColorHex(colorHex: string): string {
+  const raw = colorHex.trim();
+  return raw.startsWith("#") ? raw : `#${raw}`;
+}
+
 export function contrastTextOnBackground(colorHex: string): string {
-  const raw = colorHex.trim().startsWith("#") ? colorHex.trim() : `#${colorHex.trim()}`;
+  const raw = normalizeColorHex(colorHex);
   const match = /^#([0-9a-fA-F]{6})$/.exec(raw);
   if (!match) return "#ffffff";
   const hex = match[1];

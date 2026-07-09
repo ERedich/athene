@@ -14,6 +14,8 @@ type Props = {
   viewMode: "month" | "week";
   formatDateTime: (iso: string) => string;
   draggingWorkOrderId: string | null;
+  draggingEmployeeId?: string | null;
+  droppableWorkOrderIds?: ReadonlySet<string> | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
@@ -26,6 +28,7 @@ type Props = {
     targetDay: Date,
     event: DragEvent | React.MouseEvent,
   ) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 export function CalendarGrid({
@@ -34,6 +37,8 @@ export function CalendarGrid({
   viewMode,
   formatDateTime,
   draggingWorkOrderId,
+  draggingEmployeeId,
+  droppableWorkOrderIds,
   onEventClick,
   onAskAthene,
   onOverflowWeekClick,
@@ -42,6 +47,7 @@ export function CalendarGrid({
   onDragStart,
   onDragEnd,
   onMoveProposal,
+  onAssignEmployee,
 }: Props) {
   const { t } = useTranslation();
 
@@ -87,6 +93,8 @@ export function CalendarGrid({
               viewMode={viewMode}
               formatDateTime={formatDateTime}
               draggingWorkOrderId={draggingWorkOrderId}
+              draggingEmployeeId={draggingEmployeeId}
+              droppableWorkOrderIds={droppableWorkOrderIds}
               onEventClick={onEventClick}
               onAskAthene={onAskAthene}
               onOverflowWeekClick={onOverflowWeekClick}
@@ -94,6 +102,7 @@ export function CalendarGrid({
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               onMoveProposal={onMoveProposal}
+              onAssignEmployee={onAssignEmployee}
             />
           </div>
         );

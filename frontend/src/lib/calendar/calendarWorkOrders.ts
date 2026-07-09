@@ -1,9 +1,17 @@
 import { apiFetch } from "../api";
 import type { WorkOrderFormSource } from "../workOrderForm";
 import type { WorkOrderType } from "../workOrderForm";
-import type { WorkOrderStatus } from "../../components/workOrders/WorkOrderDialogTitle";
-import type { WorkOrderEditMeta } from "../workOrderTypes";
+import type { WorkOrderEditMeta, WorkOrderStatus } from "../workOrderTypes";
 import type { CalendarEvent } from "./calendarTypes";
+
+/** Statuses shown in Kalendar — excludes Beendet (ended), Erledigt (done) and Storniert (cancelled). */
+export const CALENDAR_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
+  "open",
+  "assigned",
+  "started",
+  "paused",
+  "continued",
+];
 
 export type CalendarWorkOrder = {
   id: string;
@@ -81,6 +89,9 @@ export function buildWorkOrderOverlapQuery(rangeStart: Date, rangeEnd: Date): st
   const params = new URLSearchParams();
   params.set("plannedStartTo", rangeEnd.toISOString());
   params.set("plannedEndFrom", rangeStart.toISOString());
+  for (const status of CALENDAR_WORK_ORDER_STATUSES) {
+    params.append("status", status);
+  }
   return params.toString();
 }
 

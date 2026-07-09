@@ -29,7 +29,7 @@ export function ShiftAssignedEmployee({ assignment, removing = false, onRemove }
             onRemove(assignment);
           }}
         >
-          <X className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+          <X className="h-4 w-4" strokeWidth={2.5} aria-hidden />
         </button>
       ) : null}
     </span>

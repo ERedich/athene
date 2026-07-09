@@ -7,6 +7,7 @@ import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { CalendarEmployeePanel } from "../components/calendar/CalendarEmployeePanel";
 import { CalendarMoveConfirmPanel } from "../components/calendar/CalendarMoveConfirmPanel";
 import { CalendarDayTimeline } from "../components/calendar/CalendarDayTimeline";
 import { CalendarGrid } from "../components/calendar/CalendarGrid";
@@ -26,6 +27,12 @@ import {
   isBeforeToday,
   type PendingCalendarMove,
 } from "../lib/calendar/calendarMove";
+import {
+  buildDroppableWorkOrderIds,
+  buildEmployeeWorkgroupMap,
+  filterAssignableEmployees,
+  type CalendarAssignableEmployee,
+} from "../lib/calendar/calendarEmployeeAssignment";
 import type { CalendarViewMode } from "../lib/calendar/calendarTypes";
 import {
   calendarWorkOrderToEditSource,
@@ -37,8 +44,11 @@ import {
 import {
   fetchWorkOrderById,
   fetchWorkOrderPlanningConflicts,
+  postWorkOrderAssignment,
   putWorkOrder,
 } from "../lib/workOrderApi";
+import { apiFetch } from "../lib/api";
+import type { WorkOrderReferenceEmployee, WorkOrderReferenceWorkgroup } from "../lib/workOrderTypes";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 
@@ -56,6 +66,11 @@ export function KalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggingWorkOrderId, setDraggingWorkOrderId] = useState<string | null>(null);
+  const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
+  const [assigningEmployeeId, setAssigningEmployeeId] = useState<string | null>(null);
+  const [assignableEmployees, setAssignableEmployees] = useState<CalendarAssignableEmployee[]>([]);
+  const [workgroupMap, setWorkgroupMap] = useState(() => buildEmployeeWorkgroupMap([]));
+  const [employeesLoading, setEmployeesLoading] = useState(true);
   const [pendingMove, setPendingMove] = useState<PendingCalendarMove | null>(null);
   const [moveSaving, setMoveSaving] = useState(false);
 
@@ -101,6 +116,31 @@ export function KalendarPage() {
     [langDe],
   );
 
+  const loadEmployees = useCallback(async () => {
+    setEmployeesLoading(true);
+    try {
+      const [employeesRes, workgroupsRes] = await Promise.all([
+        apiFetch("/api/employees"),
+        apiFetch("/api/workgroups"),
+      ]);
+      if (!employeesRes.ok || !workgroupsRes.ok) throw new Error("load_employees");
+      const employees = (await employeesRes.json()) as WorkOrderReferenceEmployee[];
+      const workgroups = (await workgroupsRes.json()) as WorkOrderReferenceWorkgroup[];
+      const map = buildEmployeeWorkgroupMap(workgroups);
+      setWorkgroupMap(map);
+      setAssignableEmployees(filterAssignableEmployees(employees, map));
+    } catch {
+      setWorkgroupMap(buildEmployeeWorkgroupMap([]));
+      setAssignableEmployees([]);
+    } finally {
+      setEmployeesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEmployees();
+  }, [loadEmployees]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -125,6 +165,13 @@ export function KalendarPage() {
     () => filterCalendarEventsBySearch(allEvents, searchTerm),
     [allEvents, searchTerm],
   );
+
+  const droppableWorkOrderIds = useMemo(
+    () => buildDroppableWorkOrderIds(draggingEmployeeId, assignableEmployees, workOrders, workgroupMap),
+    [assignableEmployees, draggingEmployeeId, workOrders, workgroupMap],
+  );
+
+  const activeDraggingEmployeeId = draggingEmployeeId ?? assigningEmployeeId;
 
   const displayEventCount = useMemo(() => {
     if (viewMode === "day") {
@@ -200,6 +247,59 @@ export function KalendarPage() {
   const handleDragEnd = useCallback(() => {
     setDraggingWorkOrderId(null);
   }, []);
+
+  const handleEmployeeDragStart = useCallback((employeeId: string) => {
+    setDraggingEmployeeId(employeeId);
+  }, []);
+
+  const handleEmployeeDragEnd = useCallback(() => {
+    setDraggingEmployeeId(null);
+  }, []);
+
+  const assignmentErrorMessage = useCallback(
+    (code: string) => {
+      if (code === "employee_not_in_workgroup") return t("workOrders.employeeNotInWorkgroup");
+      if (code === "assignment_locked_by_status") return t("workOrders.assignmentLockedByStatus");
+      if (code === "employee_site_mismatch") return t("workOrders.assignmentEmployeeSiteMismatch");
+      if (code === "invalid_employee") return t("workOrders.assignmentInvalidEmployee");
+      return t("kalendar.assignError");
+    },
+    [t],
+  );
+
+  const handleAssignEmployee = useCallback(
+    async (workOrderId: string, employeeId: string) => {
+      if (assigningEmployeeId) return;
+      setAssigningEmployeeId(employeeId);
+      try {
+        const result = await postWorkOrderAssignment(workOrderId, employeeId);
+        if (result.ok) {
+          toastRef.current?.show({
+            severity: "success",
+            summary: t("kalendar.assignSuccess"),
+            life: 3000,
+          });
+          await loadData();
+        } else {
+          toastRef.current?.show({
+            severity: "warn",
+            summary: assignmentErrorMessage(result.error),
+            life: 5000,
+          });
+        }
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("kalendar.assignError"),
+          life: 6000,
+        });
+      } finally {
+        setAssigningEmployeeId(null);
+        setDraggingEmployeeId(null);
+      }
+    },
+    [assigningEmployeeId, assignmentErrorMessage, loadData, t],
+  );
 
   const handleMoveReject = useCallback(() => {
     setPendingMove(null);
@@ -348,38 +448,52 @@ export function KalendarPage() {
         </div>
       ) : null}
 
-      {loading ? (
+      {loading || employeesLoading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-on-surface-variant">…</div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_10%,transparent)] bg-surface-container-low">
-          {!loading && displayEventCount === 0 && workOrders.length === 0 ? (
-            <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>
-          ) : null}
-          {viewMode === "day" ? (
-            <CalendarDayTimeline
-              anchorDate={anchorDate}
-              events={filteredEvents}
-              formatDateTime={formatDateTime}
-              onEventClick={handleEventClick}
-              onAskAthene={handleAskAthene}
-            />
-          ) : (
-            <CalendarGrid
-              weeks={weeks}
-              events={filteredEvents}
-              viewMode={gridViewMode}
-              formatDateTime={formatDateTime}
-              draggingWorkOrderId={draggingWorkOrderId}
-              onEventClick={handleEventClick}
-              onAskAthene={handleAskAthene}
-              onOverflowWeekClick={handleOverflowWeekClick}
-              onWeekClick={handleWeekClick}
-              onDayClick={handleDayClick}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onMoveProposal={handleMoveProposal}
-            />
-          )}
+        <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_10%,transparent)] bg-surface-container-low">
+          <div className="app-calendar-layout__main flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
+            {!loading && displayEventCount === 0 && workOrders.length === 0 ? (
+              <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>
+            ) : null}
+            {viewMode === "day" ? (
+              <CalendarDayTimeline
+                anchorDate={anchorDate}
+                events={filteredEvents}
+                formatDateTime={formatDateTime}
+                draggingEmployeeId={activeDraggingEmployeeId}
+                droppableWorkOrderIds={droppableWorkOrderIds}
+                onEventClick={handleEventClick}
+                onAskAthene={handleAskAthene}
+                onAssignEmployee={(workOrderId, employeeId) => void handleAssignEmployee(workOrderId, employeeId)}
+              />
+            ) : (
+              <CalendarGrid
+                weeks={weeks}
+                events={filteredEvents}
+                viewMode={gridViewMode}
+                formatDateTime={formatDateTime}
+                draggingWorkOrderId={draggingWorkOrderId}
+                draggingEmployeeId={activeDraggingEmployeeId}
+                droppableWorkOrderIds={droppableWorkOrderIds}
+                onEventClick={handleEventClick}
+                onAskAthene={handleAskAthene}
+                onOverflowWeekClick={handleOverflowWeekClick}
+                onWeekClick={handleWeekClick}
+                onDayClick={handleDayClick}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onMoveProposal={handleMoveProposal}
+                onAssignEmployee={(workOrderId, employeeId) => void handleAssignEmployee(workOrderId, employeeId)}
+              />
+            )}
+          </div>
+          <CalendarEmployeePanel
+            employees={assignableEmployees}
+            draggingEmployeeId={activeDraggingEmployeeId}
+            onDragStart={handleEmployeeDragStart}
+            onDragEnd={handleEmployeeDragEnd}
+          />
         </div>
       )}
     </div>

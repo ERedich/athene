@@ -21,6 +21,8 @@ type Props = {
   viewMode: "month" | "week";
   formatDateTime: (iso: string) => string;
   draggingWorkOrderId: string | null;
+  draggingEmployeeId?: string | null;
+  droppableWorkOrderIds?: ReadonlySet<string> | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
@@ -32,6 +34,7 @@ type Props = {
     targetDay: Date,
     event: DragEvent | React.MouseEvent,
   ) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 export function CalendarWeekRow({
@@ -40,6 +43,8 @@ export function CalendarWeekRow({
   viewMode,
   formatDateTime,
   draggingWorkOrderId,
+  draggingEmployeeId,
+  droppableWorkOrderIds,
   onEventClick,
   onAskAthene,
   onOverflowWeekClick,
@@ -47,6 +52,7 @@ export function CalendarWeekRow({
   onDragStart,
   onDragEnd,
   onMoveProposal,
+  onAssignEmployee,
 }: Props) {
   const { t } = useTranslation();
   const [hoverDropIso, setHoverDropIso] = useState<string | null>(null);
@@ -95,7 +101,9 @@ export function CalendarWeekRow({
 
   return (
     <div
-      className={`app-calendar-week-row${draggingWorkOrderId ? " app-calendar-week-row--drag-active" : ""}`}
+      className={`app-calendar-week-row${draggingWorkOrderId ? " app-calendar-week-row--drag-active" : ""}${
+        draggingEmployeeId ? " app-calendar-week-row--employee-drag-active" : ""
+      }`}
       style={{ minHeight: rowHeight }}
     >
       {week.days.map((day) => (
@@ -124,6 +132,8 @@ export function CalendarWeekRow({
             segment={seg}
             tooltip={segmentTooltip(seg)}
             isDragging={draggingWorkOrderId === seg.eventId}
+            draggingEmployeeId={draggingEmployeeId}
+            employeeDropAllowed={droppableWorkOrderIds?.has(seg.eventId) ?? false}
             onClick={() => handleSegmentClick(seg)}
             onAskAthene={
               onAskAthene
@@ -135,6 +145,7 @@ export function CalendarWeekRow({
             }
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onAssignEmployee={onAssignEmployee}
           />
         ))}
         {showOverflowRow && onOverflowWeekClick ? (

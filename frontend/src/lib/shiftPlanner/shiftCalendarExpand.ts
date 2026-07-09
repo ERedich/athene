@@ -2,7 +2,7 @@ import { formatIsoDate } from "../calendar/calendarDates";
 import { apiFetch } from "../api";
 import type { ShiftCalendarBlock, ShiftMasterRow, ShiftWeekdayKey } from "./shiftCalendarTypes";
 import { JS_DAY_TO_WEEKDAY_KEY, SHIFT_WEEKDAY_KEYS } from "./shiftCalendarTypes";
-
+import { splitOvernightSegments } from "./shiftDayTimelineLayout";
 function addDaysIso(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -19,6 +19,16 @@ function normalizeTimeToHm(value: string): string {
   return `${parts[0]}:${parts[1]}`;
 }
 
+export function shiftDisplayTimes(shift: { startTime: string; endTime: string }): {
+  startTime: string;
+  endTime: string;
+} {
+  return {
+    startTime: normalizeTimeToHm(shift.startTime),
+    endTime: normalizeTimeToHm(shift.endTime),
+  };
+}
+
 export function formatShiftTimeRange(startTime: string, endTime: string): string {
   return `${startTime} – ${endTime}`;
 }
@@ -26,7 +36,9 @@ export function formatShiftTimeRange(startTime: string, endTime: string): string
 export function expandShiftsForWeek(
   shifts: ShiftMasterRow[],
   weekStartIso: string,
+  options?: { splitOvernight?: boolean },
 ): ShiftCalendarBlock[] {
+  const splitOvernight = options?.splitOvernight ?? true;
   const blocks: ShiftCalendarBlock[] = [];
 
   for (const shift of shifts) {
@@ -37,11 +49,7 @@ export function expandShiftsForWeek(
       const weekdayKey = weekdayKeyForDate(date);
       if (!shift.weekdays.includes(weekdayKey)) continue;
 
-      let startTime = normalizeTimeToHm(shift.startTime);
-      let endTime = normalizeTimeToHm(shift.endTime);
-      if (endTime <= startTime) {
-        endTime = "24:00";
-      }
+      const { startTime, endTime } = shiftDisplayTimes(shift);
 
       blocks.push({
         id: `${shift.id}:${date}`,
@@ -64,6 +72,10 @@ export function expandShiftsForWeek(
       a.startTime.localeCompare(b.startTime) ||
       a.shiftName.localeCompare(b.shiftName),
   );
+
+  if (splitOvernight) {
+    return splitOvernightSegments(blocks, weekStartIso);
+  }
 
   return blocks;
 }

@@ -28,6 +28,9 @@ export type ShiftCalendarBlock = {
   startTime: string;
   endTime: string;
   assignments: ShiftAssignment[];
+  continuesBefore?: boolean;
+  continuesAfter?: boolean;
+  segmentKind?: "full" | "evening" | "morning";
 };
 
 export const SHIFT_WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;

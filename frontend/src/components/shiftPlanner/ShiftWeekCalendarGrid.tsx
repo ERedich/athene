@@ -19,11 +19,15 @@ import type {
   ShiftMasterRow,
 } from "../../lib/shiftPlanner/shiftCalendarTypes";
 import { JS_DAY_TO_WEEKDAY_KEY } from "../../lib/shiftPlanner/shiftCalendarTypes";
+import type { ShiftPlannerViewMode } from "../../lib/shiftPlanner/shiftPlannerViewMode";
+import { ShiftDayHeader } from "./ShiftDayHeader";
 import { ShiftEmployeePool } from "./ShiftEmployeePool";
 import { ShiftWeekDayColumn } from "./ShiftWeekDayColumn";
+import { ShiftWeekTimeAxis } from "./ShiftWeekTimeAxis";
 
 type Props = {
   weekStart: Date;
+  viewMode: ShiftPlannerViewMode;
   blocks: ShiftCalendarBlock[];
   shifts: ShiftMasterRow[];
   planningEmployees: PlanningEmployee[];
@@ -34,13 +38,26 @@ type Props = {
   onRemoveBlock?: (block: ShiftCalendarBlock) => void;
   onAddShift?: (shift: ShiftMasterRow, isoDate: string) => void;
   onAssignEmployee?: (block: ShiftCalendarBlock, employeeId: string) => void;
+  onRequestRollout?: (
+    block: ShiftCalendarBlock,
+    employeeId: string,
+    event: React.SyntheticEvent,
+  ) => void;
   onUnassignEmployee?: (block: ShiftCalendarBlock, assignmentId: string) => void;
   onEmployeeDragStart?: (employeeId: string) => void;
   onEmployeeDragEnd?: () => void;
+  selectedBlockId?: string | null;
+  selectedDayIso?: string | null;
+  onSelectBlock?: (block: ShiftCalendarBlock) => void;
+  onSelectDay?: (isoDate: string) => void;
+  onOpenInfo?: (block: ShiftCalendarBlock) => void;
+  disabledEmployeeIds?: ReadonlySet<string>;
+  disabledEmployeeContext?: "block" | "day" | null;
 };
 
 export function ShiftWeekCalendarGrid({
   weekStart,
+  viewMode,
   blocks,
   shifts,
   planningEmployees,
@@ -51,12 +68,21 @@ export function ShiftWeekCalendarGrid({
   onRemoveBlock,
   onAddShift,
   onAssignEmployee,
+  onRequestRollout,
   onUnassignEmployee,
   onEmployeeDragStart,
   onEmployeeDragEnd,
+  selectedBlockId,
+  selectedDayIso,
+  onSelectBlock,
+  onSelectDay,
+  onOpenInfo,
+  disabledEmployeeIds,
+  disabledEmployeeContext,
 }: Props) {
   const { t, i18n } = useTranslation();
   const today = useMemo(() => startOfDay(new Date()), []);
+  const isComplex = viewMode === "complex";
 
   const days = useMemo(() => {
     const week = buildWeekGrid(weekStart)[0];
@@ -79,55 +105,71 @@ export function ShiftWeekCalendarGrid({
   };
 
   return (
-    <div className="app-shift-planner-week-scroll">
-      <div className="app-shift-planner-week-grid" role="grid" aria-label={t("schichtplaner.tabOverview")}>
-        <div className="app-shift-planner-week-head" role="row">
-          {days.map((day) => (
-            <div
-              key={day.isoKey}
-              className={`app-shift-planner-day-header${day.isToday ? " app-shift-planner-day-header--today" : ""}`}
-              role="columnheader"
-            >
-              <span className="app-shift-planner-day-header__weekday">
-                {t(`kalendar.weekdays.${JS_DAY_TO_WEEKDAY_KEY[day.date.getDay()]}`)}
-              </span>
-              <span className="app-shift-planner-day-header__date">{formatDayHeader(day.date)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div
-          className={`app-shift-planner-week-body${draggingEmployeeId ? " app-shift-planner-week-body--drag-active" : ""}`}
-          role="row"
-        >
-          {days.map((day) => (
-            <ShiftWeekDayColumn
-              key={day.isoKey}
-              isoDate={day.isoKey}
-              dayLabel={t(`kalendar.weekdays.${JS_DAY_TO_WEEKDAY_KEY[day.date.getDay()]}`)}
-              dateLabel={formatDayHeader(day.date)}
-              isToday={day.date.getTime() === today.getTime()}
-              blocks={shiftsByDate.get(day.isoKey) ?? []}
-              availableShifts={availableByDate.get(day.isoKey) ?? []}
-              draggingEmployeeId={draggingEmployeeId}
-              removingBlockId={removingBlockId}
-              removingAssignmentId={removingAssignmentId}
-              addingShiftId={addingShiftId}
-              onRemoveBlock={onRemoveBlock}
-              onAddShift={onAddShift}
-              onAssignEmployee={onAssignEmployee}
-              onUnassignEmployee={onUnassignEmployee}
-            />
-          ))}
-        </div>
-      </div>
-
+    <div className="app-shift-planner-calendar-content">
       <ShiftEmployeePool
         employees={planningEmployees}
+        disabledEmployeeIds={disabledEmployeeIds}
+        disabledEmployeeContext={disabledEmployeeContext}
         draggingEmployeeId={draggingEmployeeId}
         onDragStart={onEmployeeDragStart}
         onDragEnd={onEmployeeDragEnd}
       />
+
+      <div className="app-shift-planner-week-scroll">
+        <div
+          className={`app-shift-planner-week-layout${isComplex ? "" : " app-shift-planner-week-layout--simple"}`}
+          role="grid"
+          aria-label={t("schichtplaner.tabOverview")}
+        >
+          {isComplex ? <div className="app-shift-planner-week-layout__corner" aria-hidden /> : null}
+          <div className="app-shift-planner-week-head" role="row">
+            {days.map((day) => (
+              <ShiftDayHeader
+                key={day.isoKey}
+                isoDate={day.isoKey}
+                date={day.date}
+                dateLabel={formatDayHeader(day.date)}
+                isToday={day.date.getTime() === today.getTime()}
+                isSelected={selectedDayIso === day.isoKey}
+                availableShifts={availableByDate.get(day.isoKey) ?? []}
+                addingShiftId={addingShiftId}
+                onSelectDay={onSelectDay}
+                onAddShift={onAddShift}
+              />
+            ))}
+          </div>
+
+          {isComplex ? <ShiftWeekTimeAxis /> : null}
+
+          <div
+            className={`app-shift-planner-week-body${draggingEmployeeId ? " app-shift-planner-week-body--drag-active" : ""}`}
+            role="row"
+          >
+            {days.map((day) => (
+              <ShiftWeekDayColumn
+                key={day.isoKey}
+                isoDate={day.isoKey}
+                dayLabel={t(`kalendar.weekdays.${JS_DAY_TO_WEEKDAY_KEY[day.date.getDay()]}`)}
+                dateLabel={formatDayHeader(day.date)}
+                isToday={day.date.getTime() === today.getTime()}
+                isSelectedDay={selectedDayIso === day.isoKey}
+                viewMode={viewMode}
+                blocks={shiftsByDate.get(day.isoKey) ?? []}
+                draggingEmployeeId={draggingEmployeeId}
+                removingBlockId={removingBlockId}
+                removingAssignmentId={removingAssignmentId}
+                onRemoveBlock={onRemoveBlock}
+                onAssignEmployee={onAssignEmployee}
+                onRequestRollout={onRequestRollout}
+                onUnassignEmployee={onUnassignEmployee}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+                onOpenInfo={onOpenInfo}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
