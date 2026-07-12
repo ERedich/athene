@@ -104,7 +104,7 @@ export function CalendarWeekRow({
       className={`app-calendar-week-row${draggingWorkOrderId ? " app-calendar-week-row--drag-active" : ""}${
         draggingEmployeeId ? " app-calendar-week-row--employee-drag-active" : ""
       }`}
-      style={{ minHeight: rowHeight }}
+      style={{ minHeight: rowHeight, height: "100%" }}
     >
       {week.days.map((day) => (
         <CalendarDayCell

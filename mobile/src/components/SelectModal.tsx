@@ -1,12 +1,7 @@
 import { useMemo } from "react";
-import {
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 
+import { BottomSheetModal } from "./BottomSheetModal";
 import { HapticPressable } from "./HapticPressable";
 
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
@@ -29,11 +24,6 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        backdrop: {
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.45)",
-          justifyContent: "flex-end",
-        },
         sheet: {
           backgroundColor: colors.surface,
           borderTopLeftRadius: radii.md,
@@ -70,35 +60,31 @@ export function SelectModal({ visible, title, items, onSelect, onClose }: Props)
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <Text style={styles.title}>{title}</Text>
-          <FlatList
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <HapticPressable
-                {...androidRippleProps(ripple)}
-                style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-                onPress={() => {
-                  onSelect(item.id);
-                  onClose();
-                }}
-              >
-                <Text style={styles.rowText}>{item.label}</Text>
-              </HapticPressable>
-            )}
-          />
+    <BottomSheetModal visible={visible} onClose={onClose} sheetStyle={styles.sheet}>
+      <Text style={styles.title}>{title}</Text>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
           <HapticPressable
             {...androidRippleProps(ripple)}
-            style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-            onPress={onClose}
+            style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={() => {
+              onSelect(item.id);
+              onClose();
+            }}
           >
-            <Text style={styles.cancelText}>OK</Text>
+            <Text style={styles.rowText}>{item.label}</Text>
           </HapticPressable>
-        </View>
-      </View>
-    </Modal>
+        )}
+      />
+      <HapticPressable
+        {...androidRippleProps(ripple)}
+        style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+        onPress={onClose}
+      >
+        <Text style={styles.cancelText}>OK</Text>
+      </HapticPressable>
+    </BottomSheetModal>
   );
 }

@@ -424,7 +424,7 @@ export function KalendarPage() {
   const gridViewMode = viewMode === "week" ? "week" : "month";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <Toast ref={toastRef} position="top-right" />
       <CalendarMoveConfirmPanel
         visible={pendingMove != null}
@@ -436,7 +436,7 @@ export function KalendarPage() {
       />
 
       {error ? (
-        <div className="mb-3 rounded-lg bg-surface-container-low p-3 text-sm text-on-surface">
+        <div className="mx-4 mt-4 mb-3 rounded-lg bg-surface-container-low p-3 text-sm text-on-surface">
           <p>{error}</p>
           <Button
             type="button"
@@ -451,7 +451,7 @@ export function KalendarPage() {
       {loading || employeesLoading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-on-surface-variant">…</div>
       ) : (
-        <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_10%,transparent)] bg-surface-container-low">
+        <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden bg-surface-container-low">
           <div className="app-calendar-layout__main flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
             {!loading && displayEventCount === 0 && workOrders.length === 0 ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>

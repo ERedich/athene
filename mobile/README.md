@@ -52,6 +52,7 @@ npm run dev:mobile
 
 - **Login only:** visual tokens live in [`src/screens/login/loginDesign.ts`](src/screens/login/loginDesign.ts) (light + dark). Do not import that file from post-login screens.
 - **Post-login shell:** light/dark tokens in [`src/styles/appTheme.ts`](src/styles/appTheme.ts), toggled in the header (sun/moon) next to language; preference is persisted with AsyncStorage (`athene.appShellColorScheme`).
+- **Bottom sheets / context menus:** use [`BottomSheetModal`](src/components/BottomSheetModal.tsx) with tokens in [`src/styles/bottomSheet.ts`](src/styles/bottomSheet.ts). The dimmed backdrop **fades in** (`animationType="fade"`); only the sheet **slides up**. Tapping the backdrop dismisses. Do not use `Modal` + `animationType="slide"` for new overlays.
 
 ## Phase 2 (not in v1)
 

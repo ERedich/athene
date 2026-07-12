@@ -976,6 +976,12 @@ export default function WorkOrdersListScreen() {
           setFeedbackEntryMode("pause");
           setFeedbackOpen(true);
         }}
+        onStop={() => {
+          if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status)) return;
+          setActionsOpen(false);
+          setFeedbackEntryMode("stop");
+          setFeedbackOpen(true);
+        }}
         onFeedback={() => {
           if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status)) return;
           setActionsOpen(false);

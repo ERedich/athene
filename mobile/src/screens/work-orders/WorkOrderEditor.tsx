@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { ClipboardCheck, Pause, Play, Sparkles, Square } from "lucide-react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { ClipboardCheck, Sparkles } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -57,6 +58,7 @@ import {
 } from "../../hooks/queries";
 import type { TransactionRow, WorkOrderAssignmentRow, WorkOrderDocumentCategory, WorkOrderDocumentRow, WorkOrderType } from "../../types/api";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../../lib/workOrderLifecycle";
+import { workOrderPlaybackIconColor } from "../../lib/workOrderPlaybackUi";
 import {
   computeSegmentHours,
   feedbackStatusActionForEntryMode,
@@ -313,7 +315,12 @@ export function WorkOrderEditor({ orderId }: Props) {
       return () => navigation.setOptions({ headerRight: undefined });
     }
     navigation.setOptions({
-      headerRight: () => (
+      headerRight: () => {
+        const canStart = canStartWorkOrder(currentOrder.status);
+        const canPause = canPauseWorkOrder(currentOrder.status);
+        const canStop = canFeedbackWorkOrder(currentOrder.status);
+
+        return (
         <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
           {onFeedbackTab ? (
             <HapticPressable
@@ -330,63 +337,51 @@ export function WorkOrderEditor({ orderId }: Props) {
           ) : null}
           <HapticPressable
             onPress={() => void startOrder()}
-            disabled={!canStartWorkOrder(currentOrder.status)}
+            disabled={!canStart}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
               { padding: 8 },
               {
-                opacity: !canStartWorkOrder(currentOrder.status)
-                  ? 0.35
-                  : pressed
-                    ? PRESSED_OPACITY_CONTROL
-                    : 1,
+                opacity: !canStart ? 1 : pressed ? PRESSED_OPACITY_CONTROL : 1,
               },
             ]}
           >
-            <Play size={22} color={colors.primary} />
+            <MaterialIcons name="play-arrow" size={22} color={workOrderPlaybackIconColor("start", canStart)} />
           </HapticPressable>
           <HapticPressable
             onPress={() => openFeedbackWithMode("stop")}
-            disabled={!canFeedbackWorkOrder(currentOrder.status)}
+            disabled={!canStop}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
               { padding: 8 },
               {
-                opacity: !canFeedbackWorkOrder(currentOrder.status)
-                  ? 0.35
-                  : pressed
-                    ? PRESSED_OPACITY_CONTROL
-                    : 1,
+                opacity: !canStop ? 1 : pressed ? PRESSED_OPACITY_CONTROL : 1,
               },
             ]}
           >
-            <Square size={20} color={colors.primary} />
+            <MaterialIcons name="stop" size={22} color={workOrderPlaybackIconColor("stop", canStop)} />
           </HapticPressable>
           <HapticPressable
             onPress={() => openFeedbackWithMode("pause")}
-            disabled={!canPauseWorkOrder(currentOrder.status)}
+            disabled={!canPause}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
               { padding: 8 },
               {
-                opacity: !canPauseWorkOrder(currentOrder.status)
-                  ? 0.35
-                  : pressed
-                    ? PRESSED_OPACITY_CONTROL
-                    : 1,
+                opacity: !canPause ? 1 : pressed ? PRESSED_OPACITY_CONTROL : 1,
               },
             ]}
           >
-            <Pause size={20} color={colors.primary} />
+            <MaterialIcons name="pause" size={22} color={workOrderPlaybackIconColor("pause", canPause)} />
           </HapticPressable>
           <HapticPressable
             onPress={() => openFeedbackWithMode("create")}
-            disabled={!canFeedbackWorkOrder(currentOrder.status)}
+            disabled={!canStop}
             {...androidRippleProps(ripple, true)}
             style={({ pressed }) => [
               { padding: 8 },
               {
-                opacity: !canFeedbackWorkOrder(currentOrder.status)
+                opacity: !canStop
                   ? 0.35
                   : pressed
                     ? PRESSED_OPACITY_CONTROL
@@ -397,7 +392,8 @@ export function WorkOrderEditor({ orderId }: Props) {
             <ClipboardCheck size={20} color={colors.primary} />
           </HapticPressable>
         </View>
-      ),
+        );
+      },
     });
     return () => navigation.setOptions({ headerRight: undefined });
   }, [

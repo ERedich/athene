@@ -1,5 +1,6 @@
 /**
  * Post-login shell — separate from login-only tokens in `screens/login/loginDesign.ts`.
+ * Bottom sheet overlays: see `styles/bottomSheet.ts` and `components/BottomSheetModal.tsx`.
  */
 
 export type AppScheme = "light" | "dark";

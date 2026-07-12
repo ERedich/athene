@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, View } from "react-native";
 import { Sparkles, X } from "lucide-react-native";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
+import { BottomSheetModal } from "./BottomSheetModal";
 import { FeedbackRemarkInput } from "./FeedbackRemarkInput";
 import { HapticPressable } from "./HapticPressable";
 
@@ -71,11 +72,6 @@ export function WorkOrderFeedbackModal({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        backdrop: {
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.45)",
-          justifyContent: "flex-end",
-        },
         sheet: {
           backgroundColor: colors.surface,
           borderTopLeftRadius: radii.md,
@@ -223,9 +219,12 @@ export function WorkOrderFeedbackModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+    <BottomSheetModal
+      visible={visible}
+      onClose={close}
+      sheetStyle={styles.sheet}
+      backdropAccessibilityLabel={t("workOrders.cancel")}
+    >
           <View style={styles.titleRow}>
             <Text style={styles.title}>{t("workOrders.tabFeedback")}</Text>
             <View style={styles.headerActions}>
@@ -318,9 +317,7 @@ export function WorkOrderFeedbackModal({
                 <Text style={styles.btnPrimaryText}>{t("workOrders.save")}</Text>
               )}
             </HapticPressable>
-          </View>
-        </View>
       </View>
-    </Modal>
+    </BottomSheetModal>
   );
 }

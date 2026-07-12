@@ -5,7 +5,6 @@ import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,6 +14,7 @@ import {
 } from "react-native";
 
 import { HapticPressable } from "../components/HapticPressable";
+import { BottomSheetModal } from "../components/BottomSheetModal";
 
 import { apiFetch } from "../lib/api";
 import { useWhisperDictation, type WhisperDictationErrorCode } from "../hooks/useWhisperDictation";
@@ -81,7 +81,6 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        modal: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
         sheet: {
           maxHeight: "92%",
           minHeight: "72%",
@@ -323,9 +322,12 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   return (
     <AtheneAssistantContext.Provider value={value}>
       {children}
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={closeModal}>
-        <View style={styles.modal}>
-          <View style={styles.sheet}>
+      <BottomSheetModal
+        visible={visible}
+        onClose={closeModal}
+        sheetStyle={styles.sheet}
+        backdropAccessibilityLabel={t("workOrders.cancel")}
+      >
             <View style={styles.header}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.title}>{t("assistant.title")}</Text>
@@ -472,9 +474,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
                 </View>
               </View>
             </View>
-          </View>
-        </View>
-      </Modal>
+      </BottomSheetModal>
     </AtheneAssistantContext.Provider>
   );
 }

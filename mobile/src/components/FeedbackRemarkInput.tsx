@@ -1,7 +1,7 @@
 import { Mic } from "lucide-react-native";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 
 import { HapticPressable } from "./HapticPressable";
@@ -22,6 +22,7 @@ type Props = {
 export function FeedbackRemarkInput({ label, value, onChange, disabled = false, placeholder }: Props) {
   const { t, i18n } = useTranslation();
   const { colors, radii } = useAppTheme();
+  const pulseAnim = useRef(new Animated.Value(0)).current;
 
   const appendText = useCallback(
     (text: string) => {
@@ -38,20 +39,63 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
     maxLength: MAX_LEN,
   });
 
+  useEffect(() => {
+    if (!speech.listening) {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseAnim, speech.listening]);
+
+  const pulseScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.18],
+  });
+  const pulseOpacity = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.5, 0],
+  });
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 },
         label: {
+          marginTop: 6,
           fontSize: 11,
           color: colors.onSurfaceVariant,
           letterSpacing: 0.4,
           textTransform: "uppercase",
-          flex: 1,
+        },
+        inputRow: {
+          flexDirection: "row",
+          alignItems: "stretch",
+          gap: 8,
+          marginTop: 4,
+        },
+        voiceBtnWrap: {
+          width: 72,
+          alignSelf: "stretch",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        pulseRing: {
+          ...StyleSheet.absoluteFillObject,
+          borderRadius: radii.sm,
+          borderWidth: 2,
+          borderColor: colors.primary,
         },
         voiceBtn: {
-          width: 36,
-          height: 36,
+          width: "100%",
+          flex: 1,
           alignItems: "center",
           justifyContent: "center",
           borderRadius: radii.sm,
@@ -63,6 +107,7 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
           backgroundColor: colors.inputBackground,
         },
         input: {
+          flex: 1,
           borderWidth: 1,
           borderColor: colors.border,
           borderRadius: radii.sm,
@@ -96,46 +141,63 @@ export function FeedbackRemarkInput({ label, value, onChange, disabled = false, 
 
   return (
     <View>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
-        <HapticPressable
-          disabled={disabled || speech.localizing}
-          style={({ pressed }) => [
-            styles.voiceBtn,
-            (speech.listening || speech.localizing) && styles.voiceBtnActive,
-            pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
-          ]}
-          onPress={() => {
-            if (!speech.supported) {
-              Alert.alert(t("assistant.voiceInput"), t("assistant.voiceNotSupported"));
-              return;
-            }
-            if (!speech.listening) {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }
-            speech.toggleListening();
-          }}
-        >
-          {speech.localizing ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Mic
-              size={18}
-              color={speech.listening ? colors.primary : colors.onSurfaceVariant}
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputRow}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder ?? label}
+          placeholderTextColor={colors.onSurfaceVariant}
+          style={styles.input}
+          multiline
+          editable={!disabled}
+          maxLength={MAX_LEN}
+        />
+        <View style={styles.voiceBtnWrap}>
+          {speech.listening ? (
+            <Animated.View
+              style={[
+                styles.pulseRing,
+                {
+                  opacity: pulseOpacity,
+                  transform: [{ scale: pulseScale }],
+                },
+              ]}
             />
-          )}
-        </HapticPressable>
+          ) : null}
+          <HapticPressable
+            disabled={disabled || speech.localizing}
+            style={({ pressed }) => [
+              styles.voiceBtn,
+              (speech.listening || speech.localizing) && styles.voiceBtnActive,
+              pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+            ]}
+            onPress={() => {
+              if (!speech.supported) {
+                Alert.alert(t("assistant.voiceInput"), t("assistant.voiceNotSupported"));
+                return;
+              }
+              if (!speech.listening) {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              speech.toggleListening();
+            }}
+            accessibilityLabel={
+              speech.listening ? t("assistant.stopListening") : t("workOrders.feedbackVoiceInput")
+            }
+            accessibilityState={{ selected: speech.listening }}
+          >
+            {speech.localizing ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Mic
+                size={24}
+                color={speech.listening ? colors.primary : colors.onSurfaceVariant}
+              />
+            )}
+          </HapticPressable>
+        </View>
       </View>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder ?? label}
-        placeholderTextColor={colors.onSurfaceVariant}
-        style={styles.input}
-        multiline
-        editable={!disabled}
-        maxLength={MAX_LEN}
-      />
       {speech.listening ? (
         <Text style={styles.hint} accessibilityLiveRegion="polite">
           {t("assistant.listening")}

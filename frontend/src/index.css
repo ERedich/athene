@@ -2657,7 +2657,9 @@ html.theme-crossfade-fallback #root {
 .app-calendar-grid {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  width: 100%;
+  min-height: 100%;
+  min-width: 0;
   flex: 1;
   overflow-x: clip;
   --calendar-week-col-width: 2.25rem;
@@ -2671,12 +2673,14 @@ html.theme-crossfade-fallback #root {
 
 .app-calendar-grid-head {
   flex-shrink: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 8%, transparent);
 }
 
 .app-calendar-grid-week {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
+  align-items: stretch;
 }
 
 .app-calendar-week-col {
@@ -2745,6 +2749,7 @@ button.app-calendar-week-col:focus-visible {
   position: relative;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  height: 100%;
   min-height: 5rem;
   min-width: 0;
   overflow-x: clip;
@@ -2934,12 +2939,18 @@ button.app-calendar-day__num:focus-visible {
 .app-calendar-layout {
   display: flex;
   flex-direction: row;
+  width: 100%;
+  height: 100%;
   min-height: 0;
 }
 
 .app-calendar-layout__main {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .app-calendar-employees {
