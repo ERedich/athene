@@ -223,7 +223,11 @@ export async function buildTransactionListExtraFilters(
       params.push(uniq);
       const idx = pi++;
       pushCond(`(
-        w."responsibleEmployeeId" = ANY($${idx}::uuid[])
+        EXISTS (
+          SELECT 1 FROM "workOrderResponsibleEmployee" r
+          WHERE r."workOrderId" = w."id"
+            AND r."employeeId" = ANY($${idx}::uuid[])
+        )
         OR EXISTS (
           SELECT 1 FROM "workOrderEmployeeAssignment" a
           WHERE a."workOrderId" = w."id"

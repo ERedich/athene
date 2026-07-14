@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
+import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
@@ -38,9 +39,11 @@ import {
   calendarWorkOrderToEditSource,
   fetchCalendarWorkOrders,
   filterCalendarEventsBySearch,
+  workOrderMatchesWorkgroupFilter,
   workOrderToCalendarEvent,
   type CalendarWorkOrder,
 } from "../lib/calendar/calendarWorkOrders";
+import { overlayAppendTo } from "../lib/overlayAppendTo";
 import {
   fetchWorkOrderById,
   fetchWorkOrderPlanningConflicts,
@@ -62,6 +65,7 @@ export function KalendarPage() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [searchTerm, setSearchTerm] = useState("");
+  const [workgroupFilterId, setWorkgroupFilterId] = useState<string | null>(null);
   const [workOrders, setWorkOrders] = useState<CalendarWorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +73,7 @@ export function KalendarPage() {
   const [draggingEmployeeId, setDraggingEmployeeId] = useState<string | null>(null);
   const [assigningEmployeeId, setAssigningEmployeeId] = useState<string | null>(null);
   const [assignableEmployees, setAssignableEmployees] = useState<CalendarAssignableEmployee[]>([]);
+  const [workgroups, setWorkgroups] = useState<WorkOrderReferenceWorkgroup[]>([]);
   const [workgroupMap, setWorkgroupMap] = useState(() => buildEmployeeWorkgroupMap([]));
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [pendingMove, setPendingMove] = useState<PendingCalendarMove | null>(null);
@@ -127,9 +132,11 @@ export function KalendarPage() {
       const employees = (await employeesRes.json()) as WorkOrderReferenceEmployee[];
       const workgroups = (await workgroupsRes.json()) as WorkOrderReferenceWorkgroup[];
       const map = buildEmployeeWorkgroupMap(workgroups);
+      setWorkgroups(workgroups);
       setWorkgroupMap(map);
       setAssignableEmployees(filterAssignableEmployees(employees, map));
     } catch {
+      setWorkgroups([]);
       setWorkgroupMap(buildEmployeeWorkgroupMap([]));
       setAssignableEmployees([]);
     } finally {
@@ -166,6 +173,15 @@ export function KalendarPage() {
     [allEvents, searchTerm],
   );
 
+  const workgroupFilterOptions = useMemo(
+    () =>
+      workgroups
+        .filter((wg) => wg.isActive)
+        .sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }))
+        .map((wg) => ({ label: `${wg.key} - ${wg.name}`, value: wg.id })),
+    [workgroups],
+  );
+
   const droppableWorkOrderIds = useMemo(
     () => buildDroppableWorkOrderIds(draggingEmployeeId, assignableEmployees, workOrders, workgroupMap),
     [assignableEmployees, draggingEmployeeId, workOrders, workgroupMap],
@@ -174,11 +190,19 @@ export function KalendarPage() {
   const activeDraggingEmployeeId = draggingEmployeeId ?? assigningEmployeeId;
 
   const displayEventCount = useMemo(() => {
+    const countMatching = (events: typeof filteredEvents) => {
+      if (!workgroupFilterId) return events.length;
+      return events.filter((ev) => {
+        const wo = ev.meta?.workOrder as CalendarWorkOrder | undefined;
+        return wo != null && workOrderMatchesWorkgroupFilter(wo, workgroupFilterId);
+      }).length;
+    };
     if (viewMode === "day") {
-      return filteredEvents.filter((ev) => eventIntersectsDay(ev.start, ev.end, anchorDate)).length;
+      const dayEvents = filteredEvents.filter((ev) => eventIntersectsDay(ev.start, ev.end, anchorDate));
+      return countMatching(dayEvents);
     }
-    return filteredEvents.length;
-  }, [anchorDate, filteredEvents, viewMode]);
+    return countMatching(filteredEvents);
+  }, [anchorDate, filteredEvents, viewMode, workgroupFilterId]);
 
   useEffect(() => {
     setHeaderRowCount(displayEventCount);
@@ -403,7 +427,20 @@ export function KalendarPage() {
             onViewModeChange={setViewMode}
           />
         </li>
-        <li className="ml-auto shrink-0">
+        <li className="ml-auto flex shrink-0 items-center gap-2">
+          <Dropdown
+            aria-label={t("kalendar.workgroupFilterLabel")}
+            value={workgroupFilterId}
+            options={workgroupFilterOptions}
+            optionLabel="label"
+            optionValue="value"
+            placeholder={t("kalendar.workgroupFilterPlaceholder")}
+            showClear
+            onChange={(e) => setWorkgroupFilterId((e.value as string | null) ?? null)}
+            className="app-header-preset-dropdown app-inline-icon-dropdown h-9 min-w-[14rem] w-60 shrink-0 text-sm"
+            panelClassName="app-header-preset-dropdown-panel"
+            appendTo={overlayAppendTo}
+          />
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
             <InputText
@@ -419,7 +456,18 @@ export function KalendarPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [handleNext, handlePrev, handleToday, periodTitle, searchTerm, setHeaderActions, t, viewMode]);
+  }, [
+    handleNext,
+    handlePrev,
+    handleToday,
+    periodTitle,
+    searchTerm,
+    setHeaderActions,
+    t,
+    viewMode,
+    workgroupFilterId,
+    workgroupFilterOptions,
+  ]);
 
   const gridViewMode = viewMode === "week" ? "week" : "month";
 
@@ -453,8 +501,11 @@ export function KalendarPage() {
       ) : (
         <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden bg-surface-container-low">
           <div className="app-calendar-layout__main flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-            {!loading && displayEventCount === 0 && workOrders.length === 0 ? (
+            {!loading && filteredEvents.length === 0 && workOrders.length === 0 ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>
+            ) : null}
+            {!loading && filteredEvents.length === 0 && workOrders.length > 0 ? (
+              <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEventsFiltered")}</p>
             ) : null}
             {viewMode === "day" ? (
               <CalendarDayTimeline
@@ -463,6 +514,7 @@ export function KalendarPage() {
                 formatDateTime={formatDateTime}
                 draggingEmployeeId={activeDraggingEmployeeId}
                 droppableWorkOrderIds={droppableWorkOrderIds}
+                workgroupFilterId={workgroupFilterId}
                 onEventClick={handleEventClick}
                 onAskAthene={handleAskAthene}
                 onAssignEmployee={(workOrderId, employeeId) => void handleAssignEmployee(workOrderId, employeeId)}
@@ -476,6 +528,7 @@ export function KalendarPage() {
                 draggingWorkOrderId={draggingWorkOrderId}
                 draggingEmployeeId={activeDraggingEmployeeId}
                 droppableWorkOrderIds={droppableWorkOrderIds}
+                workgroupFilterId={workgroupFilterId}
                 onEventClick={handleEventClick}
                 onAskAthene={handleAskAthene}
                 onOverflowWeekClick={handleOverflowWeekClick}
@@ -490,6 +543,8 @@ export function KalendarPage() {
           </div>
           <CalendarEmployeePanel
             employees={assignableEmployees}
+            workgroupFilterId={workgroupFilterId}
+            workgroupMap={workgroupMap}
             draggingEmployeeId={activeDraggingEmployeeId}
             onDragStart={handleEmployeeDragStart}
             onDragEnd={handleEmployeeDragEnd}

@@ -52,8 +52,18 @@ export const selectWorkOrdersForEmbeddingSql = `
     w."plannedDurationMinutes",
     w."orderType",
     w."status",
-    re."key" AS "responsibleEmployeeKey",
-    re."name" AS "responsibleEmployeeName",
+    (
+      SELECT NULLIF(COALESCE(string_agg(e."key", ', ' ORDER BY e."key"), ''), '')
+      FROM "workOrderResponsibleEmployee" wor
+      JOIN "employee" e ON e."id" = wor."employeeId"
+      WHERE wor."workOrderId" = w."id"
+    ) AS "responsibleEmployeeKey",
+    (
+      SELECT NULLIF(COALESCE(string_agg(e."name", ', ' ORDER BY e."key"), ''), '')
+      FROM "workOrderResponsibleEmployee" wor
+      JOIN "employee" e ON e."id" = wor."employeeId"
+      WHERE wor."workOrderId" = w."id"
+    ) AS "responsibleEmployeeName",
     dbe."key" AS "doneByEmployeeKey",
     dbe."name" AS "doneByEmployeeName",
     done_history."doneAt",
@@ -68,7 +78,6 @@ export const selectWorkOrdersForEmbeddingSql = `
   JOIN "asset" a ON a."id" = w."assetId"
   JOIN "costCenter" c ON c."id" = w."costCenterId"
   LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
-  LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN (
     SELECT "workOrderId", max("occurredAt") AS "doneAt"

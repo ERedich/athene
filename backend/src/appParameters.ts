@@ -15,6 +15,9 @@ export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG";
 /** Aufträge: Clever Search / Schnellere Suche im Suchpanel. */
 export const APP_PARAM_KEY_ENABLE_CLEVER_SEARCH = "WO-ECS";
 
+/** Aufträge: Modal-Ansicht statt Vollbild auf Aufträge- und Monitoring-Seite. */
+export const APP_PARAM_KEY_WO_MODAL_VIEW = "GN-WOMD";
+
 /** Allgemein: Asset-Schlüssel manuell oder automatisch (Werk). */
 export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG";
 

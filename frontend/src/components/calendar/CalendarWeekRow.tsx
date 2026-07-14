@@ -23,6 +23,7 @@ type Props = {
   draggingWorkOrderId: string | null;
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
+  workgroupFilterId?: string | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
@@ -45,6 +46,7 @@ export function CalendarWeekRow({
   draggingWorkOrderId,
   draggingEmployeeId,
   droppableWorkOrderIds,
+  workgroupFilterId = null,
   onEventClick,
   onAskAthene,
   onOverflowWeekClick,
@@ -126,19 +128,24 @@ export function CalendarWeekRow({
         className="app-calendar-event-layer"
         aria-hidden={segments.length === 0 && !showOverflowRow}
       >
-        {segments.map((seg) => (
+        {segments.map((seg) => {
+          const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
+          const filterDisabled =
+            workgroupFilterId != null && wo != null && wo.workgroupId !== workgroupFilterId;
+          return (
           <CalendarEventBar
             key={`${seg.eventId}-${seg.colStart}-${seg.laneIndex}`}
             segment={seg}
             tooltip={segmentTooltip(seg)}
             isDragging={draggingWorkOrderId === seg.eventId}
+            disabled={filterDisabled}
+            disabledTooltip={filterDisabled ? t("kalendar.workgroupFilterDisabledOrder") : undefined}
             draggingEmployeeId={draggingEmployeeId}
-            employeeDropAllowed={droppableWorkOrderIds?.has(seg.eventId) ?? false}
+            employeeDropAllowed={!filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)}
             onClick={() => handleSegmentClick(seg)}
             onAskAthene={
               onAskAthene
                 ? () => {
-                    const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
                     if (wo) onAskAthene(wo);
                   }
                 : undefined
@@ -147,7 +154,8 @@ export function CalendarWeekRow({
             onDragEnd={onDragEnd}
             onAssignEmployee={onAssignEmployee}
           />
-        ))}
+          );
+        })}
         {showOverflowRow && onOverflowWeekClick ? (
           <CalendarMonthOverflowHint
             overflowCount={overflowCount}

@@ -94,10 +94,11 @@ export function WorkOrderActionsSheet({
   const canStart = status ? canStartWorkOrder(status) : false;
   const canPause = status ? canPauseWorkOrder(status) : false;
   const canFeedback = status ? canFeedbackWorkOrder(status) : false;
+  const hasPlaybackActions = canStart || canPause || canFeedback;
 
-  const startStyles = workOrderPlaybackBtnStyles("start", canStart, colors, isDark, radii);
-  const pauseStyles = workOrderPlaybackBtnStyles("pause", canPause, colors, isDark, radii);
-  const stopStyles = workOrderPlaybackBtnStyles("stop", canFeedback, colors, isDark, radii);
+  const startStyles = workOrderPlaybackBtnStyles("start", true, colors, isDark, radii);
+  const pauseStyles = workOrderPlaybackBtnStyles("pause", true, colors, isDark, radii);
+  const stopStyles = workOrderPlaybackBtnStyles("stop", true, colors, isDark, radii);
 
   const run = (fn: () => void) => {
     onClose();
@@ -112,47 +113,40 @@ export function WorkOrderActionsSheet({
       backdropAccessibilityLabel={t("workOrders.cancel")}
     >
       <Text style={styles.title}>{t("workOrders.actionsTitle")}</Text>
-      <View style={styles.playbackRow}>
-        <HapticPressable
-          disabled={!canStart}
-          accessibilityLabel={t("workOrders.start")}
-          accessibilityState={{ disabled: !canStart }}
-          {...androidRippleProps(ripple)}
-          style={({ pressed }) => [
-            startStyles.button,
-            canStart && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
-          ]}
-          onPress={() => run(onStart)}
-        >
-          <MaterialIcons name="play-arrow" size={PLAYBACK_ICON_SIZE} color={startStyles.iconColor} />
-        </HapticPressable>
-        <HapticPressable
-          disabled={!canPause}
-          accessibilityLabel={t("workOrders.feedbackStatusAction.pause")}
-          accessibilityState={{ disabled: !canPause }}
-          {...androidRippleProps(ripple)}
-          style={({ pressed }) => [
-            pauseStyles.button,
-            canPause && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
-          ]}
-          onPress={() => run(onPause)}
-        >
-          <MaterialIcons name="pause" size={PLAYBACK_ICON_SIZE} color={pauseStyles.iconColor} />
-        </HapticPressable>
-        <HapticPressable
-          disabled={!canFeedback}
-          accessibilityLabel={t("workOrders.stop")}
-          accessibilityState={{ disabled: !canFeedback }}
-          {...androidRippleProps(ripple)}
-          style={({ pressed }) => [
-            stopStyles.button,
-            canFeedback && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
-          ]}
-          onPress={() => run(onStop)}
-        >
-          <MaterialIcons name="stop" size={PLAYBACK_ICON_SIZE} color={stopStyles.iconColor} />
-        </HapticPressable>
-      </View>
+      {hasPlaybackActions ? (
+        <View style={styles.playbackRow}>
+          {canStart ? (
+            <HapticPressable
+              accessibilityLabel={t("workOrders.start")}
+              {...androidRippleProps(ripple)}
+              style={({ pressed }) => [startStyles.button, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+              onPress={() => run(onStart)}
+            >
+              <MaterialIcons name="play-arrow" size={PLAYBACK_ICON_SIZE} color={startStyles.iconColor} />
+            </HapticPressable>
+          ) : null}
+          {canPause ? (
+            <HapticPressable
+              accessibilityLabel={t("workOrders.feedbackStatusAction.pause")}
+              {...androidRippleProps(ripple)}
+              style={({ pressed }) => [pauseStyles.button, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+              onPress={() => run(onPause)}
+            >
+              <MaterialIcons name="pause" size={PLAYBACK_ICON_SIZE} color={pauseStyles.iconColor} />
+            </HapticPressable>
+          ) : null}
+          {canFeedback ? (
+            <HapticPressable
+              accessibilityLabel={t("workOrders.stop")}
+              {...androidRippleProps(ripple)}
+              style={({ pressed }) => [stopStyles.button, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+              onPress={() => run(onStop)}
+            >
+              <MaterialIcons name="stop" size={PLAYBACK_ICON_SIZE} color={stopStyles.iconColor} />
+            </HapticPressable>
+          ) : null}
+        </View>
+      ) : null}
       <HapticPressable
         disabled={atheneBusy}
         {...androidRippleProps(ripple)}
@@ -170,18 +164,15 @@ export function WorkOrderActionsSheet({
         )}
         <Text style={styles.rowText}>{t("assistant.askAthene")}</Text>
       </HapticPressable>
-      <HapticPressable
-        disabled={!canFeedback}
-        {...androidRippleProps(ripple)}
-        style={({ pressed }) => [
-          styles.row,
-          !canFeedback && styles.rowDisabled,
-          canFeedback && pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
-        ]}
-        onPress={() => run(onFeedback)}
-      >
-        <Text style={styles.rowText}>{t("workOrders.contextMenuCreateFeedback")}</Text>
-      </HapticPressable>
+      {canFeedback ? (
+        <HapticPressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => run(onFeedback)}
+        >
+          <Text style={styles.rowText}>{t("workOrders.contextMenuCreateFeedback")}</Text>
+        </HapticPressable>
+      ) : null}
       <HapticPressable
         {...androidRippleProps(ripple)}
         style={({ pressed }) => [styles.cancel, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}

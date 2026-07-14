@@ -53,50 +53,58 @@ export function FeedbackRemarkInput({
 
   return (
     <div className="space-y-2 col-span-2 md:col-span-6">
-      <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-          {label}
-          {required ? (
-            <span className="app-required-marker" aria-hidden>
-              *
-            </span>
-          ) : null}
-        </label>
+      <label htmlFor={id} className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+        {label}
+        {required ? (
+          <span className="app-required-marker" aria-hidden>
+            *
+          </span>
+        ) : null}
+      </label>
+      <div className="flex items-stretch gap-2">
+        <textarea
+          id={id}
+          value={value}
+          maxLength={MAX_LEN}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={
+            speech.listening && speech.interimTranscript ? speech.interimTranscript : undefined
+          }
+          className={`min-w-0 flex-1 p-inputtext p-component resize-y ${minHeightClass}`}
+          disabled={disabled}
+        />
         {speech.supported ? (
-          <button
-            type="button"
-            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] text-on-surface-variant transition-colors hover:text-[var(--color-primary)] disabled:opacity-50 ${
-              speech.listening || speech.localizing
-                ? "border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
-                : ""
-            }`}
-            aria-label={
-              speech.listening ? t("assistant.stopListening") : t("workOrders.feedbackVoiceInput")
-            }
-            title={speech.listening ? t("assistant.stopListening") : t("workOrders.feedbackVoiceInput")}
-            aria-pressed={speech.listening}
-            disabled={disabled || speech.localizing}
-            onClick={speech.toggleListening}
-          >
-            {speech.localizing ? (
-              <LucideSpinner className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-            ) : (
-              <Mic className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
-            )}
-          </button>
+          <div className="relative flex w-[4.5rem] shrink-0 self-stretch">
+            {speech.listening ? (
+              <span
+                className="app-feedback-voice-pulse-ring pointer-events-none absolute inset-0 rounded-sm border-2 border-[var(--color-primary)]"
+                aria-hidden
+              />
+            ) : null}
+            <button
+              type="button"
+              className={`flex h-full w-full flex-1 items-center justify-center rounded-sm border border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] text-on-surface-variant transition-colors hover:text-[var(--color-primary)] disabled:opacity-50 ${
+                speech.listening || speech.localizing
+                  ? "border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
+                  : ""
+              }`}
+              aria-label={
+                speech.listening ? t("assistant.stopListening") : t("workOrders.feedbackVoiceInput")
+              }
+              title={speech.listening ? t("assistant.stopListening") : t("workOrders.feedbackVoiceInput")}
+              aria-pressed={speech.listening}
+              disabled={disabled || speech.localizing}
+              onClick={speech.toggleListening}
+            >
+              {speech.localizing ? (
+                <LucideSpinner className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+              ) : (
+                <Mic className="h-6 w-6 shrink-0" strokeWidth={1.75} aria-hidden />
+              )}
+            </button>
+          </div>
         ) : null}
       </div>
-      <textarea
-        id={id}
-        value={value}
-        maxLength={MAX_LEN}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={
-          speech.listening && speech.interimTranscript ? speech.interimTranscript : undefined
-        }
-        className={`w-full p-inputtext p-component resize-y ${minHeightClass}`}
-        disabled={disabled}
-      />
       {speech.listening ? (
         <p className="text-xs text-[var(--color-primary)]" aria-live="polite">
           {t("assistant.listening")}

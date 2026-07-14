@@ -10,6 +10,9 @@ export const APP_PARAM_KEY_DEFAULT_WORKGROUP = "WO-DWG" as const;
 /** Must match backend `APP_PARAM_KEY_ENABLE_CLEVER_SEARCH` (WO-ECS). */
 export const APP_PARAM_KEY_ENABLE_CLEVER_SEARCH = "WO-ECS" as const;
 
+/** Must match backend `APP_PARAM_KEY_WO_MODAL_VIEW` (GN-WOMD). */
+export const APP_PARAM_KEY_WO_MODAL_VIEW = "GN-WOMD" as const;
+
 /** Must match backend `APP_PARAM_KEY_ASSET_KEY_GEN`. */
 export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG" as const;
 

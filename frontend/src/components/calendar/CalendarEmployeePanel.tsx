@@ -3,12 +3,18 @@ import { useTranslation } from "react-i18next";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 
-import type { CalendarAssignableEmployee } from "../../lib/calendar/calendarEmployeeAssignment";
+import {
+  employeeMatchesWorkgroupFilter,
+  type CalendarAssignableEmployee,
+  type EmployeeWorkgroupMap,
+} from "../../lib/calendar/calendarEmployeeAssignment";
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
 import { CalendarEmployeeChip } from "./CalendarEmployeeChip";
 
 type Props = {
   employees: CalendarAssignableEmployee[];
+  workgroupFilterId?: string | null;
+  workgroupMap?: EmployeeWorkgroupMap;
   draggingEmployeeId?: string | null;
   onDragStart?: (employeeId: string) => void;
   onDragEnd?: () => void;
@@ -16,6 +22,8 @@ type Props = {
 
 export function CalendarEmployeePanel({
   employees,
+  workgroupFilterId = null,
+  workgroupMap,
   draggingEmployeeId,
   onDragStart,
   onDragEnd,
@@ -32,6 +40,13 @@ export function CalendarEmployeePanel({
     );
   }, [employees, filterTerm]);
 
+  const enabledEmployeeCount = useMemo(() => {
+    if (!workgroupFilterId || !workgroupMap) return filteredEmployees.length;
+    return filteredEmployees.filter((employee) =>
+      employeeMatchesWorkgroupFilter(employee.id, workgroupMap, workgroupFilterId),
+    ).length;
+  }, [filteredEmployees, workgroupFilterId, workgroupMap]);
+
   return (
     <aside className="app-calendar-employees" aria-label={t("kalendar.employeesSection")}>
       <div className="app-calendar-employees__head">
@@ -40,7 +55,7 @@ export function CalendarEmployeePanel({
           <div className="app-calendar-employees__head-actions">
             <span className="app-calendar-employees__count">
               {t("kalendar.employeesFilterCount", {
-                visible: filteredEmployees.length,
+                visible: workgroupFilterId ? enabledEmployeeCount : filteredEmployees.length,
                 total: employees.length,
               })}
             </span>
@@ -68,6 +83,11 @@ export function CalendarEmployeePanel({
             <CalendarEmployeeChip
               key={employee.id}
               employee={employee}
+              disabled={
+                workgroupFilterId != null &&
+                workgroupMap != null &&
+                !employeeMatchesWorkgroupFilter(employee.id, workgroupMap, workgroupFilterId)
+              }
               isDragging={draggingEmployeeId === employee.id}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}

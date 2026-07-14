@@ -2,7 +2,6 @@ import {
   ChevronRight,
   FileText,
   MoreVertical,
-  MoveHorizontal,
   Plus,
   RefreshCw,
   Search,
@@ -10,7 +9,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
 import { useNavigation, useRouter } from "expo-router";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
@@ -27,6 +26,8 @@ import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
 import { HapticPressable } from "../../../src/components/HapticPressable";
 import { WorkOrderActionsSheet } from "../../../src/components/WorkOrderActionsSheet";
 import { WorkOrderFeedbackModal } from "../../../src/components/WorkOrderFeedbackModal";
+import { WorkOrderFilterPills } from "../../../src/components/WorkOrderFilterPills";
+import { WorkOrderPresetDetailsSheet } from "../../../src/components/WorkOrderPresetDetailsSheet";
 import { useAtheneAssistant } from "../../../src/assistant/AtheneAssistantContext";
 import { useAuth } from "../../../src/auth/AuthContext";
 import {
@@ -50,411 +51,105 @@ import {
   surfaceRippleColor,
 } from "../../../src/styles/pressableFeedback";
 import { useAppTheme } from "../../../src/theme/AppThemeContext";
-import type {
-  WorkOrderSearchPresetDefaults,
-  WorkOrderSearchPresetListItem,
-} from "../../../src/lib/workOrderSearchPresetsApi";
 import type { WorkOrderRow } from "../../../src/types/api";
+import type { WorkOrderSearchPresetListItem } from "../../../src/lib/workOrderSearchPresetsApi";
 
-type AllTabPageProps = {
-  filtered: WorkOrderRow[];
-  isLoading: boolean;
-  isError: boolean;
-  refetch: () => void;
-  q: string;
-  setQ: (v: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  styles: any;
-  colors: { onSurfaceVariant: string; primary: string };
-  rowRipple: string;
-  router: ReturnType<typeof useRouter>;
-  t: ReturnType<typeof useTranslation>["t"];
-  i18n: ReturnType<typeof useTranslation>["i18n"];
-  openActions: (row: WorkOrderRow) => void;
-};
-
-/** Unfiltered work orders (same data as web default list). */
-function WorkOrdersAllTabPage({
-  filtered,
-  isLoading,
-  isError,
-  refetch,
-  q,
-  setQ,
-  styles,
-  colors,
-  rowRipple,
-  router,
-  t,
-  i18n,
-  openActions,
-}: AllTabPageProps) {
-  if (isLoading && filtered.length === 0) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-        <HapticPressable
-          onPress={() => void refetch()}
-          {...androidRippleProps(rowRipple, true)}
-          style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-        >
-          <Text style={styles.retryText}>Retry</Text>
-        </HapticPressable>
-      </View>
-    );
-  }
-
-  return (
-    <FlatList
-      data={filtered}
-      keyExtractor={(item) => item.id}
-      ListHeaderComponent={
-        <View style={styles.searchWrap}>
-          <Search size={20} color={colors.onSurfaceVariant} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={t("workOrders.searchPlaceholder")}
-            placeholderTextColor={colors.onSurfaceVariant}
-            style={styles.search}
-          />
-        </View>
-      }
-      ListEmptyComponent={<Text style={styles.empty}>{t("workOrders.empty")}</Text>}
-      contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <HapticPressable
-            {...androidRippleProps(rowRipple)}
-            style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-            onLongPress={() => openActions(item)}
-            delayLongPress={180}
-            onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-          >
-            <View style={styles.rowMain}>
-              <View style={styles.keyRow}>
-                <Text style={styles.key}>{item.orderNumber}</Text>
-                <View style={[styles.statusPill, { backgroundColor: workOrderStatusBackground(item.status) }]}>
-                  <Text style={[styles.statusPillText, { color: workOrderStatusForeground(item.status) }]}>
-                    {t(`workOrders.statusValues.${item.status}`)}
-                  </Text>
-                </View>
-                {(() => {
-                  const own = item.documentCount;
-                  const asset = item.assetDocumentCount;
-                  const total = own + asset;
-                  const isAssetOnly = own === 0 && asset > 0;
-                  return (
-                    <View
-                      style={[
-                        styles.docChip,
-                        total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
-                      ]}
-                    >
-                      <FileText size={13} color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"} />
-                      {total > 0 ? <Text style={styles.docChipText}>{total}</Text> : null}
-                    </View>
-                  );
-                })()}
-              </View>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.type}>
-                {item.assetKey} — {item.assetName}
-              </Text>
-              <Text style={styles.type}>
-                {t(`workOrders.typeValues.${item.orderType}`)} ·{" "}
-                {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
-                  new Date(item.plannedStart),
-                )}
-              </Text>
-            </View>
-          </HapticPressable>
-          <View style={styles.rowActionSide}>
-            <HapticPressable
-              {...androidRippleProps(rowRipple, true)}
-              style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-              onPress={() => openActions(item)}
-            >
-              <MoreVertical size={20} color={colors.onSurfaceVariant} />
-            </HapticPressable>
-            <HapticPressable
-              {...androidRippleProps(rowRipple, true)}
-              style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-              onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-            >
-              <ChevronRight size={22} color={colors.onSurfaceVariant} />
-            </HapticPressable>
-          </View>
-        </View>
-      )}
-    />
+function filterWorkOrders(rows: WorkOrderRow[], q: string, t: ReturnType<typeof useTranslation>["t"]) {
+  const s = q.trim().toLowerCase();
+  if (!s) return rows;
+  return rows.filter((row) =>
+    [
+      row.orderNumber,
+      row.name,
+      row.description ?? "",
+      row.assetKey,
+      row.assetName,
+      row.costCenterKey,
+      row.costCenterName,
+      row.siteKey,
+      row.siteName,
+      row.orderType,
+      row.status,
+      t(`workOrders.statusValues.${row.status}`),
+      row.createdBy,
+      row.updatedBy,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(s),
   );
 }
 
-type PresetPageProps = {
-  presetId: string;
+type ListPageProps = {
+  pageIndex: number;
   active: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- StyleSheet.create return type is too wide for child props
+  presets: WorkOrderSearchPresetListItem[];
+  bootstrapReady: boolean;
+  searchQ: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   styles: any;
-  colors: { onSurfaceVariant: string; primary: string };
-  rowRipple: string;
-  router: ReturnType<typeof useRouter>;
+  renderItem: ({ item }: { item: WorkOrderRow }) => React.JSX.Element;
   t: ReturnType<typeof useTranslation>["t"];
-  i18n: ReturnType<typeof useTranslation>["i18n"];
-  openActions: (row: WorkOrderRow) => void;
 };
 
-function WorkOrdersPresetPage({
-  presetId,
+function WorkOrdersListPage({
+  pageIndex,
   active,
+  presets,
+  bootstrapReady,
+  searchQ,
   styles,
-  colors,
-  rowRipple,
-  router,
+  renderItem,
   t,
-  i18n,
-  openActions,
-}: PresetPageProps) {
-  const [q, setQ] = useState("");
-  const { data = [], isLoading, isError, refetch, isFetching } = useWorkOrdersByPresetQuery(presetId, active);
+}: ListPageProps) {
+  const { colors, isDark } = useAppTheme();
+  const rowRipple = surfaceRippleColor(isDark);
+  const isAll = pageIndex === 0;
+  const presetId = !isAll ? presets[pageIndex - 1]?.id : undefined;
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return data;
-    return data.filter((row) =>
-      [
-        row.orderNumber,
-        row.name,
-        row.description ?? "",
-        row.assetKey,
-        row.assetName,
-        row.costCenterKey,
-        row.costCenterName,
-        row.siteKey,
-        row.siteName,
-        row.orderType,
-        row.status,
-        t(`workOrders.statusValues.${row.status}`),
-        row.createdBy,
-        row.updatedBy,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(s),
-    );
-  }, [data, q, t]);
+  const allOrdersQuery = useWorkOrdersQuery({
+    enabled: bootstrapReady && active && isAll,
+  });
+  const presetQuery = useWorkOrdersByPresetQuery(presetId, bootstrapReady && active && !isAll);
 
-  if (isLoading && data.length === 0) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  const listData = isAll ? (allOrdersQuery.data ?? []) : (presetQuery.data ?? []);
+  const listLoading = isAll ? allOrdersQuery.isLoading : presetQuery.isLoading;
+  const listError = isAll ? allOrdersQuery.isError : presetQuery.isError;
+  const listFetching = isAll ? allOrdersQuery.isFetching : presetQuery.isFetching;
+  const refetchList = isAll ? allOrdersQuery.refetch : presetQuery.refetch;
 
-  if (isError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-        <HapticPressable
-          onPress={() => void refetch()}
-          {...androidRippleProps(rowRipple, true)}
-          style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-        >
-          <Text style={styles.retryText}>Retry</Text>
-        </HapticPressable>
-      </View>
-    );
-  }
+  const filtered = useMemo(() => filterWorkOrders(listData, searchQ, t), [listData, searchQ, t]);
+
+  const listEmpty = listLoading ? (
+    <View style={[styles.center, { flex: undefined, paddingVertical: 48 }]}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  ) : listError ? (
+    <View style={[styles.center, { flex: undefined, paddingVertical: 32 }]}>
+      <Text style={styles.err}>{t("workOrders.loadError")}</Text>
+      <HapticPressable
+        onPress={() => void refetchList()}
+        {...androidRippleProps(rowRipple, true)}
+        style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+      >
+        <Text style={styles.retryText}>Retry</Text>
+      </HapticPressable>
+    </View>
+  ) : (
+    <Text style={styles.empty}>{t("workOrders.empty")}</Text>
+  );
 
   return (
     <FlatList
+      style={styles.list}
       data={filtered}
       keyExtractor={(item) => item.id}
-      extraData={isFetching}
-      ListHeaderComponent={
-        <View style={styles.searchWrap}>
-          <Search size={20} color={colors.onSurfaceVariant} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={t("workOrders.searchPlaceholder")}
-            placeholderTextColor={colors.onSurfaceVariant}
-            style={styles.search}
-          />
-        </View>
-      }
-      ListEmptyComponent={<Text style={styles.empty}>{t("workOrders.empty")}</Text>}
+      extraData={listFetching}
+      keyboardShouldPersistTaps="handled"
+      ListEmptyComponent={listEmpty}
       contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <HapticPressable
-            {...androidRippleProps(rowRipple)}
-            style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-            onLongPress={() => openActions(item)}
-            delayLongPress={180}
-            onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-          >
-            <View style={styles.rowMain}>
-              <View style={styles.keyRow}>
-                <Text style={styles.key}>{item.orderNumber}</Text>
-                <View style={[styles.statusPill, { backgroundColor: workOrderStatusBackground(item.status) }]}>
-                  <Text style={[styles.statusPillText, { color: workOrderStatusForeground(item.status) }]}>
-                    {t(`workOrders.statusValues.${item.status}`)}
-                  </Text>
-                </View>
-                {(() => {
-                  const own = item.documentCount;
-                  const asset = item.assetDocumentCount;
-                  const total = own + asset;
-                  const isAssetOnly = own === 0 && asset > 0;
-                  return (
-                    <View
-                      style={[
-                        styles.docChip,
-                        total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
-                      ]}
-                    >
-                      <FileText size={13} color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"} />
-                      {total > 0 ? <Text style={styles.docChipText}>{total}</Text> : null}
-                    </View>
-                  );
-                })()}
-              </View>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.type}>
-                {item.assetKey} — {item.assetName}
-              </Text>
-              <Text style={styles.type}>
-                {t(`workOrders.typeValues.${item.orderType}`)} ·{" "}
-                {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
-                  new Date(item.plannedStart),
-                )}
-              </Text>
-            </View>
-          </HapticPressable>
-          <View style={styles.rowActionSide}>
-            <HapticPressable
-              {...androidRippleProps(rowRipple, true)}
-              style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-              onPress={() => openActions(item)}
-            >
-              <MoreVertical size={20} color={colors.onSurfaceVariant} />
-            </HapticPressable>
-            <HapticPressable
-              {...androidRippleProps(rowRipple, true)}
-              style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-              onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-            >
-              <ChevronRight size={22} color={colors.onSurfaceVariant} />
-            </HapticPressable>
-          </View>
-        </View>
-      )}
+      renderItem={renderItem}
     />
-  );
-}
-
-type PresetPagerProps = {
-  presets: WorkOrderSearchPresetListItem[];
-  defaults: WorkOrderSearchPresetDefaults;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  styles: any;
-  colors: { onSurfaceVariant: string; primary: string };
-  rowRipple: string;
-  router: ReturnType<typeof useRouter>;
-  t: ReturnType<typeof useTranslation>["t"];
-  i18n: ReturnType<typeof useTranslation>["i18n"];
-  openActions: (row: WorkOrderRow) => void;
-  onActiveIndexChange: (index: number) => void;
-  allTab: {
-    filtered: WorkOrderRow[];
-    isLoading: boolean;
-    isError: boolean;
-    refetch: () => void;
-    q: string;
-    setQ: (v: string) => void;
-  };
-};
-
-function WorkOrdersPresetPager({
-  presets,
-  defaults,
-  styles,
-  colors,
-  rowRipple,
-  router,
-  t,
-  i18n,
-  openActions,
-  onActiveIndexChange,
-  allTab,
-}: PresetPagerProps) {
-  /** Page 0 = unfiltered „Aufträge“; pages 1..n = presets in API order. */
-  const initialPage = useMemo(() => {
-    const mob = defaults.mobilePresetId;
-    if (!mob) return 0;
-    const idx = presets.findIndex((p) => isSamePresetId(p.id, mob));
-    return idx >= 0 ? idx + 1 : 0;
-  }, [presets, defaults.mobilePresetId]);
-
-  const [activeIndex, setActiveIndex] = useState(initialPage);
-
-  useLayoutEffect(() => {
-    onActiveIndexChange(initialPage);
-  }, [initialPage, onActiveIndexChange]);
-
-  return (
-    <PagerView
-      style={{ flex: 1 }}
-      initialPage={initialPage}
-      onPageSelected={(e) => {
-        const i = e.nativeEvent.position;
-        setActiveIndex(i);
-        onActiveIndexChange(i);
-      }}
-    >
-      <View key="__all_work_orders__" collapsable={false} style={{ flex: 1 }}>
-        <WorkOrdersAllTabPage
-          filtered={allTab.filtered}
-          isLoading={allTab.isLoading}
-          isError={allTab.isError}
-          refetch={allTab.refetch}
-          q={allTab.q}
-          setQ={allTab.setQ}
-          styles={styles}
-          colors={colors}
-          rowRipple={rowRipple}
-          router={router}
-          t={t}
-          i18n={i18n}
-          openActions={openActions}
-        />
-      </View>
-      {presets.map((p, i) => (
-        <View key={p.id} collapsable={false} style={{ flex: 1 }}>
-          <WorkOrdersPresetPage
-            presetId={p.id}
-            active={activeIndex === i + 1}
-            styles={styles}
-            colors={colors}
-            rowRipple={rowRipple}
-            router={router}
-            t={t}
-            i18n={i18n}
-            openActions={openActions}
-          />
-        </View>
-      ))}
-    </PagerView>
   );
 }
 
@@ -467,30 +162,63 @@ export default function WorkOrdersListScreen() {
   const athene = useAtheneAssistant();
   const { user } = useAuth();
   const rowRipple = surfaceRippleColor(isDark);
-  const [q, setQ] = useState("");
+  const [searchByIndex, setSearchByIndex] = useState<Record<number, string>>({});
   const [activePresetIndex, setActivePresetIndex] = useState(0);
+  const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrderRow | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackEntryMode, setFeedbackEntryMode] = useState<"create" | "pause" | "stop">("create");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
-  /** Header refresh icon: only manual tap (not background refetchInterval / focus), avoids stuck spinner. */
   const [headerRefreshPending, setHeaderRefreshPending] = useState(false);
+  const pagerRef = useRef<PagerView>(null);
 
   const bootstrap = useWorkOrderSearchPresetsBootstrapQuery();
   const presets = bootstrap.data?.presets ?? [];
   const hasPresets = Boolean(bootstrap.isSuccess && presets.length > 0);
 
-  const allOrdersQuery = useWorkOrdersQuery({
-    enabled: bootstrap.isSuccess && (!hasPresets || activePresetIndex === 0),
-  });
-  const { data: allData = [], isLoading: allLoading, isError: allError, isFetching: allFetching, refetch: refetchAll } =
-    allOrdersQuery;
+  const initialActiveIndex = useMemo(() => {
+    const mob = bootstrap.data?.defaults.mobilePresetId;
+    if (!mob || !hasPresets) return 0;
+    const idx = presets.findIndex((p) => isSamePresetId(p.id, mob));
+    return idx >= 0 ? idx + 1 : 0;
+  }, [bootstrap.data?.defaults.mobilePresetId, hasPresets, presets]);
+
+  useEffect(() => {
+    if (bootstrap.isSuccess && hasPresets) {
+      setActivePresetIndex(initialActiveIndex);
+      pagerRef.current?.setPage(initialActiveIndex);
+    }
+  }, [bootstrap.isSuccess, hasPresets, initialActiveIndex]);
+
+  const q = searchByIndex[activePresetIndex] ?? "";
+  const setQ = useCallback(
+    (value: string) => {
+      setSearchByIndex((prev) => ({ ...prev, [activePresetIndex]: value }));
+    },
+    [activePresetIndex],
+  );
+
+  const selectPresetIndex = useCallback((index: number) => {
+    setActivePresetIndex(index);
+    pagerRef.current?.setPage(index);
+  }, []);
+
+  const onPagerPageSelected = useCallback((position: number) => {
+    setActivePresetIndex(position);
+  }, []);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
+        stickyHeader: {
+          backgroundColor: colors.background,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.border,
+        },
+        list: { flex: 1 },
         center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
         err: { color: colors.primary, marginBottom: 12 },
         retry: { padding: 12 },
@@ -500,7 +228,8 @@ export default function WorkOrdersListScreen() {
           alignItems: "center",
           gap: 8,
           marginHorizontal: 16,
-          marginVertical: 12,
+          marginTop: 4,
+          marginBottom: 12,
           paddingHorizontal: 12,
           height: 40,
           borderRadius: 8,
@@ -564,37 +293,7 @@ export default function WorkOrdersListScreen() {
         },
         docChipBlue: { backgroundColor: "rgb(103,232,249)" },
         docChipGreen: { backgroundColor: "rgb(134,239,172)" },
-        docChipMuted: { backgroundColor: "transparent" },
         docChipText: { color: "rgb(15,23,42)", fontWeight: "700", fontSize: 11 },
-        swipeHintBar: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.border,
-          backgroundColor: colors.surface,
-        },
-        swipeHintText: {
-          flex: 1,
-          fontSize: 12,
-          color: colors.onSurfaceVariant,
-          fontWeight: "500",
-        },
-        swipeDots: { flexDirection: "row", alignItems: "center", gap: 5 },
-        swipeDot: {
-          width: 6,
-          height: 6,
-          borderRadius: 3,
-          backgroundColor: colors.border,
-        },
-        swipeDotActive: {
-          backgroundColor: colors.primary,
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-        },
       }),
     [
       colors.background,
@@ -605,6 +304,8 @@ export default function WorkOrdersListScreen() {
       colors.surface,
     ],
   );
+
+  const bootstrapReady = bootstrap.isSuccess;
 
   const refetchLists = useCallback(async () => {
     await qc.invalidateQueries({ queryKey: [...queryKeys.workOrders] });
@@ -621,12 +322,8 @@ export default function WorkOrdersListScreen() {
   }, [refetchLists]);
 
   useLayoutEffect(() => {
-    const title =
-      hasPresets && activePresetIndex > 0
-        ? (presets[activePresetIndex - 1]?.name ?? t("workOrders.appName"))
-        : t("workOrders.appName");
     navigation.setOptions({
-      title,
+      title: t("workOrders.appName"),
       headerRight: () => (
         <ShellHeaderActions
           extra={
@@ -660,10 +357,7 @@ export default function WorkOrdersListScreen() {
   }, [
     colors.primary,
     headerRefreshPending,
-    activePresetIndex,
-    hasPresets,
     navigation,
-    presets,
     refreshFromHeader,
     router,
     rowRipple,
@@ -672,34 +366,6 @@ export default function WorkOrdersListScreen() {
     styles.rowActionBtn,
     t,
   ]);
-
-  const data = allData;
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return data;
-    return data.filter((row) =>
-      [
-        row.orderNumber,
-        row.name,
-        row.description ?? "",
-        row.assetKey,
-        row.assetName,
-        row.costCenterKey,
-        row.costCenterName,
-        row.siteKey,
-        row.siteName,
-        row.orderType,
-        row.status,
-        t(`workOrders.statusValues.${row.status}`),
-        row.createdBy,
-        row.updatedBy,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(s),
-    );
-  }, [data, q, t]);
 
   const load = useCallback(async () => {
     await refetchLists();
@@ -758,9 +424,83 @@ export default function WorkOrdersListScreen() {
     setActionsOpen(true);
   }, []);
 
-  const onActivePresetIndexChange = useCallback((index: number) => {
-    setActivePresetIndex(index);
+  const openPresetDetails = useCallback((presetId: string) => {
+    setDetailsPresetId(presetId);
+    setDetailsOpen(true);
   }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: WorkOrderRow }) => (
+      <View style={styles.row}>
+        <HapticPressable
+          {...androidRippleProps(rowRipple)}
+          style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+          onLongPress={() => openActions(item)}
+          delayLongPress={180}
+          onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
+        >
+          <View style={styles.rowMain}>
+            <View style={styles.keyRow}>
+              <Text style={styles.key}>{item.orderNumber}</Text>
+              <View style={[styles.statusPill, { backgroundColor: workOrderStatusBackground(item.status) }]}>
+                <Text style={[styles.statusPillText, { color: workOrderStatusForeground(item.status) }]}>
+                  {t(`workOrders.statusValues.${item.status}`)}
+                </Text>
+              </View>
+              {(() => {
+                const own = item.documentCount;
+                const asset = item.assetDocumentCount;
+                const total = own + asset;
+                if (total === 0) return null;
+                const isAssetOnly = own === 0 && asset > 0;
+                return (
+                  <View style={[styles.docChip, isAssetOnly ? styles.docChipGreen : styles.docChipBlue]}>
+                    <FileText size={13} color="rgb(15,23,42)" />
+                    <Text style={styles.docChipText}>{total}</Text>
+                  </View>
+                );
+              })()}
+            </View>
+            <Text style={styles.name}>{item.name}</Text>
+            <Text style={styles.type}>
+              {item.assetKey} — {item.assetName}
+            </Text>
+            <Text style={styles.type}>
+              {t(`workOrders.typeValues.${item.orderType}`)} ·{" "}
+              {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
+                new Date(item.plannedStart),
+              )}
+            </Text>
+          </View>
+        </HapticPressable>
+        <View style={styles.rowActionSide}>
+          <HapticPressable
+            {...androidRippleProps(rowRipple, true)}
+            style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={() => openActions(item)}
+          >
+            <MoreVertical size={20} color={colors.onSurfaceVariant} />
+          </HapticPressable>
+          <HapticPressable
+            {...androidRippleProps(rowRipple, true)}
+            style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+            onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
+          >
+            <ChevronRight size={22} color={colors.onSurfaceVariant} />
+          </HapticPressable>
+        </View>
+      </View>
+    ),
+    [
+      colors.onSurfaceVariant,
+      i18n.language,
+      openActions,
+      router,
+      rowRipple,
+      styles,
+      t,
+    ],
+  );
 
   if (bootstrap.isPending || bootstrap.isLoading) {
     return (
@@ -785,165 +525,85 @@ export default function WorkOrdersListScreen() {
     );
   }
 
-  if (!hasPresets) {
-    if (allLoading) {
-      return (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      );
-    }
-
-    if (allError) {
-      return (
-        <View style={styles.center}>
-          <Text style={styles.err}>{t("workOrders.loadError")}</Text>
-          <HapticPressable
-            onPress={() => void refetchAll()}
-            {...androidRippleProps(rowRipple, true)}
-            style={({ pressed }) => [styles.retry, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </HapticPressable>
-        </View>
-      );
-    }
-  }
-
-  const presetPageCount = presets.length + 1;
-
   return (
     <View style={styles.container}>
-      {hasPresets && bootstrap.data ? (
-        <>
-          <View
-            style={styles.swipeHintBar}
-            accessible
-            accessibilityLabel={t("workOrders.swipeSearchConfigsHint")}
-          >
-            <MoveHorizontal size={20} color={colors.primary} importantForAccessibility="no" />
-            <Text style={styles.swipeHintText} importantForAccessibility="no">
-              {t("workOrders.swipeSearchConfigsHint")}
-            </Text>
-            <View style={styles.swipeDots} importantForAccessibility="no">
-              {Array.from({ length: presetPageCount }, (_, i) => (
-                <View
-                  key={String(i)}
-                  style={[styles.swipeDot, i === activePresetIndex ? styles.swipeDotActive : null]}
-                />
-              ))}
-            </View>
+      <View style={styles.stickyHeader}>
+        {hasPresets ? (
+          <WorkOrderFilterPills
+            presets={presets}
+            activeIndex={activePresetIndex}
+            onSelect={selectPresetIndex}
+            onShowDetails={openPresetDetails}
+          />
+        ) : null}
+        <View style={styles.searchWrap}>
+          <Search size={20} color={colors.onSurfaceVariant} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder={t("workOrders.searchPlaceholder")}
+            placeholderTextColor={colors.onSurfaceVariant}
+            style={styles.search}
+          />
+        </View>
+      </View>
+      {hasPresets ? (
+        <PagerView
+          ref={pagerRef}
+          style={styles.list}
+          initialPage={initialActiveIndex}
+          onPageSelected={(e) => onPagerPageSelected(e.nativeEvent.position)}
+        >
+          <View key="__all_work_orders__" collapsable={false} style={styles.list}>
+            <WorkOrdersListPage
+              pageIndex={0}
+              active={activePresetIndex === 0}
+              presets={presets}
+              bootstrapReady={bootstrapReady}
+              searchQ={searchByIndex[0] ?? ""}
+              styles={styles}
+              renderItem={renderItem}
+              t={t}
+            />
           </View>
-        <WorkOrdersPresetPager
-          key={["all", ...presets.map((p) => p.id)].join("-")}
-          presets={presets}
-          defaults={bootstrap.data.defaults}
-          styles={styles}
-          colors={colors}
-          rowRipple={rowRipple}
-          router={router}
-          t={t}
-          i18n={i18n}
-          openActions={openActions}
-          onActiveIndexChange={onActivePresetIndexChange}
-          allTab={{
-            filtered,
-            isLoading: allLoading,
-            isError: allError,
-            refetch: refetchAll,
-            q,
-            setQ,
-          }}
-        />
-        </>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            <View style={styles.searchWrap}>
-              <Search size={20} color={colors.onSurfaceVariant} />
-              <TextInput
-                value={q}
-                onChangeText={setQ}
-                placeholder={t("workOrders.searchPlaceholder")}
-                placeholderTextColor={colors.onSurfaceVariant}
-                style={styles.search}
-              />
-            </View>
-          }
-          ListEmptyComponent={<Text style={styles.empty}>{t("workOrders.empty")}</Text>}
-          contentContainerStyle={filtered.length === 0 ? styles.emptyList : undefined}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <HapticPressable
-                {...androidRippleProps(rowRipple)}
-                style={({ pressed }) => [styles.rowMainPressable, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-                onLongPress={() => openActions(item)}
-                delayLongPress={180}
-                onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-              >
-                <View style={styles.rowMain}>
-                  <View style={styles.keyRow}>
-                    <Text style={styles.key}>{item.orderNumber}</Text>
-                    <View style={[styles.statusPill, { backgroundColor: workOrderStatusBackground(item.status) }]}>
-                      <Text style={[styles.statusPillText, { color: workOrderStatusForeground(item.status) }]}>
-                        {t(`workOrders.statusValues.${item.status}`)}
-                      </Text>
-                    </View>
-                    {(() => {
-                      const own = item.documentCount;
-                      const asset = item.assetDocumentCount;
-                      const total = own + asset;
-                      const isAssetOnly = own === 0 && asset > 0;
-                      return (
-                        <View
-                          style={[
-                            styles.docChip,
-                            total === 0 ? styles.docChipMuted : isAssetOnly ? styles.docChipGreen : styles.docChipBlue,
-                          ]}
-                        >
-                          <FileText
-                            size={13}
-                            color={total === 0 ? "rgb(125,211,252)" : "rgb(15,23,42)"}
-                          />
-                          {total > 0 ? <Text style={styles.docChipText}>{total}</Text> : null}
-                        </View>
-                      );
-                    })()}
-                  </View>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.type}>
-                    {item.assetKey} — {item.assetName}
-                  </Text>
-                  <Text style={styles.type}>
-                    {t(`workOrders.typeValues.${item.orderType}`)} ·{" "}
-                    {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
-                      new Date(item.plannedStart),
-                    )}
-                  </Text>
-                </View>
-              </HapticPressable>
-              <View style={styles.rowActionSide}>
-                <HapticPressable
-                  {...androidRippleProps(rowRipple, true)}
-                  style={({ pressed }) => [styles.rowActionBtn, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-                  onPress={() => openActions(item)}
-                >
-                  <MoreVertical size={20} color={colors.onSurfaceVariant} />
-                </HapticPressable>
-                <HapticPressable
-                  {...androidRippleProps(rowRipple, true)}
-                  style={({ pressed }) => [styles.rowChevron, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
-                  onPress={() => router.push({ pathname: "/work-orders/[id]", params: { id: item.id } })}
-                >
-                  <ChevronRight size={22} color={colors.onSurfaceVariant} />
-                </HapticPressable>
+          {presets.map((preset, i) => {
+            const pageIndex = i + 1;
+            return (
+              <View key={preset.id} collapsable={false} style={styles.list}>
+                <WorkOrdersListPage
+                  pageIndex={pageIndex}
+                  active={activePresetIndex === pageIndex}
+                  presets={presets}
+                  bootstrapReady={bootstrapReady}
+                  searchQ={searchByIndex[pageIndex] ?? ""}
+                  styles={styles}
+                  renderItem={renderItem}
+                  t={t}
+                />
               </View>
-            </View>
-          )}
+            );
+          })}
+        </PagerView>
+      ) : (
+        <WorkOrdersListPage
+          pageIndex={0}
+          active
+          presets={presets}
+          bootstrapReady={bootstrapReady}
+          searchQ={searchByIndex[0] ?? ""}
+          styles={styles}
+          renderItem={renderItem}
+          t={t}
         />
       )}
+      <WorkOrderPresetDetailsSheet
+        visible={detailsOpen}
+        presetId={detailsPresetId}
+        onClose={() => {
+          setDetailsOpen(false);
+          setDetailsPresetId(null);
+        }}
+      />
       <WorkOrderActionsSheet
         visible={actionsOpen}
         status={selectedOrder?.status ?? null}

@@ -346,7 +346,11 @@ export async function buildWorkOrderListFilters(
     } else {
       params.push(uniq);
       pushCond(`(
-        w."responsibleEmployeeId" = ANY($${pi}::uuid[])
+        EXISTS (
+          SELECT 1 FROM "workOrderResponsibleEmployee" r
+          WHERE r."workOrderId" = w."id"
+            AND r."employeeId" = ANY($${pi}::uuid[])
+        )
         OR EXISTS (
           SELECT 1 FROM "workOrderEmployeeAssignment" a
           WHERE a."workOrderId" = w."id"
@@ -360,8 +364,16 @@ export async function buildWorkOrderListFilters(
   // Optional: only responsible (without assignment)
   const responsibleOnly = collectQueryStrings(q, "responsibleEmployeeId");
   if (responsibleOnly.length) {
-    const err = uuidIn(responsibleOnly, `w."responsibleEmployeeId"`, "invalid_responsible_employee_id");
-    if (err) return { ok: false, status: 400, error: err };
+    const ids = [...new Set(responsibleOnly)];
+    for (const id of ids) {
+      if (!isUuid(id)) return { ok: false, status: 400, error: "invalid_responsible_employee_id" };
+    }
+    params.push(ids);
+    pushCond(`EXISTS (
+      SELECT 1 FROM "workOrderResponsibleEmployee" r
+      WHERE r."workOrderId" = w."id"
+        AND r."employeeId" = ANY($${pi++}::uuid[])
+    )`);
   }
 
   return { ok: true, conditions, params };

@@ -12,6 +12,8 @@ type Props = {
   segment: CalendarEventSegment;
   tooltip: string;
   isDragging?: boolean;
+  disabled?: boolean;
+  disabledTooltip?: string;
   draggingEmployeeId?: string | null;
   employeeDropAllowed?: boolean;
   onClick: () => void;
@@ -31,6 +33,8 @@ export function CalendarEventBar({
   segment,
   tooltip,
   isDragging,
+  disabled = false,
+  disabledTooltip,
   draggingEmployeeId,
   employeeDropAllowed = false,
   onClick,
@@ -49,9 +53,10 @@ export function CalendarEventBar({
 
   const employeeDragActive = draggingEmployeeId != null;
   const employeeDropDenied = employeeDragActive && !employeeDropAllowed;
+  const interactionLocked = disabled || employeeDragActive;
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (!onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
+    if (disabled || !onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
@@ -75,7 +80,7 @@ export function CalendarEventBar({
     e.stopPropagation();
     setIsDropTarget(false);
     setIsDropDenied(false);
-    if (!onAssignEmployee || !employeeDropAllowed) return;
+    if (!onAssignEmployee || !employeeDropAllowed || disabled) return;
     const employeeId = readCalendarEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
     onAssignEmployee(segment.eventId, employeeId);
@@ -84,12 +89,14 @@ export function CalendarEventBar({
   return (
     <button
       type="button"
-      draggable={!employeeDragActive}
+      draggable={!interactionLocked}
       className={`app-calendar-event-bar ${orderTypeClass(segment.orderType)}${
         isDragging ? " app-calendar-event-bar--dragging" : ""
-      }${employeeDropDenied ? " app-calendar-event-bar--employee-drop-denied" : ""}${
-        isDropTarget ? " app-calendar-event-bar--drop-target" : ""
-      }${isDropDenied ? " app-calendar-event-bar--drop-denied" : ""}`}
+      }${disabled ? " app-calendar-event-bar--filter-disabled" : ""}${
+        employeeDropDenied ? " app-calendar-event-bar--employee-drop-denied" : ""
+      }${isDropTarget ? " app-calendar-event-bar--drop-target" : ""}${
+        isDropDenied ? " app-calendar-event-bar--drop-denied" : ""
+      }`}
       style={{
         left: pos.left,
         width: pos.width,
@@ -100,12 +107,13 @@ export function CalendarEventBar({
         borderBottomRightRadius: radiusAfter,
         color: textColor,
       }}
-      title={tooltip}
+      title={disabled && disabledTooltip ? `${tooltip}\n${disabledTooltip}` : tooltip}
+      aria-disabled={disabled || undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onDragStart={(e) => {
-        if (employeeDragActive) {
+        if (interactionLocked) {
           e.preventDefault();
           return;
         }

@@ -31,6 +31,7 @@ import { DateTimeField } from "../../components/DateTimeField";
 import { useAtheneAssistant } from "../../assistant/AtheneAssistantContext";
 import { FeedbackRemarkInput } from "../../components/FeedbackRemarkInput";
 import { HapticPressable } from "../../components/HapticPressable";
+import { MultiSelectModal } from "../../components/MultiSelectModal";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import {
   WorkOrderActionError,
@@ -53,6 +54,7 @@ import {
   useWorkOrderAssignmentsQuery,
   useWorkOrderFeedbackQuery,
   useWorkgroupsQuery,
+  useEmployeesQuery,
   useWorkOrdersQuery,
   type WorkOrderSaveBody,
 } from "../../hooks/queries";
@@ -99,6 +101,7 @@ type FormState = {
   costCenterId: string;
   classificationId: string;
   workgroupId: string;
+  responsibleEmployeeIds: string[];
   plannedStart: Date;
   plannedEnd: Date | null;
   plannedDurationHours: string;
@@ -132,6 +135,7 @@ function emptyForm(): FormState {
     costCenterId: "",
     classificationId: "",
     workgroupId: "",
+    responsibleEmployeeIds: [],
     plannedStart: start,
     plannedEnd: new Date(start.getTime() + 24 * 60 * 60 * 1000),
     plannedDurationHours: "24",
@@ -163,6 +167,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const { data: costCenters = [], isLoading: ccLoading } = useCostCentersQuery();
   const { data: classifications = [], isLoading: clfLoading } = useClassificationsQuery();
   const { data: workgroups = [], isLoading: wgLoading } = useWorkgroupsQuery();
+  const { data: employees = [] } = useEmployeesQuery();
 
   const row = useMemo(() => (orderId ? orders.find((o) => o.id === orderId) : undefined), [orderId, orders]);
   const [tabIndex, setTabIndex] = useState(0);
@@ -171,6 +176,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [saving, setSaving] = useState(false);
   const [typeModal, setTypeModal] = useState(false);
   const [workgroupModal, setWorkgroupModal] = useState(false);
+  const [responsibleModal, setResponsibleModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [docSearchTerm, setDocSearchTerm] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingDoc[]>([]);
@@ -419,6 +425,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       costCenterId: row.costCenterId,
       classificationId: row.classificationId ?? "",
       workgroupId: row.workgroupId ?? "",
+      responsibleEmployeeIds: [...(row.responsibleEmployeeIds ?? [])],
       plannedStart: parseIso(row.plannedStart) ?? new Date(),
       plannedEnd: parseIso(row.plannedEnd),
       plannedDurationHours:
@@ -501,13 +508,54 @@ export function WorkOrderEditor({ orderId }: Props) {
     return wg ? `${wg.key} - ${wg.name}` : t("workOrders.workgroupPlaceholder");
   }, [form.workgroupId, t, workgroups]);
 
+  const selectedWorkgroup = useMemo(
+    () => workgroups.find((w) => w.id === form.workgroupId) ?? null,
+    [form.workgroupId, workgroups],
+  );
+
+  const responsibleEmployeeItems = useMemo<SelectItem[]>(
+    () =>
+      (selectedWorkgroup?.leaderEmployeeIds ?? [])
+        .map((id) => employees.find((emp) => emp.id === id))
+        .filter((emp): emp is (typeof employees)[number] => Boolean(emp))
+        .filter((emp) => emp.isActive || form.responsibleEmployeeIds.includes(emp.id))
+        .map((emp) => ({ id: emp.id, label: `${emp.key} - ${emp.name}` })),
+    [employees, form.responsibleEmployeeIds, selectedWorkgroup],
+  );
+
+  const selectedResponsibleLabel = useMemo(() => {
+    if (form.responsibleEmployeeIds.length === 0) return t("workOrders.responsiblePlaceholder");
+    const labels = form.responsibleEmployeeIds
+      .map((id) => employees.find((emp) => emp.id === id))
+      .filter(Boolean)
+      .map((emp) => `${emp!.key} - ${emp!.name}`);
+    return labels.length
+      ? labels.join(", ")
+      : t("workOrders.responsibleCount", { count: form.responsibleEmployeeIds.length });
+  }, [employees, form.responsibleEmployeeIds, t]);
+
   useEffect(() => {
     if (!form.workgroupId) return;
+    const allowed = new Set(selectedWorkgroup?.leaderEmployeeIds ?? []);
+    const next = form.responsibleEmployeeIds.filter((id) => allowed.has(id));
+    if (next.length === form.responsibleEmployeeIds.length && next.every((id, i) => id === form.responsibleEmployeeIds[i])) {
+      return;
+    }
+    setForm((cur) => ({ ...cur, responsibleEmployeeIds: next }));
+  }, [form.responsibleEmployeeIds, form.workgroupId, selectedWorkgroup]);
+
+  useEffect(() => {
+    if (!form.workgroupId || wgLoading || assetsLoading) return;
     const wg = workgroups.find((w) => w.id === form.workgroupId);
-    if (!wg || !selectedAsset?.siteId || wg.siteId !== selectedAsset.siteId) {
+    if (!wg) {
+      setForm((cur) => ({ ...cur, workgroupId: "" }));
+      return;
+    }
+    if (!selectedAsset?.siteId) return;
+    if (wg.siteId !== selectedAsset.siteId) {
       setForm((cur) => ({ ...cur, workgroupId: "" }));
     }
-  }, [form.workgroupId, selectedAsset?.siteId, workgroups]);
+  }, [assetsLoading, form.workgroupId, selectedAsset?.siteId, wgLoading, workgroups]);
 
   useEffect(() => {
     if (!orderId) prevCreateAssetIdForDefaultWgRef.current = null;
@@ -582,8 +630,9 @@ export function WorkOrderEditor({ orderId }: Props) {
       assetId: !form.assetId,
       costCenterId: !form.costCenterId,
       workgroupId: !form.workgroupId.trim(),
+      responsibleEmployeeIds: form.responsibleEmployeeIds.length === 0,
     }),
-    [form.assetId, form.costCenterId, form.name, form.workgroupId],
+    [form.assetId, form.costCenterId, form.name, form.responsibleEmployeeIds.length, form.workgroupId],
   );
 
   const styles = useMemo(
@@ -732,7 +781,7 @@ export function WorkOrderEditor({ orderId }: Props) {
           : Number.isFinite(Number(hoursRaw)) && Number(hoursRaw) >= 0
             ? Number(hoursRaw)
             : NaN;
-      if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
+      if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim() || form.responsibleEmployeeIds.length === 0) {
         return null;
       }
       if (Number.isNaN(hours)) return null;
@@ -747,6 +796,7 @@ export function WorkOrderEditor({ orderId }: Props) {
         plannedDurationMinutes: hours == null ? null : Math.round(hours * 60),
         orderType: form.orderType,
         workgroupId: form.workgroupId.trim(),
+        responsibleEmployeeIds: [...form.responsibleEmployeeIds],
       };
     })();
     if (!payload) return null;
@@ -869,7 +919,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const onSave = async () => {
     const name = form.name.trim();
     const description = form.description.trim();
-    if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
+    if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim() || form.responsibleEmployeeIds.length === 0) {
       setShowRequiredHints(true);
       setTabIndex(tabRoutes.findIndex((r) => r.key === "general"));
       Alert.alert("", t("workOrders.validationRequired"));
@@ -902,6 +952,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       plannedDurationMinutes: hours == null ? null : Math.round(hours * 60),
       orderType: form.orderType,
       workgroupId: form.workgroupId.trim(),
+      responsibleEmployeeIds: [...form.responsibleEmployeeIds],
     };
 
     setSaving(true);
@@ -1148,8 +1199,42 @@ export function WorkOrderEditor({ orderId }: Props) {
             visible={workgroupModal}
             title={t("workOrders.workgroup")}
             items={workgroupItems}
-            onSelect={(id) => setForm((cur) => ({ ...cur, workgroupId: String(id) }))}
+            onSelect={(id) =>
+              setForm((cur) => ({
+                ...cur,
+                workgroupId: String(id),
+                responsibleEmployeeIds: [],
+              }))
+            }
             onClose={() => setWorkgroupModal(false)}
+          />
+
+          <Text style={styles.label}>
+            {t("workOrders.responsible")} <Text style={{ color: colors.primary }}>*</Text>
+          </Text>
+          <HapticPressable
+            {...androidRippleProps(ripple)}
+            style={({ pressed }) => [
+              styles.input,
+              (!form.workgroupId || responsibleEmployeeItems.length === 0) && { opacity: 0.5 },
+              showRequiredHints && requiredMissing.responsibleEmployeeIds && styles.requiredInput,
+              form.workgroupId && responsibleEmployeeItems.length > 0
+                ? pressedOpacity(pressed, PRESSED_OPACITY_ROW)
+                : null,
+            ]}
+            disabled={!form.workgroupId || responsibleEmployeeItems.length === 0}
+            onPress={() => setResponsibleModal(true)}
+          >
+            <Text style={{ color: colors.onSurface }}>{selectedResponsibleLabel}</Text>
+          </HapticPressable>
+          <MultiSelectModal
+            visible={responsibleModal}
+            title={t("workOrders.responsible")}
+            items={responsibleEmployeeItems}
+            selectedIds={form.responsibleEmployeeIds}
+            onChange={(ids) => setForm((cur) => ({ ...cur, responsibleEmployeeIds: ids }))}
+            onClose={() => setResponsibleModal(false)}
+            doneLabel={t("workOrders.done")}
           />
 
           <DateTimeField

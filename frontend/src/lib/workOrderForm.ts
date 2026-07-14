@@ -10,7 +10,7 @@ export type WorkOrderFormFields = {
   plannedEnd: Date | null;
   plannedDurationHours: string;
   orderType: WorkOrderType;
-  responsibleEmployeeId: string;
+  responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string;
   originalWoId: string;
@@ -29,7 +29,7 @@ export type WorkOrderFormSource = {
   plannedEnd: string;
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   workgroupId: string | null;
   classificationId: string | null;
   originalWo?: string | null;
@@ -55,7 +55,7 @@ export function emptyWorkOrderForm(): WorkOrderFormFields {
     plannedEnd,
     plannedDurationHours: "24",
     orderType: "maintenance",
-    responsibleEmployeeId: "",
+    responsibleEmployeeIds: [],
     workgroupId: "",
     classificationId: "",
     originalWoId: "",
@@ -83,7 +83,7 @@ export function workOrderRowToFormState(
           ? String(row.plannedDurationMinutes / 60)
           : (row.plannedDurationMinutes / 60).toFixed(2),
     orderType: row.orderType,
-    responsibleEmployeeId: row.responsibleEmployeeId ?? "",
+    responsibleEmployeeIds: [...(row.responsibleEmployeeIds ?? [])],
     workgroupId: row.workgroupId ?? "",
     classificationId: row.classificationId ?? "",
     originalWoId: asCopy ? row.id : (row.originalWo ?? ""),

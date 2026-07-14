@@ -51,6 +51,7 @@ type Workgroup = {
   siteColorHex: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -63,6 +64,7 @@ type FormState = {
   siteId: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
 };
 
 const emptyForm = (): FormState => ({
@@ -71,6 +73,7 @@ const emptyForm = (): FormState => ({
   siteId: "",
   isActive: true,
   employeeIds: [],
+  leaderEmployeeIds: [],
 });
 
 const actionNavItem =
@@ -157,6 +160,11 @@ export function WorkgroupsPage() {
     return employees.filter((entry) => hasEmployeeSiteAccess(entry, form.siteId));
   }, [employees, form.siteId]);
 
+  const eligibleLeaders = useMemo(
+    () => eligibleEmployees.filter((entry) => form.employeeIds.includes(entry.id)),
+    [eligibleEmployees, form.employeeIds],
+  );
+
   const filteredWorkgroups = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return workgroups;
@@ -230,6 +238,7 @@ export function WorkgroupsPage() {
       siteId: row.siteId,
       isActive: row.isActive,
       employeeIds: uniqueIds(row.employeeIds),
+      leaderEmployeeIds: uniqueIds(row.leaderEmployeeIds ?? []),
     });
     setDialogVisible(true);
   }, []);
@@ -246,6 +255,7 @@ export function WorkgroupsPage() {
     if (code === "duplicate_key") detail = t("workgroups.duplicateKey");
     if (code === "foreign_key_violation") detail = t("workgroups.foreignKey");
     if (code === "member_site_mismatch") detail = t("workgroups.memberSiteMismatch");
+    if (code === "leader_not_member") detail = t("workgroups.leaderNotMember");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -269,6 +279,7 @@ export function WorkgroupsPage() {
         siteId,
         isActive: form.isActive,
         employeeIds: uniqueIds(form.employeeIds),
+        leaderEmployeeIds: uniqueIds(form.leaderEmployeeIds),
       };
       const url = editingId ? `/api/workgroups/${editingId}` : "/api/workgroups";
       const res = await apiFetch(url, {
@@ -423,10 +434,32 @@ export function WorkgroupsPage() {
         const entry = employeeLookup.get(id);
         return entry ? hasEmployeeSiteAccess(entry, cur.siteId) : false;
       });
-      if (filtered.length === cur.employeeIds.length) return cur;
-      return { ...cur, employeeIds: filtered };
+      const filteredLeaders = cur.leaderEmployeeIds.filter((id) => filtered.includes(id));
+      if (
+        filtered.length === cur.employeeIds.length &&
+        filteredLeaders.length === cur.leaderEmployeeIds.length &&
+        filtered.every((id, index) => id === cur.employeeIds[index]) &&
+        filteredLeaders.every((id, index) => id === cur.leaderEmployeeIds[index])
+      ) {
+        return cur;
+      }
+      return { ...cur, employeeIds: filtered, leaderEmployeeIds: filteredLeaders };
     });
   }, [employeeLookup, form.siteId]);
+
+  useEffect(() => {
+    setForm((cur) => {
+      const memberSet = new Set(cur.employeeIds);
+      const filteredLeaders = cur.leaderEmployeeIds.filter((id) => memberSet.has(id));
+      if (
+        filteredLeaders.length === cur.leaderEmployeeIds.length &&
+        filteredLeaders.every((id, index) => id === cur.leaderEmployeeIds[index])
+      ) {
+        return cur;
+      }
+      return { ...cur, leaderEmployeeIds: filteredLeaders };
+    });
+  }, [form.employeeIds]);
 
   const activeBody = (row: Workgroup) =>
     row.isActive ? (
@@ -683,6 +716,35 @@ export function WorkgroupsPage() {
               display="comma"
               appendTo={overlayAppendTo}
               disabled={!form.siteId}
+            />
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="workgroup-leadership"
+              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+            >
+              {t("workgroups.leadership")}
+            </label>
+            <MultiSelect
+              inputId="workgroup-leadership"
+              value={form.leaderEmployeeIds}
+              options={eligibleLeaders}
+              optionLabel="name"
+              optionValue="id"
+              itemTemplate={employeeOptionTemplate}
+              selectedItemTemplate={selectedEmployeeTemplate}
+              onChange={(e) =>
+                setForm((cur) => ({
+                  ...cur,
+                  leaderEmployeeIds: uniqueIds((Array.isArray(e.value) ? e.value : []).map((entry) => String(entry))),
+                }))
+              }
+              placeholder={t("workgroups.leadershipPlaceholder")}
+              className="w-full"
+              filter
+              display="comma"
+              appendTo={overlayAppendTo}
+              disabled={form.employeeIds.length === 0}
             />
           </div>
           <label className="flex cursor-pointer items-center gap-3 group">

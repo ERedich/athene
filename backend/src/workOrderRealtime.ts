@@ -29,7 +29,7 @@ export type WorkOrderRealtimePayload = {
   plannedDurationMinutes: number | null;
   orderType: "maintenance" | "repair" | "breakdown";
   status: "open" | "assigned" | "started" | "paused" | "continued" | "ended" | "done" | "cancelled";
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
   doneBy: string | null;
@@ -113,6 +113,35 @@ export async function broadcastSubscriptionNotification(
   for (const [socket, socketUserId] of sockets.entries()) {
     if (socket.readyState !== WebSocket.OPEN) continue;
     if (socketUserId !== userId) continue;
+    socket.send(message);
+  }
+}
+
+export type ChatNotificationPayload = {
+  id: string;
+  userId: string;
+  workOrderId: string;
+  messageId: string;
+  orderNumber: number;
+  workOrderName: string;
+  siteKey: string;
+  siteName: string;
+  messagePreview: string;
+  authorUserName: string;
+  isReply: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export async function broadcastChatNotification(notification: ChatNotificationPayload): Promise<void> {
+  if (sockets.size === 0) return;
+  const message = JSON.stringify({
+    type: "chat_notification",
+    notification,
+  });
+  for (const [socket, socketUserId] of sockets.entries()) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    if (socketUserId !== notification.userId) continue;
     socket.send(message);
   }
 }

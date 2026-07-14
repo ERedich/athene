@@ -709,6 +709,22 @@ html.theme-crossfade-fallback #root {
   box-shadow: none !important;
 }
 
+/* Sidebar bell: unread notification blip (dot only, no count). */
+.app-notification-bell-blip.p-badge {
+  min-width: 0.5rem !important;
+  width: 0.5rem !important;
+  height: 0.5rem !important;
+  padding: 0 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  border-radius: 9999px !important;
+  background: var(--color-primary) !important;
+  color: transparent !important;
+  box-shadow: none !important;
+  top: 0.35rem !important;
+  right: 0.35rem !important;
+}
+
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled {
   background: transparent !important;
@@ -1194,6 +1210,38 @@ html.theme-crossfade-fallback #root {
   overflow: auto;
   overscroll-behavior: contain;
   padding-top: 1rem;
+}
+
+.app-wo-edit-page-view {
+  min-height: 0;
+  height: 100%;
+}
+
+.app-wo-edit-page-view__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-wo-edit-page-view__body .app-wo-edit-tab-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.app-wo-edit-page-view__body .app-wo-edit-tab-host .p-tabview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.app-wo-edit-page-view__body .app-wo-edit-tab-host .p-tabview-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .app-tabbed-modal-window .p-dialog-content {
@@ -2181,6 +2229,22 @@ html.theme-crossfade-fallback #root {
   }
 }
 
+@keyframes app-feedback-voice-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+.app-feedback-voice-pulse-ring {
+  animation: app-feedback-voice-pulse 1.6s ease-in-out infinite;
+}
+
 /* Dashboard KPI grid — full viewport, shared borders, equal cells */
 .app-dashboard-page {
   display: flex;
@@ -2900,6 +2964,17 @@ button.app-calendar-day__num:focus-visible {
   cursor: grabbing;
 }
 
+.app-calendar-event-bar--filter-disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.55) brightness(0.94);
+  border: 1px dashed color-mix(in srgb, var(--color-outline) 55%, transparent);
+}
+
+.app-calendar-event-bar--filter-disabled:hover {
+  filter: grayscale(0.55) brightness(0.94);
+}
+
 .app-calendar-event-bar--employee-drop-denied {
   opacity: 0.35;
   cursor: not-allowed;
@@ -3027,7 +3102,8 @@ button.app-calendar-day__num:focus-visible {
   pointer-events: none;
 }
 
-.app-calendar-move-panel.p-dialog {
+.app-calendar-move-panel.p-dialog,
+.app-planning-conflict-confirm.p-dialog {
   width: 24rem;
   max-width: calc(100vw - 2rem);
 }

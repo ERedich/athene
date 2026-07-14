@@ -20,6 +20,7 @@ type Props = {
   formatDateTime: (iso: string) => string;
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
+  workgroupFilterId?: string | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
@@ -31,6 +32,7 @@ export function CalendarDayTimeline({
   formatDateTime,
   draggingEmployeeId,
   droppableWorkOrderIds,
+  workgroupFilterId = null,
   onEventClick,
   onAskAthene,
   onAssignEmployee,
@@ -81,25 +83,31 @@ export function CalendarDayTimeline({
               ))}
             </div>
             <div className="app-calendar-timeline-events">
-              {segments.map((seg) => (
+              {segments.map((seg) => {
+                const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
+                const filterDisabled =
+                  workgroupFilterId != null && wo != null && wo.workgroupId !== workgroupFilterId;
+                return (
                 <CalendarTimelineEventBar
                   key={`${seg.eventId}-${seg.startMinute}-${seg.laneIndex}`}
                   segment={seg}
                   tooltip={segmentTooltip(seg)}
+                  disabled={filterDisabled}
+                  disabledTooltip={filterDisabled ? t("kalendar.workgroupFilterDisabledOrder") : undefined}
                   draggingEmployeeId={draggingEmployeeId}
-                  employeeDropAllowed={droppableWorkOrderIds?.has(seg.eventId) ?? false}
+                  employeeDropAllowed={!filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)}
                   onClick={() => handleSegmentClick(seg)}
                   onAskAthene={
                     onAskAthene
                       ? () => {
-                          const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
                           if (wo) onAskAthene(wo);
                         }
                       : undefined
                   }
                   onAssignEmployee={onAssignEmployee}
                 />
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

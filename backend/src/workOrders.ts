@@ -32,6 +32,7 @@ import {
 } from "./documents/index.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
+import { workOrderMessagesRouter } from "./workOrderMessages.js";
 import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
 import {
   calendarDayKey,
@@ -77,7 +78,7 @@ type WorkOrderRow = {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   status: WorkOrderStatus;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
   doneBy: string | null;
@@ -120,7 +121,7 @@ type ParsedBody = {
   plannedEnd: string | null;
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string | null;
   originalWo: string | null;
@@ -151,6 +152,13 @@ const allowedWorkOrderStatuses: WorkOrderStatus[] = [
 ];
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
+}
+
+function normalizeEmployeeIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
+  if (normalized.some((id) => !isUuid(id))) return null;
+  return [...new Set(normalized)];
 }
 
 function isWorkOrderType(value: unknown): value is WorkOrderType {
@@ -292,10 +300,8 @@ function parseBody(body: unknown): ParsedBody | null {
   const orderType = o.orderType;
   if (!isWorkOrderType(orderType)) return null;
 
-  const responsibleEmployeeIdRaw =
-    typeof o.responsibleEmployeeId === "string" ? o.responsibleEmployeeId.trim() : "";
-  const responsibleEmployeeId = responsibleEmployeeIdRaw ? responsibleEmployeeIdRaw : null;
-  if (responsibleEmployeeId !== null && !isUuid(responsibleEmployeeId)) return null;
+  const responsibleEmployeeIds = normalizeEmployeeIds(o.responsibleEmployeeIds);
+  if (!responsibleEmployeeIds || responsibleEmployeeIds.length === 0) return null;
 
   if (typeof o.workgroupId !== "string") return null;
   const workgroupIdTrimmed = o.workgroupId.trim();
@@ -316,7 +322,7 @@ function parseBody(body: unknown): ParsedBody | null {
     plannedEnd,
     plannedDurationMinutes,
     orderType,
-    responsibleEmployeeId,
+    responsibleEmployeeIds,
     workgroupId: workgroupIdTrimmed,
     classificationId: classificationIdRaw,
     originalWo: originalWoRaw,
@@ -356,6 +362,26 @@ function auditMeta(req: Request) {
   };
 }
 
+const responsibleEmployeeColumnsSql = (workOrderIdRef: string) => `
+  (
+    SELECT COALESCE(array_agg(wor."employeeId"::text ORDER BY e."key"), ARRAY[]::text[])
+    FROM "workOrderResponsibleEmployee" wor
+    JOIN "employee" e ON e."id" = wor."employeeId"
+    WHERE wor."workOrderId" = ${workOrderIdRef}
+  ) AS "responsibleEmployeeIds",
+  (
+    SELECT NULLIF(COALESCE(string_agg(e."key", ', ' ORDER BY e."key"), ''), '')
+    FROM "workOrderResponsibleEmployee" wor
+    JOIN "employee" e ON e."id" = wor."employeeId"
+    WHERE wor."workOrderId" = ${workOrderIdRef}
+  ) AS "responsibleEmployeeKey",
+  (
+    SELECT NULLIF(COALESCE(string_agg(e."name", ', ' ORDER BY e."key"), ''), '')
+    FROM "workOrderResponsibleEmployee" wor
+    JOIN "employee" e ON e."id" = wor."employeeId"
+    WHERE wor."workOrderId" = ${workOrderIdRef}
+  ) AS "responsibleEmployeeName"`;
+
 const selectWorkOrdersSql = `
   SELECT
     w."id",
@@ -380,9 +406,7 @@ const selectWorkOrdersSql = `
     w."plannedDurationMinutes",
     w."orderType",
     w."status",
-    w."responsibleEmployeeId",
-    re."key" AS "responsibleEmployeeKey",
-    re."name" AS "responsibleEmployeeName",
+    ${responsibleEmployeeColumnsSql('w."id"')},
     w."doneBy",
     dbe."key" AS "doneByEmployeeKey",
     dbe."name" AS "doneByEmployeeName",
@@ -414,7 +438,6 @@ const selectWorkOrdersSql = `
   JOIN "asset" a ON a."id" = w."assetId"
   JOIN "costCenter" c ON c."id" = w."costCenterId"
   LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
-  LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
@@ -491,6 +514,108 @@ async function assertWorkgroupForOrderSite(
     [workgroupId, orderSiteId, userId],
   );
   if (!rows[0]) throw new Error("invalid_workgroup");
+}
+
+async function assertResponsibleEmployeesContext(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  userId: string,
+  responsibleEmployeeIds: string[],
+  siteId: string,
+  workgroupId: string | null,
+): Promise<void> {
+  if (responsibleEmployeeIds.length === 0) {
+    throw new Error("responsible_required");
+  }
+  for (const responsibleEmployeeId of responsibleEmployeeIds) {
+    const employee = await client.query<QueryResultRow & { id: string; siteId: string }>(
+      `
+      SELECT "id", "siteId"::text AS "siteId"
+      FROM "employee"
+      WHERE "id" = $1::uuid
+        AND ${siteAccessSql('"siteId"', "$2")}
+      `,
+      [responsibleEmployeeId, userId],
+    );
+    const employeeRow = employee.rows[0];
+    if (!employeeRow) throw new Error("invalid_responsible_employee");
+    if (employeeRow.siteId !== siteId) throw new Error("responsible_employee_site_mismatch");
+    if (workgroupId) {
+      const m = await client.query<{ ok: string }>(
+        `
+        SELECT '1' AS ok
+        FROM "workgroupUser"
+        WHERE "workgroupId" = $1::uuid
+          AND "employeeId" = $2::uuid
+          AND "isLeader" = true
+        LIMIT 1
+        `,
+        [workgroupId, responsibleEmployeeId],
+      );
+      if (!m.rows[0]) {
+        throw new Error("responsible_employee_not_leader");
+      }
+    }
+  }
+}
+
+async function setWorkOrderResponsibles(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  workOrderId: string,
+  employeeIds: string[],
+): Promise<void> {
+  await client.query(`DELETE FROM "workOrderResponsibleEmployee" WHERE "workOrderId" = $1::uuid`, [
+    workOrderId,
+  ]);
+  if (employeeIds.length === 0) return;
+  const placeholders = employeeIds.map((_, idx) => `($1::uuid, $${idx + 2}::uuid)`).join(", ");
+  await client.query(
+    `
+    INSERT INTO "workOrderResponsibleEmployee" ("workOrderId", "employeeId")
+    VALUES ${placeholders}
+    ON CONFLICT ("workOrderId", "employeeId") DO NOTHING
+    `,
+    [workOrderId, ...employeeIds],
+  );
+}
+
+async function fetchWorkOrderRow(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  workOrderId: string,
+): Promise<WorkOrderRow | null> {
+  const { rows } = await client.query<WorkOrderRow>(
+    `
+    ${selectWorkOrdersSql}
+    WHERE w."id" = $1::uuid
+    LIMIT 1
+    `,
+    [workOrderId],
+  );
+  return rows[0] ?? null;
+}
+
+async function assertResponsiblesCompatibleWithWorkgroup(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  workOrderId: string,
+  workgroupId: string | null,
+): Promise<void> {
+  if (!workgroupId) return;
+  const { rowCount } = await client.query(
+    `
+    SELECT 1
+    FROM "workOrderResponsibleEmployee" r
+    WHERE r."workOrderId" = $1::uuid
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "workgroupUser" wu
+        WHERE wu."workgroupId" = $2::uuid
+          AND wu."employeeId" = r."employeeId"
+          AND wu."isLeader" = true
+      )
+    LIMIT 1
+    `,
+    [workOrderId, workgroupId],
+  );
+  if ((rowCount ?? 0) > 0) throw new Error("responsibles_incompatible_with_workgroup");
 }
 
 async function assertResponsibleEmployeeContext(
@@ -1476,10 +1601,10 @@ router.post("/", async (req: Request, res: Response) => {
       }
       await assertSiteAccess(client, meta.userId, effectiveSiteId);
       await assertWorkgroupForOrderSite(client, meta.userId, parsed.workgroupId, effectiveSiteId);
-      await assertResponsibleEmployeeContext(
+      await assertResponsibleEmployeesContext(
         client,
         meta.userId,
-        parsed.responsibleEmployeeId,
+        parsed.responsibleEmployeeIds,
         effectiveSiteId,
         parsed.workgroupId,
       );
@@ -1496,70 +1621,13 @@ router.post("/", async (req: Request, res: Response) => {
         if (!template) throw new Error("invalid_original_wo");
       }
 
-      const { rows } = await client.query<WorkOrderRow>(
+      const inserted = await client.query<{ id: string }>(
         `
-        WITH inserted AS (
-          INSERT INTO "workOrder"
-            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId", "originalWo")
-          VALUES
-            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid)
-          RETURNING *
-        )
-        SELECT
-          i."id",
-          i."orderNumber",
-          i."name",
-          i."description",
-          i."siteId",
-          s."key" AS "siteKey",
-          s."name" AS "siteName",
-          s."colorHex" AS "siteColorHex",
-          i."assetId",
-          a."key" AS "assetKey",
-          a."name" AS "assetName",
-          i."costCenterId",
-          c."key" AS "costCenterKey",
-          c."name" AS "costCenterName",
-          i."classificationId",
-          cl."key" AS "classificationKey",
-          cl."name" AS "classificationName",
-          i."plannedStart",
-          i."plannedEnd",
-          i."plannedDurationMinutes",
-          i."orderType",
-          i."status",
-          i."responsibleEmployeeId",
-          re."key" AS "responsibleEmployeeKey",
-          re."name" AS "responsibleEmployeeName",
-          i."doneBy",
-          dbe."key" AS "doneByEmployeeKey",
-          dbe."name" AS "doneByEmployeeName",
-          i."workgroupId",
-          wg."key" AS "workgroupKey",
-          wg."name" AS "workgroupName",
-          i."originalWo",
-          orig."orderNumber" AS "originalWoOrderNumber",
-          orig."name" AS "originalWoName",
-          i."createdAt",
-          i."updatedAt",
-          COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
-          COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
-          0::int AS "documentCount",
-          COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-          0::int AS "assignedEmployeeCount",
-          0::int AS "transactionCount"
-        FROM inserted i
-        JOIN "site" s ON s."id" = i."siteId"
-        JOIN "asset" a ON a."id" = i."assetId"
-        JOIN "costCenter" c ON c."id" = i."costCenterId"
-        LEFT JOIN "classification" cl ON cl."id" = i."classificationId"
-        LEFT JOIN "employee" re ON re."id" = i."responsibleEmployeeId"
-        LEFT JOIN "employee" dbe ON dbe."id" = i."doneBy"
-        LEFT JOIN "workgroup" wg ON wg."id" = i."workgroupId"
-        LEFT JOIN "workOrder" orig ON orig."id" = i."originalWo"
-        LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
-        LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
-        ${workOrderAssetDocumentCountSubqueryOnInsert}
+        INSERT INTO "workOrder"
+          ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId", "originalWo")
+        VALUES
+          ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
+        RETURNING "id"
         `,
         [
           parsed.name,
@@ -1571,13 +1639,15 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.plannedEnd,
           parsed.plannedDurationMinutes,
           parsed.orderType,
-          parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
           parsed.originalWo,
         ],
       );
-      return rows[0] ?? null;
+      const workOrderId = inserted.rows[0]?.id;
+      if (!workOrderId) return null;
+      await setWorkOrderResponsibles(client, workOrderId, parsed.responsibleEmployeeIds);
+      return await fetchWorkOrderRow(client, workOrderId);
     });
     if (!row) {
       res.status(500).json({ error: "no_row" });
@@ -1628,6 +1698,14 @@ router.post("/", async (req: Request, res: Response) => {
     }
     if (message === "responsible_employee_not_in_workgroup") {
       res.status(400).json({ error: "responsible_employee_not_in_workgroup" });
+      return;
+    }
+    if (message === "responsible_required") {
+      res.status(400).json({ error: "responsible_required" });
+      return;
+    }
+    if (message === "responsible_employee_not_leader") {
+      res.status(400).json({ error: "responsible_employee_not_leader" });
       return;
     }
     if (message === "invalid_original_wo") {
@@ -1722,10 +1800,10 @@ router.put("/:id", async (req: Request, res: Response) => {
       await assertSiteAccess(client, meta.userId, effectiveSiteId);
       await assertWorkgroupForOrderSite(client, meta.userId, parsed.workgroupId, effectiveSiteId);
       await assertAssignmentsCompatibleWithWorkgroup(client, id, parsed.workgroupId);
-      await assertResponsibleEmployeeContext(
+      await assertResponsibleEmployeesContext(
         client,
         meta.userId,
-        parsed.responsibleEmployeeId,
+        parsed.responsibleEmployeeIds,
         effectiveSiteId,
         parsed.workgroupId,
       );
@@ -1737,92 +1815,22 @@ router.put("/:id", async (req: Request, res: Response) => {
         "work_order",
       );
 
-      const { rows } = await client.query<WorkOrderRow>(
+      await client.query(
         `
-        WITH updated AS (
-          UPDATE "workOrder"
-          SET
-            "name" = $1,
-            "description" = $2,
-            "siteId" = $3::uuid,
-            "assetId" = $4::uuid,
-            "costCenterId" = $5::uuid,
-            "plannedStart" = $6::timestamptz,
-            "plannedEnd" = $7::timestamptz,
-            "plannedDurationMinutes" = $8::integer,
-            "orderType" = $9,
-            "responsibleEmployeeId" = $10::uuid,
-            "workgroupId" = $11::uuid,
-            "classificationId" = $12::uuid
-          WHERE "id" = $13::uuid
-          RETURNING *
-        )
-        SELECT
-          u."id",
-          u."orderNumber",
-          u."name",
-          u."description",
-          u."siteId",
-          s."key" AS "siteKey",
-          s."name" AS "siteName",
-          s."colorHex" AS "siteColorHex",
-          u."assetId",
-          a."key" AS "assetKey",
-          a."name" AS "assetName",
-          u."costCenterId",
-          c."key" AS "costCenterKey",
-          c."name" AS "costCenterName",
-          u."classificationId",
-          clf."key" AS "classificationKey",
-          clf."name" AS "classificationName",
-          u."plannedStart",
-          u."plannedEnd",
-          u."plannedDurationMinutes",
-          u."orderType",
-          u."status",
-          u."responsibleEmployeeId",
-          re."key" AS "responsibleEmployeeKey",
-          re."name" AS "responsibleEmployeeName",
-          u."doneBy",
-          dbe."key" AS "doneByEmployeeKey",
-          dbe."name" AS "doneByEmployeeName",
-          u."workgroupId",
-          wg."key" AS "workgroupKey",
-          wg."name" AS "workgroupName",
-          u."originalWo",
-          orig."orderNumber" AS "originalWoOrderNumber",
-          orig."name" AS "originalWoName",
-          u."createdAt",
-          u."updatedAt",
-          COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
-          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
-          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
-          COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-          COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
-          COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
-        FROM updated u
-        JOIN "site" s ON s."id" = u."siteId"
-        JOIN "asset" a ON a."id" = u."assetId"
-        JOIN "costCenter" c ON c."id" = u."costCenterId"
-        LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
-        LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
-        LEFT JOIN "employee" dbe ON dbe."id" = u."doneBy"
-        LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
-        LEFT JOIN "workOrder" orig ON orig."id" = u."originalWo"
-        LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
-        LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
-        ${workOrderDocumentCountSubqueryOnUpdate}
-        ${workOrderAssetDocumentCountSubqueryOnUpdate}
-        LEFT JOIN (
-          SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
-          FROM "workOrderEmployeeAssignment"
-          GROUP BY "workOrderId"
-        ) assign_counts ON assign_counts."workOrderId" = u."id"
-        LEFT JOIN (
-          SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
-          FROM "transaction"
-          GROUP BY "workOrderId"
-        ) tx_counts ON tx_counts."workOrderId" = u."id"
+        UPDATE "workOrder"
+        SET
+          "name" = $1,
+          "description" = $2,
+          "siteId" = $3::uuid,
+          "assetId" = $4::uuid,
+          "costCenterId" = $5::uuid,
+          "plannedStart" = $6::timestamptz,
+          "plannedEnd" = $7::timestamptz,
+          "plannedDurationMinutes" = $8::integer,
+          "orderType" = $9,
+          "workgroupId" = $10::uuid,
+          "classificationId" = $11::uuid
+        WHERE "id" = $12::uuid
         `,
         [
           parsed.name,
@@ -1834,13 +1842,13 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.plannedEnd,
           parsed.plannedDurationMinutes,
           parsed.orderType,
-          parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
           id,
         ],
       );
-      return rows[0] ?? null;
+      await setWorkOrderResponsibles(client, id, parsed.responsibleEmployeeIds);
+      return await fetchWorkOrderRow(client, id);
     });
     if (!row) {
       res.status(404).json({ error: "not_found" });
@@ -1899,6 +1907,18 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "responsible_employee_not_in_workgroup") {
       res.status(400).json({ error: "responsible_employee_not_in_workgroup" });
+      return;
+    }
+    if (message === "responsible_required") {
+      res.status(400).json({ error: "responsible_required" });
+      return;
+    }
+    if (message === "responsible_employee_not_leader") {
+      res.status(400).json({ error: "responsible_employee_not_leader" });
+      return;
+    }
+    if (message === "responsibles_incompatible_with_workgroup") {
+      res.status(400).json({ error: "responsibles_incompatible_with_workgroup" });
       return;
     }
     if (message === "assignments_incompatible_with_workgroup") {
@@ -2165,7 +2185,7 @@ export async function updateWorkOrderPlanning(
     plannedEnd: plannedEndIso,
     plannedDurationMinutes,
     orderType: row.orderType,
-    responsibleEmployeeId: row.responsibleEmployeeId,
+    responsibleEmployeeIds: row.responsibleEmployeeIds,
     workgroupId: row.workgroupId,
     classificationId: row.classificationId,
   });
@@ -2209,10 +2229,10 @@ export async function updateWorkOrderPlanning(
       await assertSiteAccess(client, meta.userId, effectiveSiteId);
       await assertWorkgroupForOrderSite(client, meta.userId, parsed.workgroupId, effectiveSiteId);
       await assertAssignmentsCompatibleWithWorkgroup(client, workOrderId, parsed.workgroupId);
-      await assertResponsibleEmployeeContext(
+      await assertResponsibleEmployeesContext(
         client,
         meta.userId,
-        parsed.responsibleEmployeeId,
+        parsed.responsibleEmployeeIds,
         effectiveSiteId,
         parsed.workgroupId,
       );
@@ -2224,92 +2244,22 @@ export async function updateWorkOrderPlanning(
         "work_order",
       );
 
-      const { rows } = await client.query<WorkOrderRow>(
+      await client.query(
         `
-        WITH updated AS (
-          UPDATE "workOrder"
-          SET
-            "name" = $1,
-            "description" = $2,
-            "siteId" = $3::uuid,
-            "assetId" = $4::uuid,
-            "costCenterId" = $5::uuid,
-            "plannedStart" = $6::timestamptz,
-            "plannedEnd" = $7::timestamptz,
-            "plannedDurationMinutes" = $8::integer,
-            "orderType" = $9,
-            "responsibleEmployeeId" = $10::uuid,
-            "workgroupId" = $11::uuid,
-            "classificationId" = $12::uuid
-          WHERE "id" = $13::uuid
-          RETURNING *
-        )
-        SELECT
-          u."id",
-          u."orderNumber",
-          u."name",
-          u."description",
-          u."siteId",
-          s."key" AS "siteKey",
-          s."name" AS "siteName",
-          s."colorHex" AS "siteColorHex",
-          u."assetId",
-          a."key" AS "assetKey",
-          a."name" AS "assetName",
-          u."costCenterId",
-          c."key" AS "costCenterKey",
-          c."name" AS "costCenterName",
-          u."classificationId",
-          clf."key" AS "classificationKey",
-          clf."name" AS "classificationName",
-          u."plannedStart",
-          u."plannedEnd",
-          u."plannedDurationMinutes",
-          u."orderType",
-          u."status",
-          u."responsibleEmployeeId",
-          re."key" AS "responsibleEmployeeKey",
-          re."name" AS "responsibleEmployeeName",
-          u."doneBy",
-          dbe."key" AS "doneByEmployeeKey",
-          dbe."name" AS "doneByEmployeeName",
-          u."workgroupId",
-          wg."key" AS "workgroupKey",
-          wg."name" AS "workgroupName",
-          u."originalWo",
-          orig."orderNumber" AS "originalWoOrderNumber",
-          orig."name" AS "originalWoName",
-          u."createdAt",
-          u."updatedAt",
-          COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
-          COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
-          COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
-          COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
-          COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
-          COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
-        FROM updated u
-        JOIN "site" s ON s."id" = u."siteId"
-        JOIN "asset" a ON a."id" = u."assetId"
-        JOIN "costCenter" c ON c."id" = u."costCenterId"
-        LEFT JOIN "classification" clf ON clf."id" = u."classificationId"
-        LEFT JOIN "employee" re ON re."id" = u."responsibleEmployeeId"
-        LEFT JOIN "employee" dbe ON dbe."id" = u."doneBy"
-        LEFT JOIN "workgroup" wg ON wg."id" = u."workgroupId"
-        LEFT JOIN "workOrder" orig ON orig."id" = u."originalWo"
-        LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
-        LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
-        ${workOrderDocumentCountSubqueryOnUpdate}
-        ${workOrderAssetDocumentCountSubqueryOnUpdate}
-        LEFT JOIN (
-          SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
-          FROM "workOrderEmployeeAssignment"
-          GROUP BY "workOrderId"
-        ) assign_counts ON assign_counts."workOrderId" = u."id"
-        LEFT JOIN (
-          SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
-          FROM "transaction"
-          GROUP BY "workOrderId"
-        ) tx_counts ON tx_counts."workOrderId" = u."id"
+        UPDATE "workOrder"
+        SET
+          "name" = $1,
+          "description" = $2,
+          "siteId" = $3::uuid,
+          "assetId" = $4::uuid,
+          "costCenterId" = $5::uuid,
+          "plannedStart" = $6::timestamptz,
+          "plannedEnd" = $7::timestamptz,
+          "plannedDurationMinutes" = $8::integer,
+          "orderType" = $9,
+          "workgroupId" = $10::uuid,
+          "classificationId" = $11::uuid
+        WHERE "id" = $12::uuid
         `,
         [
           parsed.name,
@@ -2321,13 +2271,13 @@ export async function updateWorkOrderPlanning(
           parsed.plannedEnd,
           parsed.plannedDurationMinutes,
           parsed.orderType,
-          parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
           workOrderId,
         ],
       );
-      return rows[0] ?? null;
+      await setWorkOrderResponsibles(client, workOrderId, parsed.responsibleEmployeeIds);
+      return await fetchWorkOrderRow(client, workOrderId);
     });
 
     if (!updated) {
@@ -2425,6 +2375,8 @@ export async function updateWorkOrderPlanningBatch(
 
   return { ok: true, rows };
 }
+
+router.use(workOrderMessagesRouter);
 
 export const workOrdersRouter = router;
 

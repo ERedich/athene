@@ -1,4 +1,5 @@
 import {
+  createElement,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -14,6 +15,7 @@ import type { Toast } from "primereact/toast";
 import { confirmDialog } from "primereact/confirmdialog";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
+import { PlanningConflictWarning } from "../components/PlanningConflictWarning";
 import { apiFetch } from "../lib/api";
 import type { WorkOrderPlanningConflict } from "../lib/workOrderApi";
 import type { TransactionRow } from "../pages/TransactionsPage";
@@ -43,6 +45,7 @@ import type {
   WorkOrderSelectOption,
   PendingDocumentUpload,
 } from "../lib/workOrderTypes";
+import { fetchWorkOrderMessages, sendWorkOrderMessage, type WorkOrderMessage } from "../lib/notificationCenter";
 import { workOrderToEditMeta } from "../lib/workOrderTypes";
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
 
@@ -103,7 +106,7 @@ type WorkOrderSavePayload = {
   plannedEnd: string | null;
   plannedDurationMinutes: number | null;
   orderType: WorkOrder["orderType"];
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string | null;
   originalWo?: string | null;
@@ -115,25 +118,6 @@ type WorkOrderAssetConflictPayload = {
   conflicts: WorkOrderPlanningConflict[];
   sameDayConflict: boolean;
 };
-
-function buildAssetConflictConfirmMessage(
-  t: (key: string, opts?: Record<string, string>) => string,
-  conflict: WorkOrderAssetConflictPayload,
-): string {
-  const intro = conflict.sameDayConflict
-    ? t("kalendar.moveAssetConflictSameDay", {
-        assetKey: conflict.assetKey,
-        assetName: conflict.assetName,
-      })
-    : t("kalendar.moveAssetConflictOverlap", {
-        assetKey: conflict.assetKey,
-        assetName: conflict.assetName,
-      });
-  const list = conflict.conflicts
-    .map((c) => `#${c.orderNumber} ${c.name}`)
-    .join("\n");
-  return list ? `${intro}\n\n${list}` : intro;
-}
 
 function workOrderRowFromMeta(
   editingId: string,
@@ -163,7 +147,7 @@ function workOrderRowFromMeta(
     plannedDurationMinutes: null,
     orderType: form.orderType,
     status: meta.status ?? "open",
-    responsibleEmployeeId: form.responsibleEmployeeId || null,
+    responsibleEmployeeIds: [...form.responsibleEmployeeIds],
     responsibleEmployeeKey: null,
     responsibleEmployeeName: null,
     doneBy: null,
@@ -204,6 +188,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     classifications,
     employees,
     workgroups,
+    loaded: refDataLoaded,
     calendarDateFormat,
     typeOrder,
     typeLabel,
@@ -240,6 +225,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [feedbackTransactions, setFeedbackTransactions] = useState<TransactionRow[]>([]);
   const [feedbackTransactionsLoading, setFeedbackTransactionsLoading] = useState(false);
   const [feedbackTransactionsLoadedOrderId, setFeedbackTransactionsLoadedOrderId] = useState<string | null>(null);
+  const [workOrderMessages, setWorkOrderMessages] = useState<WorkOrderMessage[]>([]);
+  const [workOrderMessagesLoading, setWorkOrderMessagesLoading] = useState(false);
+  const [workOrderMessagesLoadedOrderId, setWorkOrderMessagesLoadedOrderId] = useState<string | null>(null);
+  const [workOrderMessageSending, setWorkOrderMessageSending] = useState(false);
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
@@ -250,6 +239,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const pendingFilesRef = useRef(pendingFiles);
   const pendingAutoTimersRef = useRef(new Map<string, number>());
   const editingIdRef = useRef<string | null>(null);
+  const openSessionRef = useRef(0);
   const formRef = useRef(form);
   const orderCreateLockRef = useRef<Promise<string | null> | null>(null);
 
@@ -261,9 +251,11 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   }, [refData]);
 
   const closeDialog = useCallback(() => {
+    openSessionRef.current += 1;
     setDialogVisible(false);
     onClose?.();
-  }, [onClose]);
+    onVisibleChangeRef.current?.(false, editingIdRef.current, activeTabIndex);
+  }, [activeTabIndex, onClose]);
 
   const refreshExternal = useCallback(async () => {
     await onRefresh?.();
@@ -316,14 +308,26 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     [form.workgroupId, workgroups],
   );
 
+  const responsibleEmployeeOptions = useMemo<WorkOrderSelectOption[]>(
+    () =>
+      employees
+        .filter((emp) => !selectedAsset?.siteId || emp.siteId === selectedAsset.siteId)
+        .filter((emp) =>
+          form.workgroupId ? (selectedWorkgroup?.leaderEmployeeIds?.includes(emp.id) ?? false) : false,
+        )
+        .filter((emp) => emp.isActive || form.responsibleEmployeeIds.includes(emp.id))
+        .map((emp) => ({ label: `${emp.key} - ${emp.name}`, value: emp.id })),
+    [employees, form.responsibleEmployeeIds, form.workgroupId, selectedAsset?.siteId, selectedWorkgroup],
+  );
+
   const employeeOptions = useMemo<WorkOrderSelectOption[]>(
     () =>
       employees
         .filter((emp) => !selectedAsset?.siteId || emp.siteId === selectedAsset.siteId)
         .filter((emp) => !form.workgroupId || (selectedWorkgroup?.employeeIds?.includes(emp.id) ?? false))
-        .filter((emp) => emp.isActive || emp.id === form.responsibleEmployeeId)
+        .filter((emp) => emp.isActive || assignments.some((a) => a.employeeId === emp.id))
         .map((emp) => ({ label: `${emp.key} - ${emp.name}`, value: emp.id })),
-    [employees, form.responsibleEmployeeId, form.workgroupId, selectedAsset?.siteId, selectedWorkgroup],
+    [assignments, employees, form.workgroupId, selectedAsset?.siteId, selectedWorkgroup],
   );
 
   const workgroupOptions = useMemo<WorkOrderSelectOption[]>(
@@ -414,16 +418,20 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   }, [assignmentEmployeeOptions]);
 
   useEffect(() => {
-    if (!form.workgroupId || !form.responsibleEmployeeId) return;
+    if (!form.workgroupId || form.responsibleEmployeeIds.length === 0) return;
     if (!selectedWorkgroup) return;
-    if (selectedWorkgroup.employeeIds.includes(form.responsibleEmployeeId)) return;
-    setForm((cur) => (cur.responsibleEmployeeId ? { ...cur, responsibleEmployeeId: "" } : cur));
+    const allowed = new Set(selectedWorkgroup.leaderEmployeeIds ?? []);
+    const next = form.responsibleEmployeeIds.filter((id) => allowed.has(id));
+    if (next.length === form.responsibleEmployeeIds.length && next.every((id, i) => id === form.responsibleEmployeeIds[i])) {
+      return;
+    }
+    setForm((cur) => ({ ...cur, responsibleEmployeeIds: next }));
     toastRef.current?.show({
       severity: "info",
       summary: t("workOrders.responsibleClearedDueToWorkgroup"),
       life: 5000,
     });
-  }, [form.responsibleEmployeeId, form.workgroupId, selectedWorkgroup, t, toastRef]);
+  }, [form.responsibleEmployeeIds, form.workgroupId, selectedWorkgroup, t, toastRef]);
 
   useEffect(() => {
     if (!selectedAsset) return;
@@ -444,12 +452,17 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   }, [classificationOptions, form.classificationId]);
 
   useEffect(() => {
-    if (!form.workgroupId) return;
+    if (!form.workgroupId || !refDataLoaded) return;
     const wg = workgroups.find((w) => w.id === form.workgroupId);
-    if (!wg || !selectedAsset?.siteId || wg.siteId !== selectedAsset.siteId) {
+    if (!wg) {
+      setForm((cur) => ({ ...cur, workgroupId: "" }));
+      return;
+    }
+    if (!selectedAsset?.siteId) return;
+    if (wg.siteId !== selectedAsset.siteId) {
       setForm((cur) => ({ ...cur, workgroupId: "" }));
     }
-  }, [form.workgroupId, selectedAsset?.siteId, workgroups]);
+  }, [form.workgroupId, refDataLoaded, selectedAsset?.siteId, workgroups]);
 
   useEffect(() => {
     if (!dialogVisible || editingId) return;
@@ -552,16 +565,47 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     }
   }, []);
 
+  const loadWorkOrderMessages = useCallback(async (orderId: string) => {
+    setWorkOrderMessagesLoading(true);
+    try {
+      const rows = await fetchWorkOrderMessages(orderId);
+      setWorkOrderMessages(rows);
+      setWorkOrderMessagesLoadedOrderId(orderId);
+    } catch {
+      setWorkOrderMessages([]);
+      setWorkOrderMessagesLoadedOrderId(null);
+      toastRef.current?.show({ severity: "error", summary: t("workOrders.messagesLoadError"), life: 6000 });
+    } finally {
+      setWorkOrderMessagesLoading(false);
+    }
+  }, [t, toastRef]);
+
   useEffect(() => {
     if (!dialogVisible || !editingId) return;
     void loadFeedbackTransactions(editingId);
   }, [dialogVisible, editingId, loadFeedbackTransactions]);
 
   useEffect(() => {
+    if (!dialogVisible || !editingId || activeTabIndex !== orderDialogTabs.Messages) return;
+    if (workOrderMessagesLoadedOrderId === editingId) return;
+    void loadWorkOrderMessages(editingId);
+  }, [
+    activeTabIndex,
+    dialogVisible,
+    editingId,
+    loadWorkOrderMessages,
+    workOrderMessagesLoadedOrderId,
+  ]);
+
+  useEffect(() => {
     if (dialogVisible) return;
     setFeedbackTransactions([]);
     setFeedbackTransactionsLoading(false);
     setFeedbackTransactionsLoadedOrderId(null);
+    setWorkOrderMessages([]);
+    setWorkOrderMessagesLoading(false);
+    setWorkOrderMessagesLoadedOrderId(null);
+    setWorkOrderMessageSending(false);
   }, [dialogVisible]);
 
   useEffect(() => {
@@ -706,7 +750,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       plannedEnd: formRef.current.plannedEnd ? formRef.current.plannedEnd.toISOString() : null,
       plannedDurationMinutes,
       orderType: formRef.current.orderType,
-      responsibleEmployeeId: formRef.current.responsibleEmployeeId || null,
+      responsibleEmployeeIds: [...formRef.current.responsibleEmployeeIds],
       workgroupId: formRef.current.workgroupId.trim(),
       classificationId: formRef.current.classificationId.trim() || null,
     };
@@ -878,6 +922,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     setFeedbackEntryMode("create");
     setFeedbackAdditionalHours([]);
     setFeedbackTransactions([]);
+    setWorkOrderMessages([]);
+    setWorkOrderMessagesLoadedOrderId(null);
     setEditingMeta(null);
   }, []);
 
@@ -909,8 +955,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const copyWorkOrder = useWorkOrderCopy({ t, onOpenCreateForm: openCopyAsNew });
 
   const openEdit = useCallback(
-    (row: WorkOrderEditOpenSource) => {
-      void ensureRefDataLoaded();
+    async (row: WorkOrderEditOpenSource) => {
+      const session = openSessionRef.current;
+      await ensureRefDataLoaded();
+      if (session !== openSessionRef.current) return;
       setEditingId(row.id);
       const meta =
         "meta" in row && row.meta != null
@@ -928,7 +976,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       setFeedbackEntryMode("create");
       setFeedbackAdditionalHours([]);
       setFeedbackTransactions([]);
+      setWorkOrderMessages([]);
+      setWorkOrderMessagesLoadedOrderId(null);
       setActiveTabIndex(orderDialogTabs.General);
+      if (session !== openSessionRef.current) return;
       setDialogVisible(true);
     },
     [ensureRefDataLoaded],
@@ -947,17 +998,17 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   );
 
   const openPlanningTab = useCallback(
-    (row: WorkOrder) => {
-      openEdit(row);
+    async (row: WorkOrder) => {
+      await openEdit(row);
       setActiveTabIndex(orderDialogTabs.Planning);
     },
     [openEdit],
   );
 
   const openFeedbackTab = useCallback(
-    (row: WorkOrder, mode: FeedbackEntryMode = "create") => {
+    async (row: WorkOrder, mode: FeedbackEntryMode = "create") => {
       if (!workOrderStatusAllowsFeedbackTab(row.status)) return;
-      openEdit(row);
+      await openEdit(row);
       applyFeedbackEntry(row, mode);
       setActiveTabIndex(orderDialogTabs.Feedback);
     },
@@ -965,11 +1016,40 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   );
 
   const openDocumentsTab = useCallback(
-    (row: WorkOrder) => {
-      openEdit(row);
+    async (row: WorkOrder) => {
+      await openEdit(row);
       setActiveTabIndex(orderDialogTabs.Documents);
     },
     [openEdit],
+  );
+
+  const openMessagesTab = useCallback(
+    async (row: WorkOrder) => {
+      await openEdit(row);
+      setActiveTabIndex(orderDialogTabs.Messages);
+    },
+    [openEdit],
+  );
+
+  const sendMessage = useCallback(
+    async (body: string, replyToMessageId?: string | null) => {
+      if (!editingId) return;
+      setWorkOrderMessageSending(true);
+      try {
+        const created = await sendWorkOrderMessage(editingId, { body, replyToMessageId });
+        setWorkOrderMessages((current) => {
+          if (current.some((entry) => entry.id === created.id)) return current;
+          return [...current, created];
+        });
+        setWorkOrderMessagesLoadedOrderId(editingId);
+      } catch {
+        toastRef.current?.show({ severity: "error", summary: t("workOrders.messagesSendError"), life: 6000 });
+        throw new Error("send_message");
+      } finally {
+        setWorkOrderMessageSending(false);
+      }
+    },
+    [editingId, t, toastRef],
   );
 
   const updatePlannedDuration = useCallback((hours: number | null) => {
@@ -1007,6 +1087,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       if (code === "responsible_employee_not_in_workgroup") {
         detail = t("workOrders.responsibleEmployeeNotInWorkgroup");
       }
+      if (code === "responsible_required") detail = t("workOrders.responsibleRequired");
+      if (code === "responsible_employee_not_leader") detail = t("workOrders.responsibleEmployeeNotLeader");
       if (code === "employee_not_in_workgroup") detail = t("workOrders.employeeNotInWorkgroup");
       if (code === "assignments_incompatible_with_workgroup") {
         detail = t("workOrders.assignmentsIncompatibleWithWorkgroup");
@@ -1129,8 +1211,14 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     (conflict: WorkOrderAssetConflictPayload) =>
       new Promise<boolean>((resolve) => {
         confirmDialog({
-          message: buildAssetConflictConfirmMessage(t, conflict),
+          message: createElement(PlanningConflictWarning, {
+            assetKey: conflict.assetKey,
+            assetName: conflict.assetName,
+            conflicts: conflict.conflicts,
+            sameDayConflict: conflict.sameDayConflict,
+          }),
           header: t("workOrders.assetConflictConfirmTitle"),
+          className: "app-planning-conflict-confirm app-dialog-sm",
           acceptLabel: t("workOrders.saveDespiteAssetConflict"),
           rejectLabel: t("workOrders.no"),
           accept: () => resolve(true),
@@ -1143,7 +1231,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const save = useCallback(async () => {
     const name = form.name.trim();
     const description = form.description.trim();
-    if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim()) {
+    if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim() || form.responsibleEmployeeIds.length === 0) {
       toastRef.current?.show({ severity: "warn", summary: t("workOrders.validationRequired"), life: 4000 });
       return;
     }
@@ -1174,7 +1262,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         plannedEnd: form.plannedEnd ? form.plannedEnd.toISOString() : null,
         plannedDurationMinutes,
         orderType: form.orderType,
-        responsibleEmployeeId: form.responsibleEmployeeId || null,
+        responsibleEmployeeIds: [...form.responsibleEmployeeIds],
         workgroupId: form.workgroupId.trim(),
         classificationId: form.classificationId.trim() || null,
         ...(editingId ? {} : { originalWo: form.originalWoId.trim() || null }),
@@ -1424,6 +1512,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     feedbackTransactionsLoadedOrderId === editingId
       ? feedbackTransactions.length
       : (editingMeta?.transactionCount ?? 0);
+  const messagesTabCount =
+    workOrderMessagesLoadedOrderId === editingId ? workOrderMessages.length : 0;
 
   const orderStatusForUi = editingMeta?.status ?? "open";
   const orderNumberForTitle = editingId ? (editingMeta?.orderNumber ?? form.orderNumber) : null;
@@ -1445,6 +1535,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     openPlanningTab,
     openFeedbackTab,
     openDocumentsTab,
+    openMessagesTab,
     applyFeedbackEntry,
     copyWorkOrder,
     fileInputRef,
@@ -1464,6 +1555,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     classificationOptions,
     workgroupOptions,
     employeeOptions,
+    responsibleEmployeeOptions,
     calendarDateFormat,
     assignments,
     assignmentsLoading,
@@ -1513,14 +1605,20 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     feedbackSaving,
     feedbackTransactions,
     feedbackTransactionsLoading,
+    workOrderMessages,
+    workOrderMessagesLoading,
+    workOrderMessageSending,
+    sendMessage,
     reportingEmployeeLabel,
     feedbackAdditionalEmployeeOptions,
     userEmployeeId: user.employeeId,
+    currentUserId: user.id,
     isFeedbackTab,
     documentsTabCount,
     assignmentsTabCount,
     feedbackTabCount,
     transactionsTabCount,
+    messagesTabCount,
     updatePlannedDuration,
   };
 }

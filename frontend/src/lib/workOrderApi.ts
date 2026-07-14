@@ -48,7 +48,7 @@ export type WorkOrderPutBody = {
   plannedEnd: string | null;
   plannedDurationMinutes: number | null;
   orderType: WorkOrder["orderType"];
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string | null;
   allowAssetOverlap?: boolean;
@@ -81,7 +81,7 @@ export function buildWorkOrderPutBody(
         ? patch.plannedDurationMinutes
         : order.plannedDurationMinutes,
     orderType: order.orderType,
-    responsibleEmployeeId: order.responsibleEmployeeId,
+    responsibleEmployeeIds: order.responsibleEmployeeIds ?? [],
     workgroupId: order.workgroupId ?? "",
     classificationId: order.classificationId,
     ...(options?.allowAssetOverlap ? { allowAssetOverlap: true } : {}),

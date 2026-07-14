@@ -16,7 +16,7 @@ export type WorkOrderSubscriptionSnapshot = {
   costCenterId: string;
   classificationId: string | null;
   workgroupId: string | null;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   pauseRemark: string | null;
@@ -40,7 +40,7 @@ type WorkOrderSubscriptionSource = Pick<
   | "costCenterId"
   | "classificationId"
   | "workgroupId"
-  | "responsibleEmployeeId"
+  | "responsibleEmployeeIds"
   | "originalWo"
   | "originalWoOrderNumber"
   | "pauseRemark"
@@ -73,6 +73,13 @@ function isKnownChangeKind(value: unknown): value is WorkOrderSubscriptionChange
   return typeof value === "string" && (CHANGE_KINDS as readonly string[]).includes(value);
 }
 
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
+}
+
 export function buildSubscriptionSnapshot(workOrder: WorkOrderSubscriptionSource): WorkOrderSubscriptionSnapshot {
   return {
     status: workOrder.status,
@@ -86,7 +93,7 @@ export function buildSubscriptionSnapshot(workOrder: WorkOrderSubscriptionSource
     costCenterId: workOrder.costCenterId,
     classificationId: workOrder.classificationId ?? null,
     workgroupId: workOrder.workgroupId ?? null,
-    responsibleEmployeeId: workOrder.responsibleEmployeeId ?? null,
+    responsibleEmployeeIds: [...(workOrder.responsibleEmployeeIds ?? [])],
     originalWo: workOrder.originalWo ?? null,
     originalWoOrderNumber: workOrder.originalWoOrderNumber ?? null,
     pauseRemark: workOrder.pauseRemark ?? null,
@@ -118,7 +125,9 @@ function normalizeSnapshot(value: unknown): WorkOrderSubscriptionSnapshot | null
     costCenterId: row.costCenterId,
     classificationId: typeof row.classificationId === "string" ? row.classificationId : null,
     workgroupId: typeof row.workgroupId === "string" ? row.workgroupId : null,
-    responsibleEmployeeId: typeof row.responsibleEmployeeId === "string" ? row.responsibleEmployeeId : null,
+    responsibleEmployeeIds: Array.isArray(row.responsibleEmployeeIds)
+      ? row.responsibleEmployeeIds.filter((id): id is string => typeof id === "string")
+      : [],
     originalWo: typeof row.originalWo === "string" ? row.originalWo : null,
     originalWoOrderNumber: typeof row.originalWoOrderNumber === "number" ? row.originalWoOrderNumber : null,
     pauseRemark: typeof row.pauseRemark === "string" ? row.pauseRemark : null,
@@ -152,7 +161,7 @@ export function detectSubscriptionChangeKinds(
     previous.costCenterId !== next.costCenterId ||
     previous.classificationId !== next.classificationId ||
     previous.workgroupId !== next.workgroupId ||
-    previous.responsibleEmployeeId !== next.responsibleEmployeeId ||
+    !arraysEqual(previous.responsibleEmployeeIds, next.responsibleEmployeeIds) ||
     previous.originalWo !== next.originalWo ||
     previous.originalWoOrderNumber !== next.originalWoOrderNumber ||
     previous.pauseRemark !== next.pauseRemark ||

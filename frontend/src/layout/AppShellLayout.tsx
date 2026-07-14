@@ -57,6 +57,7 @@ function headerTitleKey(pathname: string): string {
     "table-viewer": "tableViewer.appName",
     translations: "translations.appName",
     abonnements: "abonnements.appName",
+    mitteilungszentrale: "mitteilungszentrale.appName",
   };
   if (!seg) return "dashboard.appName";
   return map[seg.toLowerCase()] ?? "dashboard.appName";
@@ -125,6 +126,10 @@ export function AppShellLayout() {
   const densityToggleTitle = isCompact
     ? t("shell.tableDensityComfortable")
     : t("shell.tableDensityCompact");
+  const hasUnreadNotifications = subscriptions.unreadCount > 0;
+  const notificationBellLabel = hasUnreadNotifications
+    ? t("mitteilungszentrale.appNameUnread")
+    : t("mitteilungszentrale.appName");
 
   return (
     <div
@@ -212,13 +217,13 @@ export function AppShellLayout() {
             <Button
               type="button"
               icon={<Bell className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />}
-              aria-label={t("abonnements.appName")}
-              title={t("abonnements.appName")}
+              aria-label={notificationBellLabel}
+              title={notificationBellLabel}
               text
               className="h-9 w-9 !relative !p-0"
-              badge={subscriptions.unreadCount > 0 ? String(subscriptions.unreadCount) : undefined}
-              badgeClassName="!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0"
-              onClick={() => navigate("/abonnements")}
+              badge={hasUnreadNotifications ? " " : undefined}
+              badgeClassName="app-notification-bell-blip"
+              onClick={() => navigate("/mitteilungszentrale")}
             />
             <button
               type="button"

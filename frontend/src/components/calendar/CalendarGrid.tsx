@@ -16,6 +16,7 @@ type Props = {
   draggingWorkOrderId: string | null;
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
+  workgroupFilterId?: string | null;
   onEventClick: (workOrder: CalendarWorkOrder) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
@@ -39,6 +40,7 @@ export function CalendarGrid({
   draggingWorkOrderId,
   draggingEmployeeId,
   droppableWorkOrderIds,
+  workgroupFilterId = null,
   onEventClick,
   onAskAthene,
   onOverflowWeekClick,
@@ -95,6 +97,7 @@ export function CalendarGrid({
               draggingWorkOrderId={draggingWorkOrderId}
               draggingEmployeeId={draggingEmployeeId}
               droppableWorkOrderIds={droppableWorkOrderIds}
+              workgroupFilterId={workgroupFilterId}
               onEventClick={onEventClick}
               onAskAthene={onAskAthene}
               onOverflowWeekClick={onOverflowWeekClick}

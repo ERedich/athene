@@ -24,6 +24,7 @@ import type {
   WorkOrderRow,
   WorkOrderType,
   WorkgroupRow,
+  EmployeeRow,
 } from "../types/api";
 
 export const queryKeys = {
@@ -36,6 +37,7 @@ export const queryKeys = {
   workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
   workOrderFeedback: (orderId: string) => ["workOrders", orderId, "feedback"] as const,
   workgroups: ["workgroups"] as const,
+  employees: ["employees"] as const,
 };
 
 export type WorkOrderActionErrorCode =
@@ -178,6 +180,18 @@ export function useWorkOrdersByPresetQuery(presetId: string | undefined, enabled
   });
 }
 
+export function useWorkOrderSearchPresetDetailQuery(presetId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.workOrders, "preset-detail", presetId ?? "none"] as const,
+    enabled: Boolean(enabled && presetId),
+    queryFn: async () => {
+      if (!presetId) throw new Error("preset_id_required");
+      return fetchWorkOrderSearchPresetDetail(presetId);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useWorkgroupsQuery() {
   return useQuery({
     queryKey: queryKeys.workgroups,
@@ -186,8 +200,23 @@ export function useWorkgroupsQuery() {
       if (!r.ok) throw new Error("workgroups");
       const raw = (await r.json()) as WorkgroupRow[];
       return Array.isArray(raw)
-        ? raw.map((wg) => ({ ...wg, employeeIds: Array.isArray(wg.employeeIds) ? wg.employeeIds : [] }))
+        ? raw.map((wg) => ({
+            ...wg,
+            employeeIds: Array.isArray(wg.employeeIds) ? wg.employeeIds : [],
+            leaderEmployeeIds: Array.isArray(wg.leaderEmployeeIds) ? wg.leaderEmployeeIds : [],
+          }))
         : [];
+    },
+  });
+}
+
+export function useEmployeesQuery() {
+  return useQuery({
+    queryKey: queryKeys.employees,
+    queryFn: async (): Promise<EmployeeRow[]> => {
+      const r = await apiFetch("/api/employees");
+      if (!r.ok) throw new Error("employees");
+      return r.json() as Promise<EmployeeRow[]>;
     },
   });
 }
@@ -387,6 +416,7 @@ export type WorkOrderSaveBody = {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   workgroupId: string;
+  responsibleEmployeeIds: string[];
 };
 
 export async function postWorkOrder(body: WorkOrderSaveBody): Promise<WorkOrderRow> {

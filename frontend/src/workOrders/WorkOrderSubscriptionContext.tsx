@@ -56,7 +56,7 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
   const workOrderEventListenersRef = useRef(new Set<(message: WorkOrderEventMessage) => void>());
 
   const refreshUnreadCount = useCallback(async () => {
-    const res = await apiFetch("/api/work-order-subscriptions/unread-count");
+    const res = await apiFetch("/api/notification-center/unread-count");
     if (!res.ok) throw new Error("unread_count");
     const body = (await res.json()) as { count?: number };
     setUnreadCount(typeof body.count === "number" ? body.count : 0);
@@ -115,6 +115,10 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
           return;
         }
         if (message.type === "subscription_notification" && message.notification?.id) {
+          setUnreadCount((current) => current + 1);
+          return;
+        }
+        if (message.type === "chat_notification" && message.notification?.id) {
           setUnreadCount((current) => current + 1);
         }
       };

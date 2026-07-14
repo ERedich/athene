@@ -6,13 +6,14 @@ export const WO_TAB_URL_PARAM = "woTab";
 export function parseWoTabParam(raw: string | null): OrderDialogTab | undefined {
   if (raw == null || raw === "") return undefined;
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0 || n > 4) return undefined;
+  if (!Number.isInteger(n) || n < 0 || n > 5) return undefined;
   const tabs = [
     orderDialogTabs.General,
     orderDialogTabs.Planning,
     orderDialogTabs.Documents,
     orderDialogTabs.Feedback,
     orderDialogTabs.Transactions,
+    orderDialogTabs.Messages,
   ] as const;
   return tabs[n];
 }

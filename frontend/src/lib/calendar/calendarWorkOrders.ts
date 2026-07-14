@@ -39,7 +39,7 @@ export type CalendarWorkOrder = {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   status: WorkOrderStatus;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
   currentSegmentStartedAt: string | null;
@@ -63,7 +63,7 @@ export function calendarWorkOrderToEditSource(
     plannedEnd: wo.plannedEnd,
     plannedDurationMinutes: wo.plannedDurationMinutes,
     orderType: wo.orderType,
-    responsibleEmployeeId: wo.responsibleEmployeeId,
+    responsibleEmployeeIds: wo.responsibleEmployeeIds ?? [],
     workgroupId: wo.workgroupId,
     classificationId: wo.classificationId,
     meta: {
@@ -143,4 +143,23 @@ export function filterCalendarEventsBySearch(
       wo.name.toLowerCase().includes(q)
     );
   });
+}
+
+export function filterCalendarEventsByWorkgroup(
+  events: CalendarEvent[],
+  workgroupId: string | null,
+): CalendarEvent[] {
+  if (!workgroupId) return events;
+  return events.filter((ev) => {
+    const wo = ev.meta?.workOrder as CalendarWorkOrder | undefined;
+    return wo?.workgroupId === workgroupId;
+  });
+}
+
+export function workOrderMatchesWorkgroupFilter(
+  workOrder: CalendarWorkOrder,
+  workgroupFilterId: string | null,
+): boolean {
+  if (!workgroupFilterId) return true;
+  return workOrder.workgroupId === workgroupFilterId;
 }

@@ -11,6 +11,8 @@ import { readableSiteColor } from "../../lib/siteColor";
 type Props = {
   segment: CalendarTimelineSegment;
   tooltip: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
   draggingEmployeeId?: string | null;
   employeeDropAllowed?: boolean;
   onClick: () => void;
@@ -27,6 +29,8 @@ function orderTypeClass(orderType?: string): string {
 export function CalendarTimelineEventBar({
   segment,
   tooltip,
+  disabled = false,
+  disabledTooltip,
   draggingEmployeeId,
   employeeDropAllowed = false,
   onClick,
@@ -44,7 +48,7 @@ export function CalendarTimelineEventBar({
   const employeeDropDenied = employeeDragActive && !employeeDropAllowed;
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (!onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
+    if (disabled || !onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
@@ -68,7 +72,7 @@ export function CalendarTimelineEventBar({
     e.stopPropagation();
     setIsDropTarget(false);
     setIsDropDenied(false);
-    if (!onAssignEmployee || !employeeDropAllowed) return;
+    if (!onAssignEmployee || !employeeDropAllowed || disabled) return;
     const employeeId = readCalendarEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
     onAssignEmployee(segment.eventId, employeeId);
@@ -78,10 +82,10 @@ export function CalendarTimelineEventBar({
     <button
       type="button"
       className={`app-calendar-event-bar ${orderTypeClass(segment.orderType)}${
-        employeeDropDenied ? " app-calendar-event-bar--employee-drop-denied" : ""
-      }${isDropTarget ? " app-calendar-event-bar--drop-target" : ""}${
-        isDropDenied ? " app-calendar-event-bar--drop-denied" : ""
-      }`}
+        disabled ? " app-calendar-event-bar--filter-disabled" : ""
+      }${employeeDropDenied ? " app-calendar-event-bar--employee-drop-denied" : ""}${
+        isDropTarget ? " app-calendar-event-bar--drop-target" : ""
+      }${isDropDenied ? " app-calendar-event-bar--drop-denied" : ""}`}
       style={{
         left: pos.left,
         width: pos.width,
@@ -92,7 +96,8 @@ export function CalendarTimelineEventBar({
         borderBottomRightRadius: radiusAfter,
         color: textColor,
       }}
-      title={tooltip}
+      title={disabled && disabledTooltip ? `${tooltip}\n${disabledTooltip}` : tooltip}
+      aria-disabled={disabled || undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

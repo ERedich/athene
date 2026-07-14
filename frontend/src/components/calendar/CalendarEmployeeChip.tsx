@@ -5,22 +5,29 @@ import type { CalendarAssignableEmployee } from "../../lib/calendar/calendarEmpl
 
 type Props = {
   employee: CalendarAssignableEmployee;
+  disabled?: boolean;
   isDragging?: boolean;
   onDragStart?: (employeeId: string) => void;
   onDragEnd?: () => void;
 };
 
-export function CalendarEmployeeChip({ employee, isDragging, onDragStart, onDragEnd }: Props) {
+export function CalendarEmployeeChip({ employee, disabled = false, isDragging, onDragStart, onDragEnd }: Props) {
   const { t } = useTranslation();
   const label = `${employee.key} – ${employee.name}`;
+  const disabledLabel = t("kalendar.workgroupFilterDisabledEmployee");
 
   return (
     <div
-      draggable
-      className={`app-shift-planner-employee-chip${isDragging ? " app-shift-planner-employee-chip--dragging" : ""}`}
-      title={label}
-      aria-label={t("kalendar.dragEmployee", { name: employee.name })}
+      draggable={!disabled}
+      className={`app-shift-planner-employee-chip${isDragging ? " app-shift-planner-employee-chip--dragging" : ""}${disabled ? " app-shift-planner-employee-chip--disabled" : ""}`}
+      title={disabled ? disabledLabel : label}
+      aria-label={disabled ? disabledLabel : t("kalendar.dragEmployee", { name: employee.name })}
+      aria-disabled={disabled || undefined}
       onDragStart={(e) => {
+        if (disabled) {
+          e.preventDefault();
+          return;
+        }
         setCalendarEmployeeDragData(e.dataTransfer, employee.id);
         onDragStart?.(employee.id);
       }}

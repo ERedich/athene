@@ -42,6 +42,7 @@ import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
+import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
 import { useWorkOrderOverviewPanel } from "../hooks/useWorkOrderOverviewPanel";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
@@ -214,7 +215,7 @@ export function MonitoringPage() {
             plannedDurationMinutes: null,
             orderType: "maintenance" as const,
             status: "open" as const,
-            responsibleEmployeeId: null,
+            responsibleEmployeeIds: [],
             responsibleEmployeeKey: null,
             responsibleEmployeeName: null,
             doneBy: null,
@@ -249,11 +250,15 @@ export function MonitoringPage() {
   }, [overview.activeOrder, orders]);
 
   useEffect(() => {
+    if (!woDialog.useModalPresentation && woDialog.dialogVisible) {
+      setHeaderRowCount(null);
+      return () => setHeaderRowCount(null);
+    }
     setHeaderRowCount(orders.length);
     return () => {
       setHeaderRowCount(null);
     };
-  }, [orders.length, setHeaderRowCount]);
+  }, [orders.length, setHeaderRowCount, woDialog.dialogVisible, woDialog.useModalPresentation]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 350);
@@ -556,6 +561,10 @@ export function MonitoringPage() {
   );
 
   useEffect(() => {
+    if (!woDialog.useModalPresentation && woDialog.dialogVisible) {
+      setHeaderActions(null);
+      return () => setHeaderActions(null);
+    }
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
@@ -668,6 +677,8 @@ export function MonitoringPage() {
     selectedOrder,
     setHeaderActions,
     t,
+    woDialog.dialogVisible,
+    woDialog.useModalPresentation,
   ]);
 
   const formatShortDt = useCallback(
@@ -1023,6 +1034,10 @@ export function MonitoringPage() {
   const editorInitialPayload = activePayload ?? originalMonitoringTableLayoutPayload();
   const editorLayoutId = activeLayoutId;
   const editorInitialName = activeLayoutName ?? "";
+
+  if (!woDialog.useModalPresentation && woDialog.dialogVisible && woDialog.editDialogState) {
+    return <WorkOrderEditPageView {...woDialog.editDialogState} />;
+  }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">

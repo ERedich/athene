@@ -27,6 +27,7 @@ import { SearchPresetsPage } from "./pages/SearchPresetsPage";
 import { TableLayoutsPage } from "./pages/TableLayoutsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
 
 export default function App() {
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />
           <Route path="translations" element={<TranslationsPage />} />
+          <Route path="mitteilungszentrale" element={<MitteilungszentralePage />} />
           <Route path="abonnements" element={<AbonnementsPage />} />
         </Route>
       </Route>

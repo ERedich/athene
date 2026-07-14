@@ -43,6 +43,24 @@ export function filterAssignableEmployees(
     }));
 }
 
+export function filterEmployeesByWorkgroup(
+  employees: CalendarAssignableEmployee[],
+  workgroupMap: EmployeeWorkgroupMap,
+  workgroupId: string | null,
+): CalendarAssignableEmployee[] {
+  if (!workgroupId) return employees;
+  return employees.filter((emp) => employeeMatchesWorkgroupFilter(emp.id, workgroupMap, workgroupId));
+}
+
+export function employeeMatchesWorkgroupFilter(
+  employeeId: string,
+  workgroupMap: EmployeeWorkgroupMap,
+  workgroupFilterId: string | null,
+): boolean {
+  if (!workgroupFilterId) return true;
+  return workgroupMap.get(employeeId)?.has(workgroupFilterId) ?? false;
+}
+
 export function canAssignEmployeeToWorkOrder(
   employee: CalendarAssignableEmployee,
   workOrder: CalendarWorkOrder,

@@ -29,6 +29,7 @@ import { createWorkOrderWebSocketServer, registerWorkOrderRealtime } from "./wor
 import { workgroupsRouter } from "./workgroups.js";
 import { workOrdersRouter } from "./workOrders.js";
 import { workOrderSearchPresetsRouter } from "./workOrderSearchPresets.js";
+import { notificationCenterRouter } from "./notificationCenter.js";
 import { workOrderSubscriptionsRouter } from "./workOrderSubscriptions.js";
 import { tableLayoutsRouter } from "./tableLayouts.js";
 
@@ -83,6 +84,7 @@ app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/work-orders", requireAuth, workOrdersRouter);
 app.use("/api/work-order-search-presets", requireAuth, workOrderSearchPresetsRouter);
 app.use("/api/work-order-subscriptions", requireAuth, workOrderSubscriptionsRouter);
+app.use("/api/notification-center", requireAuth, notificationCenterRouter);
 app.use("/api/table-layouts", requireAuth, tableLayoutsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);

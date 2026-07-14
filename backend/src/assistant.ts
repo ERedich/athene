@@ -115,7 +115,7 @@ type WorkOrderRow = QueryResultRow & {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   status: WorkOrderStatus;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
   doneBy: string | null;
@@ -232,7 +232,7 @@ type ParsedCreateWorkOrder = {
   plannedEnd: string | null;
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string | null;
   originalWo: string | null;
@@ -400,9 +400,24 @@ const selectWorkOrdersSql = `
     w."plannedDurationMinutes",
     w."orderType",
     w."status",
-    w."responsibleEmployeeId",
-    re."key" AS "responsibleEmployeeKey",
-    re."name" AS "responsibleEmployeeName",
+    (
+      SELECT COALESCE(array_agg(wor."employeeId"::text ORDER BY e."key"), ARRAY[]::text[])
+      FROM "workOrderResponsibleEmployee" wor
+      JOIN "employee" e ON e."id" = wor."employeeId"
+      WHERE wor."workOrderId" = w."id"
+    ) AS "responsibleEmployeeIds",
+    (
+      SELECT NULLIF(COALESCE(string_agg(e."key", ', ' ORDER BY e."key"), ''), '')
+      FROM "workOrderResponsibleEmployee" wor
+      JOIN "employee" e ON e."id" = wor."employeeId"
+      WHERE wor."workOrderId" = w."id"
+    ) AS "responsibleEmployeeKey",
+    (
+      SELECT NULLIF(COALESCE(string_agg(e."name", ', ' ORDER BY e."key"), ''), '')
+      FROM "workOrderResponsibleEmployee" wor
+      JOIN "employee" e ON e."id" = wor."employeeId"
+      WHERE wor."workOrderId" = w."id"
+    ) AS "responsibleEmployeeName",
     w."doneBy",
     dbe."key" AS "doneByEmployeeKey",
     dbe."name" AS "doneByEmployeeName",
@@ -426,7 +441,6 @@ const selectWorkOrdersSql = `
   JOIN "asset" a ON a."id" = w."assetId"
   JOIN "costCenter" c ON c."id" = w."costCenterId"
   LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
-  LEFT JOIN "employee" re ON re."id" = w."responsibleEmployeeId"
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN (
     SELECT "workOrderId", max("occurredAt") AS "doneAt"
@@ -525,6 +539,13 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
 
+function normalizeEmployeeIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized = value.map((entry) => (typeof entry === "string" ? entry.trim() : ""));
+  if (normalized.some((id) => !isUuid(id))) return null;
+  return [...new Set(normalized)];
+}
+
 function readString(value: unknown, max = 2000): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -587,7 +608,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
       : typeof rawDuration === "number" && Number.isInteger(rawDuration) && rawDuration >= 0
         ? rawDuration
         : null;
-  const responsibleEmployeeId = readOptionalString(args.responsibleEmployeeId, 80);
+  const responsibleEmployeeIds = normalizeEmployeeIds(args.responsibleEmployeeIds);
   const workgroupId = readString(args.workgroupId, 80);
   const classificationId = readOptionalString(args.classificationId, 80);
   const originalWo = readOptionalString(args.originalWo, 80);
@@ -604,7 +625,8 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     !isUuid(assetId) ||
     !isUuid(costCenterId) ||
     !isUuid(workgroupId) ||
-    (responsibleEmployeeId !== null && !isUuid(responsibleEmployeeId)) ||
+    !responsibleEmployeeIds ||
+    responsibleEmployeeIds.length === 0 ||
     (classificationId !== null && !isUuid(classificationId)) ||
     (originalWo !== null && !isUuid(originalWo))
   ) {
@@ -620,7 +642,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     plannedEnd,
     plannedDurationMinutes,
     orderType: args.orderType,
-    responsibleEmployeeId,
+    responsibleEmployeeIds,
     workgroupId,
     classificationId,
     originalWo,
@@ -919,7 +941,7 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
     "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, or search configuration.",
     "You may create work orders only through createWorkOrder or createWorkOrderFromOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
-    "createWorkOrder requires UUID values for assetId, costCenterId, and workgroupId (and responsibleEmployeeId when set). Never pass business keys (assetKey, costCenterKey, employeeKey) or order numbers as IDs. getWorkOrderDetails returns both keys and UUIDs: use the *Id fields for createWorkOrder.",
+    "createWorkOrder requires UUID values for assetId, costCenterId, workgroupId, and responsibleEmployeeIds (at least one leader UUID). Never pass business keys (assetKey, costCenterKey, employeeKey) or order numbers as IDs. getWorkOrderDetails returns both keys and UUIDs: use the *Id fields for createWorkOrder.",
     "After the user confirms they want the same data as a template order (possibly with a new name or dates), call the create tool immediately. Do not loop on re-confirming fields already taken from getWorkOrderDetails or createWorkOrderFromOrder.",
     "For questions about counts, totals, or how many work orders exist in a status, use countWorkOrdersByStatus.",
     `Work-order status labels and aliases: ${allowedWorkOrderStatuses
@@ -2779,6 +2801,62 @@ async function assertWorkgroupForOrderSite(
   if (!rows[0]) throw new Error("invalid_workgroup");
 }
 
+async function assertResponsibleEmployeesContext(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  userId: string,
+  responsibleEmployeeIds: string[],
+  siteId: string,
+  workgroupId: string,
+): Promise<void> {
+  if (responsibleEmployeeIds.length === 0) throw new Error("responsible_required");
+  for (const responsibleEmployeeId of responsibleEmployeeIds) {
+    const employee = await client.query<QueryResultRow & { id: string; siteId: string }>(
+      `
+      SELECT "id", "siteId"::text AS "siteId"
+      FROM "employee"
+      WHERE "id" = $1::uuid
+        AND ${siteAccessSql('"siteId"', "$2")}
+      `,
+      [responsibleEmployeeId, userId],
+    );
+    const row = employee.rows[0];
+    if (!row) throw new Error("invalid_responsible_employee");
+    if (row.siteId !== siteId) throw new Error("responsible_employee_site_mismatch");
+    const member = await client.query<{ ok: string }>(
+      `
+      SELECT '1' AS ok
+      FROM "workgroupUser"
+      WHERE "workgroupId" = $1::uuid
+        AND "employeeId" = $2::uuid
+        AND "isLeader" = true
+      LIMIT 1
+      `,
+      [workgroupId, responsibleEmployeeId],
+    );
+    if (!member.rows[0]) throw new Error("responsible_employee_not_leader");
+  }
+}
+
+async function setWorkOrderResponsibles(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  workOrderId: string,
+  employeeIds: string[],
+): Promise<void> {
+  await client.query(`DELETE FROM "workOrderResponsibleEmployee" WHERE "workOrderId" = $1::uuid`, [
+    workOrderId,
+  ]);
+  if (employeeIds.length === 0) return;
+  const placeholders = employeeIds.map((_, idx) => `($1::uuid, $${idx + 2}::uuid)`).join(", ");
+  await client.query(
+    `
+    INSERT INTO "workOrderResponsibleEmployee" ("workOrderId", "employeeId")
+    VALUES ${placeholders}
+    ON CONFLICT ("workOrderId", "employeeId") DO NOTHING
+    `,
+    [workOrderId, ...employeeIds],
+  );
+}
+
 async function assertResponsibleEmployeeContext(
   client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
   userId: string,
@@ -2864,11 +2942,11 @@ async function createWorkOrderFromOrder(userId: string, args: Record<string, unk
   const description =
     args.description !== undefined ? readOptionalString(args.description, 2000) : template.description;
 
-  const responsibleEmployeeId =
-    args.responsibleEmployeeId !== undefined
-      ? readOptionalString(args.responsibleEmployeeId, 80)
-      : template.responsibleEmployeeId;
-  if (responsibleEmployeeId !== null && !isUuid(responsibleEmployeeId)) {
+  const responsibleEmployeeIds =
+    args.responsibleEmployeeIds !== undefined
+      ? normalizeEmployeeIds(args.responsibleEmployeeIds)
+      : template.responsibleEmployeeIds;
+  if (!responsibleEmployeeIds || responsibleEmployeeIds.length === 0) {
     throw new Error("invalid_body");
   }
 
@@ -2883,7 +2961,7 @@ async function createWorkOrderFromOrder(userId: string, args: Record<string, unk
     plannedEnd,
     plannedDurationMinutes,
     orderType,
-    responsibleEmployeeId,
+    responsibleEmployeeIds,
     workgroupId: template.workgroupId,
     classificationId: template.classificationId,
     originalWo: template.id,
@@ -2911,10 +2989,10 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
       if (effectiveSiteId !== relationSiteId) throw new Error("site_access_denied");
       await assertSiteAccess(client, userId, effectiveSiteId);
       await assertWorkgroupForOrderSite(client, userId, parsed.workgroupId, effectiveSiteId);
-      await assertResponsibleEmployeeContext(
+      await assertResponsibleEmployeesContext(
         client,
         userId,
-        parsed.responsibleEmployeeId,
+        parsed.responsibleEmployeeIds,
         effectiveSiteId,
         parsed.workgroupId,
       );
@@ -2940,16 +3018,13 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
         if (!templateAccess.rows[0]) throw new Error("invalid_original_wo");
       }
 
-      const { rows } = await client.query<WorkOrderRow>(
+      const inserted = await client.query<{ id: string }>(
         `
-        WITH inserted AS (
-          INSERT INTO "workOrder"
-            ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "responsibleEmployeeId", "workgroupId", "classificationId", "originalWo")
-          VALUES
-            ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid)
-          RETURNING *
-        )
-        ${selectWorkOrdersSql.replace('FROM "workOrder" w', 'FROM inserted w')}
+        INSERT INTO "workOrder"
+          ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId", "originalWo")
+        VALUES
+          ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
+        RETURNING "id"
         `,
         [
           parsed.name,
@@ -2961,11 +3036,21 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
           parsed.plannedEnd,
           parsed.plannedDurationMinutes,
           parsed.orderType,
-          parsed.responsibleEmployeeId,
           parsed.workgroupId,
           parsed.classificationId,
           parsed.originalWo,
         ],
+      );
+      const workOrderId = inserted.rows[0]?.id;
+      if (!workOrderId) return null;
+      await setWorkOrderResponsibles(client, workOrderId, parsed.responsibleEmployeeIds);
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        ${selectWorkOrdersSql}
+        WHERE w."id" = $1::uuid
+        LIMIT 1
+        `,
+        [workOrderId],
       );
       return rows[0] ?? null;
     },
@@ -3411,7 +3496,7 @@ const tools = [
     function: {
       name: "createWorkOrderFromOrder",
       description:
-        "Create a new work order by copying reference fields (asset, cost center, workgroup, classification, dates, responsible employee, order type) from an existing accessible template order. Use when the user asks for the same components as another Auftrag. Provide templateOrderNumber (e.g. 100015) and the new name; optional overrides for description, plannedStart, plannedEnd, plannedDurationMinutes, orderType, responsibleEmployeeId.",
+        "Create a new work order by copying reference fields (asset, cost center, workgroup, classification, dates, responsible employees, order type) from an existing accessible template order. Use when the user asks for the same components as another Auftrag. Provide templateOrderNumber (e.g. 100015) and the new name; optional overrides for description, plannedStart, plannedEnd, plannedDurationMinutes, orderType, responsibleEmployeeIds.",
       parameters: {
         type: "object",
         properties: {
@@ -3428,9 +3513,10 @@ const tools = [
           plannedEnd: { type: ["string", "null"] },
           plannedDurationMinutes: { type: ["integer", "null"] },
           orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
-          responsibleEmployeeId: {
-            type: ["string", "null"],
-            description: "Employee UUID override; omit to copy from template.",
+          responsibleEmployeeIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Employee UUID overrides; omit to copy from template.",
           },
         },
         required: ["templateOrderNumber", "name"],
@@ -3454,14 +3540,15 @@ const tools = [
           plannedEnd: { type: ["string", "null"] },
           plannedDurationMinutes: { type: ["integer", "null"] },
           orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
-          responsibleEmployeeId: {
-            type: ["string", "null"],
-            description: "Employee UUID, not employeeKey.",
+          responsibleEmployeeIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Leader employee UUIDs from the workgroup, not employeeKey.",
           },
           workgroupId: { type: "string", description: "Workgroup UUID, not workgroupKey." },
           classificationId: { type: ["string", "null"] },
         },
-        required: ["name", "assetId", "costCenterId", "plannedStart", "orderType", "workgroupId"],
+        required: ["name", "assetId", "costCenterId", "plannedStart", "orderType", "workgroupId", "responsibleEmployeeIds"],
       },
     },
   },

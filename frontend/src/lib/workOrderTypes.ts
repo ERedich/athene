@@ -34,7 +34,7 @@ export type WorkOrder = {
   plannedDurationMinutes: number | null;
   orderType: WorkOrderType;
   status: WorkOrderStatus;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
   doneBy: string | null;
@@ -135,6 +135,7 @@ export type WorkOrderReferenceWorkgroup = {
   siteId: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
 };
 
 export type WorkOrderSiteOption = { id: string; key: string; name: string };

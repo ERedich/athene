@@ -18,6 +18,7 @@ export type WorkgroupRow = {
   siteColorHex: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -30,6 +31,7 @@ type WorkgroupBody = {
   siteId: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
 };
 
 const router = Router();
@@ -49,6 +51,15 @@ function normalizeEmployeeIds(value: unknown): string[] | null {
   return [...new Set(normalized)];
 }
 
+function assertLeadersAreMembers(leaderEmployeeIds: string[], employeeIds: string[]): void {
+  const memberSet = new Set(employeeIds);
+  for (const leaderId of leaderEmployeeIds) {
+    if (!memberSet.has(leaderId)) {
+      throw new Error("leader_not_member");
+    }
+  }
+}
+
 function parseBody(body: unknown): WorkgroupBody | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -56,9 +67,10 @@ function parseBody(body: unknown): WorkgroupBody | null {
   const name = typeof o.name === "string" ? o.name.trim() : "";
   const siteId = typeof o.siteId === "string" ? o.siteId.trim() : "";
   const employeeIds = normalizeEmployeeIds(o.employeeIds);
+  const leaderEmployeeIds = normalizeEmployeeIds(o.leaderEmployeeIds);
   const isActive = o.isActive === undefined ? true : Boolean(o.isActive);
-  if (!key || !name || !isUuid(siteId) || !employeeIds) return null;
-  return { key, name, siteId, isActive, employeeIds };
+  if (!key || !name || !isUuid(siteId) || !employeeIds || !leaderEmployeeIds) return null;
+  return { key, name, siteId, isActive, employeeIds, leaderEmployeeIds };
 }
 
 function sendPgError(res: Response, err: unknown) {
@@ -115,17 +127,21 @@ async function setWorkgroupMembers(
   client: SiteAccessClient,
   workgroupId: string,
   employeeIds: string[],
+  leaderEmployeeIds: string[],
 ): Promise<void> {
+  const leaderSet = new Set(leaderEmployeeIds);
   await client.query(`DELETE FROM "workgroupUser" WHERE "workgroupId" = $1::uuid`, [workgroupId]);
   if (employeeIds.length === 0) return;
-  const placeholders = employeeIds.map((_, idx) => `($1::uuid, $${idx + 2}::uuid)`).join(", ");
+  const placeholders = employeeIds
+    .map((_, idx) => `($1::uuid, $${idx + 2}::uuid, $${employeeIds.length + 2 + idx}::boolean)`)
+    .join(", ");
   await client.query(
     `
-    INSERT INTO "workgroupUser" ("workgroupId", "employeeId")
+    INSERT INTO "workgroupUser" ("workgroupId", "employeeId", "isLeader")
     VALUES ${placeholders}
     ON CONFLICT ("workgroupId", "employeeId") DO NOTHING
     `,
-    [workgroupId, ...employeeIds],
+    [workgroupId, ...employeeIds, ...employeeIds.map((id) => leaderSet.has(id))],
   );
 }
 
@@ -143,6 +159,10 @@ const selectWorkgroupsSql = `
       array_agg(DISTINCT wu."employeeId"::text) FILTER (WHERE wu."employeeId" IS NOT NULL),
       ARRAY[]::text[]
     ) AS "employeeIds",
+    COALESCE(
+      array_agg(DISTINCT wu."employeeId"::text) FILTER (WHERE wu."isLeader" = true),
+      ARRAY[]::text[]
+    ) AS "leaderEmployeeIds",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -197,8 +217,9 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { key, name, siteId, isActive, employeeIds } = parsed;
+  const { key, name, siteId, isActive, employeeIds, leaderEmployeeIds } = parsed;
   try {
+    assertLeadersAreMembers(leaderEmployeeIds, employeeIds);
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
       const allowSiteChange = await getAllowSiteChange(client);
@@ -215,7 +236,7 @@ router.post("/", async (req: Request, res: Response) => {
       );
       const workgroupId = inserted.rows[0]?.id;
       if (!workgroupId) return null;
-      await setWorkgroupMembers(client, workgroupId, employeeIds);
+      await setWorkgroupMembers(client, workgroupId, employeeIds, leaderEmployeeIds);
       return await fetchWorkgroupById(client, workgroupId);
     });
     if (!row) {
@@ -237,6 +258,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(409).json({ error: "member_site_mismatch" });
       return;
     }
+    if (message === "leader_not_member") {
+      res.status(409).json({ error: "leader_not_member" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -252,8 +277,9 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { key, name, siteId, isActive, employeeIds } = parsed;
+  const { key, name, siteId, isActive, employeeIds, leaderEmployeeIds } = parsed;
   try {
+    assertLeadersAreMembers(leaderEmployeeIds, employeeIds);
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<{ id: string; siteId: string }>(
@@ -281,7 +307,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         `,
         [key, name, effectiveSiteId, isActive, id],
       );
-      await setWorkgroupMembers(client, id, employeeIds);
+      await setWorkgroupMembers(client, id, employeeIds, leaderEmployeeIds);
       return await fetchWorkgroupById(client, id);
     });
     if (!row) {
@@ -301,6 +327,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "member_site_mismatch") {
       res.status(409).json({ error: "member_site_mismatch" });
+      return;
+    }
+    if (message === "leader_not_member") {
+      res.status(409).json({ error: "leader_not_member" });
       return;
     }
     sendPgError(res, err);

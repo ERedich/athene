@@ -41,7 +41,7 @@ type WorkOrderRow = {
   plannedDurationMinutes: number | null;
   orderType: "maintenance" | "repair" | "breakdown";
   status: "open" | "assigned" | "started" | "paused" | "continued" | "ended" | "done" | "cancelled";
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   doneBy: string | null;
   workgroupId: string | null;
   pauseRemark: string | null;
@@ -88,7 +88,12 @@ async function loadWorkOrderById(workOrderId: string): Promise<WorkOrderRow | nu
       END AS "plannedDurationMinutes",
       w."orderType",
       w."status",
-      w."responsibleEmployeeId"::text AS "responsibleEmployeeId",
+      (
+        SELECT COALESCE(array_agg(wor."employeeId"::text ORDER BY e."key"), ARRAY[]::text[])
+        FROM "workOrderResponsibleEmployee" wor
+        JOIN "employee" e ON e."id" = wor."employeeId"
+        WHERE wor."workOrderId" = w."id"
+      ) AS "responsibleEmployeeIds",
       w."doneBy"::text AS "doneBy",
       w."workgroupId"::text AS "workgroupId",
       w."pauseRemark",

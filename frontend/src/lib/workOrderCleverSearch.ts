@@ -13,7 +13,7 @@ export type WorkOrderCleverSearchRow = {
   plannedDurationMinutes: number | null;
   orderType: string;
   status: string;
-  responsibleEmployeeId: string | null;
+  responsibleEmployeeIds: string[];
   createdBy: string;
   updatedBy: string;
   documentCount: number;
@@ -75,6 +75,6 @@ export function mergeWorkOrderIntoAdvancedSearch(
     classificationId: singleton(row.classificationId),
     classificationUnassigned: row.classificationId == null,
     workgroupId: singleton(row.workgroupId),
-    responsibleEmployeeId: singleton(row.responsibleEmployeeId),
+    responsibleEmployeeId: row.responsibleEmployeeIds ?? [],
   };
 }

@@ -136,6 +136,7 @@ export type WorkOrderRow = {
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
+  responsibleEmployeeIds: string[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -151,6 +152,15 @@ export type WorkgroupRow = {
   siteId: string;
   isActive: boolean;
   employeeIds: string[];
+  leaderEmployeeIds: string[];
+};
+
+export type EmployeeRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  isActive: boolean;
 };
 
 export type WorkOrderDocumentSource = "workOrder" | "asset";

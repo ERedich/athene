@@ -211,7 +211,11 @@ router.get("/metrics", async (req: Request, res: Response) => {
           FROM "workOrder" w
           WHERE ${siteFilter}
             AND (
-              w."responsibleEmployeeId" = $2::uuid
+              EXISTS (
+                SELECT 1 FROM "workOrderResponsibleEmployee" r
+                WHERE r."workOrderId" = w."id"
+                  AND r."employeeId" = $2::uuid
+              )
               OR EXISTS (
                 SELECT 1 FROM "workOrderEmployeeAssignment" a
                 WHERE a."workOrderId" = w."id"
