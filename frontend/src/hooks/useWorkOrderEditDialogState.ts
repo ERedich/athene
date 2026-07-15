@@ -48,6 +48,7 @@ import type {
 import { fetchWorkOrderMessages, sendWorkOrderMessage, type WorkOrderMessage } from "../lib/notificationCenter";
 import { workOrderToEditMeta } from "../lib/workOrderTypes";
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
+import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
 
 export const PENDING_AUTO_UPLOAD_MS = 5_000;
 
@@ -239,9 +240,14 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const pendingFilesRef = useRef(pendingFiles);
   const pendingAutoTimersRef = useRef(new Map<string, number>());
   const editingIdRef = useRef<string | null>(null);
+  const dialogVisibleRef = useRef(false);
+  const activeTabIndexRef = useRef<OrderDialogTab>(orderDialogTabs.General);
+  const workOrderMessagesLoadedOrderIdRef = useRef<string | null>(null);
+  const workOrderMessageIdsRef = useRef(new Set<string>());
   const openSessionRef = useRef(0);
   const formRef = useRef(form);
   const orderCreateLockRef = useRef<Promise<string | null> | null>(null);
+  const { onNotificationEvent, onWorkOrderMessageEvent } = useWorkOrderSubscriptions();
 
   const ensureRefDataLoaded = useCallback(async () => {
     if (!refDataLoadedRef.current) {
@@ -565,20 +571,42 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     }
   }, []);
 
-  const loadWorkOrderMessages = useCallback(async (orderId: string) => {
-    setWorkOrderMessagesLoading(true);
-    try {
-      const rows = await fetchWorkOrderMessages(orderId);
-      setWorkOrderMessages(rows);
-      setWorkOrderMessagesLoadedOrderId(orderId);
-    } catch {
-      setWorkOrderMessages([]);
-      setWorkOrderMessagesLoadedOrderId(null);
-      toastRef.current?.show({ severity: "error", summary: t("workOrders.messagesLoadError"), life: 6000 });
-    } finally {
-      setWorkOrderMessagesLoading(false);
-    }
-  }, [t, toastRef]);
+  const loadWorkOrderMessages = useCallback(
+    async (orderId: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+      if (!silent) setWorkOrderMessagesLoading(true);
+      try {
+        const rows = await fetchWorkOrderMessages(orderId);
+        setWorkOrderMessages(rows);
+        setWorkOrderMessagesLoadedOrderId(orderId);
+      } catch {
+        if (!silent) {
+          setWorkOrderMessages([]);
+          setWorkOrderMessagesLoadedOrderId(null);
+          toastRef.current?.show({ severity: "error", summary: t("workOrders.messagesLoadError"), life: 6000 });
+        }
+      } finally {
+        if (!silent) setWorkOrderMessagesLoading(false);
+      }
+    },
+    [t, toastRef],
+  );
+
+  useEffect(() => {
+    dialogVisibleRef.current = dialogVisible;
+  }, [dialogVisible]);
+
+  useEffect(() => {
+    activeTabIndexRef.current = activeTabIndex;
+  }, [activeTabIndex]);
+
+  useEffect(() => {
+    workOrderMessagesLoadedOrderIdRef.current = workOrderMessagesLoadedOrderId;
+  }, [workOrderMessagesLoadedOrderId]);
+
+  useEffect(() => {
+    workOrderMessageIdsRef.current = new Set(workOrderMessages.map((row) => row.id));
+  }, [workOrderMessages]);
 
   useEffect(() => {
     if (!dialogVisible || !editingId) return;
@@ -596,6 +624,49 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     loadWorkOrderMessages,
     workOrderMessagesLoadedOrderId,
   ]);
+
+  useEffect(
+    () =>
+      onWorkOrderMessageEvent((event) => {
+        if (!dialogVisibleRef.current) return;
+        const orderId = editingIdRef.current;
+        if (!orderId || event.message.workOrderId !== orderId) return;
+
+        const onMessagesTab = activeTabIndexRef.current === orderDialogTabs.Messages;
+        const messagesLoaded = workOrderMessagesLoadedOrderIdRef.current === orderId;
+        if (!onMessagesTab && !messagesLoaded) return;
+
+        setWorkOrderMessages((current) => {
+          if (current.some((entry) => entry.id === event.message.id)) return current;
+          return [...current, event.message];
+        });
+        setWorkOrderMessagesLoadedOrderId(orderId);
+      }),
+    [onWorkOrderMessageEvent],
+  );
+
+  useEffect(
+    () =>
+      onNotificationEvent((message) => {
+        if (message.type !== "chat_notification") return;
+        if (!dialogVisibleRef.current) return;
+
+        const orderId = editingIdRef.current;
+        if (!orderId || message.notification.workOrderId !== orderId) return;
+
+        // Prefer thread event for list updates; keep chat_notification for badge suppress + fallback refetch.
+        const onMessagesTab = activeTabIndexRef.current === orderDialogTabs.Messages;
+        if (onMessagesTab) return true;
+
+        const messagesLoaded = workOrderMessagesLoadedOrderIdRef.current === orderId;
+        if (!messagesLoaded) return;
+
+        if (workOrderMessageIdsRef.current.has(message.notification.messageId)) return;
+
+        void loadWorkOrderMessages(orderId, { silent: true });
+      }),
+    [loadWorkOrderMessages, onNotificationEvent],
+  );
 
   useEffect(() => {
     if (dialogVisible) return;

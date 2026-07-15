@@ -57,6 +57,72 @@ export type NotificationInboxItem = {
   isReply?: boolean;
 };
 
+type SubscriptionNotificationSource = {
+  id: string;
+  workOrderId: string;
+  orderNumber: number;
+  workOrderName: string;
+  siteKey: string;
+  siteName: string;
+  changeKinds: string[];
+  createdAt: string;
+  readAt: string | null;
+};
+
+type ChatNotificationSource = {
+  id: string;
+  workOrderId: string;
+  orderNumber: number;
+  workOrderName: string;
+  siteKey: string;
+  siteName: string;
+  messageId: string;
+  messagePreview: string;
+  authorUserName: string;
+  isReply: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export function inboxItemFromSubscriptionNotification(
+  notification: SubscriptionNotificationSource,
+  options?: { readAt?: string | null },
+): NotificationInboxItem {
+  return {
+    id: notification.id,
+    kind: "subscription",
+    workOrderId: notification.workOrderId,
+    orderNumber: notification.orderNumber,
+    workOrderName: notification.workOrderName,
+    siteKey: notification.siteKey,
+    siteName: notification.siteName,
+    createdAt: notification.createdAt,
+    readAt: options?.readAt !== undefined ? options.readAt : notification.readAt,
+    changeKinds: notification.changeKinds,
+  };
+}
+
+export function inboxItemFromChatNotification(
+  notification: ChatNotificationSource,
+  options?: { readAt?: string | null },
+): NotificationInboxItem {
+  return {
+    id: notification.id,
+    kind: "chat",
+    workOrderId: notification.workOrderId,
+    orderNumber: notification.orderNumber,
+    workOrderName: notification.workOrderName,
+    siteKey: notification.siteKey,
+    siteName: notification.siteName,
+    createdAt: notification.createdAt,
+    readAt: options?.readAt !== undefined ? options.readAt : notification.readAt,
+    messageId: notification.messageId,
+    messagePreview: notification.messagePreview,
+    authorUserName: notification.authorUserName,
+    isReply: notification.isReply,
+  };
+}
+
 type InboxResponse = {
   rows: NotificationInboxItem[];
   total: number;

@@ -146,6 +146,38 @@ export async function broadcastChatNotification(notification: ChatNotificationPa
   }
 }
 
+export type WorkOrderMessageRealtimePayload = {
+  id: string;
+  workOrderId: string;
+  authorUserId: string;
+  authorUserName: string;
+  body: string;
+  replyToMessageId: string | null;
+  replyToAuthorUserName: string | null;
+  replyToBodyPreview: string | null;
+  replyToCreatedAt: string | null;
+  createdAt: string;
+};
+
+/** Fan-out new thread messages to all users with site access (not only inbox recipients). */
+export async function broadcastWorkOrderMessageCreated(
+  siteId: string,
+  messageRow: WorkOrderMessageRealtimePayload,
+): Promise<void> {
+  if (sockets.size === 0) return;
+  const recipientUserIds = await getRecipientUserIds(siteId);
+  if (recipientUserIds.size === 0) return;
+  const payload = JSON.stringify({
+    type: "work_order_message_created",
+    message: messageRow,
+  });
+  for (const [socket, userId] of sockets.entries()) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    if (!recipientUserIds.has(userId)) continue;
+    socket.send(payload);
+  }
+}
+
 async function broadcastWorkOrderEvent(
   siteId: string,
   type: "work_order_created" | "work_order_updated",

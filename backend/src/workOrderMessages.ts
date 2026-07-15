@@ -2,7 +2,11 @@ import { Router, type Request, type Response } from "express";
 
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
-import { broadcastChatNotification, type ChatNotificationPayload } from "./workOrderRealtime.js";
+import {
+  broadcastChatNotification,
+  broadcastWorkOrderMessageCreated,
+  type ChatNotificationPayload,
+} from "./workOrderRealtime.js";
 
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -359,7 +363,10 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
       messageRow.replyToCreatedAt = replyMeta[0]?.replyToCreatedAt ?? null;
     }
 
-    await Promise.all(notifications.map((notification) => broadcastChatNotification(notification)));
+    await Promise.all([
+      broadcastWorkOrderMessageCreated(meta.siteId, messageRow),
+      ...notifications.map((notification) => broadcastChatNotification(notification)),
+    ]);
 
     res.status(201).json(messageRow);
   } catch (err) {

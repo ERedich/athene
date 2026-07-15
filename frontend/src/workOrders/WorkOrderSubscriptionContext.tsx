@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { apiFetch } from "../lib/api";
+import type { WorkOrderMessage } from "../lib/notificationCenter";
 import type { WorkOrder } from "../lib/workOrderTypes";
 
 type SubscriptionChangeKind = "status" | "temporal" | "data" | "references";
@@ -26,10 +27,36 @@ export type WorkOrderSubscriptionNotification = {
   readAt: string | null;
 };
 
+export type WorkOrderChatNotification = {
+  id: string;
+  workOrderId: string;
+  orderNumber: number;
+  workOrderName: string;
+  siteKey: string;
+  siteName: string;
+  messageId: string;
+  messagePreview: string;
+  authorUserName: string;
+  isReply: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
 type WorkOrderEventMessage = {
   type: "work_order_created" | "work_order_updated";
   workOrder: WorkOrder;
 };
+
+export type WorkOrderMessageEventMessage = {
+  type: "work_order_message_created";
+  message: WorkOrderMessage;
+};
+
+export type NotificationEventMessage =
+  | { type: "subscription_notification"; notification: WorkOrderSubscriptionNotification }
+  | { type: "chat_notification"; notification: WorkOrderChatNotification };
+
+type NotificationEventHandler = (message: NotificationEventMessage) => boolean | void;
 
 type SubscriptionContextValue = {
   unreadCount: number;
@@ -40,6 +67,8 @@ type SubscriptionContextValue = {
   unsubscribe: (workOrderId: string) => Promise<void>;
   isSubscribed: (workOrderId: string) => boolean;
   onWorkOrderEvent: (handler: (message: WorkOrderEventMessage) => void) => () => void;
+  onWorkOrderMessageEvent: (handler: (message: WorkOrderMessageEventMessage) => void) => () => void;
+  onNotificationEvent: (handler: NotificationEventHandler) => () => void;
 };
 
 const WorkOrderSubscriptionContext = createContext<SubscriptionContextValue | null>(null);
@@ -50,10 +79,43 @@ function eventsWsUrl(): string {
   return url.toString();
 }
 
+function isSubscriptionNotification(value: unknown): value is WorkOrderSubscriptionNotification {
+  if (!value || typeof value !== "object") return false;
+  const n = value as WorkOrderSubscriptionNotification;
+  return typeof n.id === "string" && typeof n.workOrderId === "string" && Array.isArray(n.changeKinds);
+}
+
+function isChatNotification(value: unknown): value is WorkOrderChatNotification {
+  if (!value || typeof value !== "object") return false;
+  const n = value as WorkOrderChatNotification;
+  return (
+    typeof n.id === "string" &&
+    typeof n.workOrderId === "string" &&
+    typeof n.messageId === "string" &&
+    typeof n.messagePreview === "string"
+  );
+}
+
+function isWorkOrderMessage(value: unknown): value is WorkOrderMessage {
+  if (!value || typeof value !== "object") return false;
+  const m = value as WorkOrderMessage;
+  return (
+    typeof m.id === "string" &&
+    typeof m.workOrderId === "string" &&
+    typeof m.authorUserId === "string" &&
+    typeof m.body === "string" &&
+    typeof m.createdAt === "string"
+  );
+}
+
 export function WorkOrderSubscriptionProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
   const workOrderEventListenersRef = useRef(new Set<(message: WorkOrderEventMessage) => void>());
+  const workOrderMessageEventListenersRef = useRef(
+    new Set<(message: WorkOrderMessageEventMessage) => void>(),
+  );
+  const notificationEventListenersRef = useRef(new Set<NotificationEventHandler>());
 
   const refreshUnreadCount = useCallback(async () => {
     const res = await apiFetch("/api/notification-center/unread-count");
@@ -101,7 +163,8 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
         const message = payload as {
           type?: string;
           workOrder?: WorkOrder;
-          notification?: WorkOrderSubscriptionNotification;
+          notification?: unknown;
+          message?: unknown;
         };
         if (
           (message.type === "work_order_created" || message.type === "work_order_updated") &&
@@ -114,12 +177,36 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
           for (const listener of workOrderEventListenersRef.current) listener(casted);
           return;
         }
-        if (message.type === "subscription_notification" && message.notification?.id) {
-          setUnreadCount((current) => current + 1);
+        if (message.type === "work_order_message_created" && isWorkOrderMessage(message.message)) {
+          const casted: WorkOrderMessageEventMessage = {
+            type: "work_order_message_created",
+            message: message.message,
+          };
+          for (const listener of workOrderMessageEventListenersRef.current) listener(casted);
           return;
         }
-        if (message.type === "chat_notification" && message.notification?.id) {
-          setUnreadCount((current) => current + 1);
+        if (message.type === "subscription_notification" && isSubscriptionNotification(message.notification)) {
+          const casted: NotificationEventMessage = {
+            type: "subscription_notification",
+            notification: message.notification,
+          };
+          let handled = false;
+          for (const listener of notificationEventListenersRef.current) {
+            if (listener(casted) === true) handled = true;
+          }
+          if (!handled) setUnreadCount((current) => current + 1);
+          return;
+        }
+        if (message.type === "chat_notification" && isChatNotification(message.notification)) {
+          const casted: NotificationEventMessage = {
+            type: "chat_notification",
+            notification: message.notification,
+          };
+          let handled = false;
+          for (const listener of notificationEventListenersRef.current) {
+            if (listener(casted) === true) handled = true;
+          }
+          if (!handled) setUnreadCount((current) => current + 1);
         }
       };
       ws.onclose = () => {
@@ -176,6 +263,23 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
     };
   }, []);
 
+  const onNotificationEvent = useCallback((handler: NotificationEventHandler) => {
+    notificationEventListenersRef.current.add(handler);
+    return () => {
+      notificationEventListenersRef.current.delete(handler);
+    };
+  }, []);
+
+  const onWorkOrderMessageEvent = useCallback(
+    (handler: (message: WorkOrderMessageEventMessage) => void) => {
+      workOrderMessageEventListenersRef.current.add(handler);
+      return () => {
+        workOrderMessageEventListenersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
   const value = useMemo<SubscriptionContextValue>(
     () => ({
       unreadCount,
@@ -186,10 +290,14 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
       unsubscribe,
       isSubscribed,
       onWorkOrderEvent,
+      onWorkOrderMessageEvent,
+      onNotificationEvent,
     }),
     [
       isSubscribed,
+      onNotificationEvent,
       onWorkOrderEvent,
+      onWorkOrderMessageEvent,
       refreshSubscribedIds,
       refreshUnreadCount,
       subscribe,
