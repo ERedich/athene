@@ -713,14 +713,16 @@ export function MonitoringPage() {
     const totalDocuments = ownDocuments + assetDocuments;
     const hasDocuments = totalDocuments > 0;
     const isAssetOnly = ownDocuments === 0 && assetDocuments > 0;
-    const badgeValue = hasDocuments ? String(totalDocuments) : undefined;
-    const badgeClassName = hasDocuments ? "!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0" : undefined;
+    const badgeValue = hasDocuments ? String(totalDocuments) : " ";
+    const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+      hasDocuments ? "" : " app-ref-badge--placeholder"
+    }`;
     const assignedCount = row.assignedEmployeeCount ?? 0;
     const hasAssignments = assignedCount > 0;
-    const assignmentsBadge = hasAssignments ? String(assignedCount) : undefined;
-    const assignmentsBadgeClassName = hasAssignments
-      ? "!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0"
-      : undefined;
+    const assignmentsBadge = hasAssignments ? String(assignedCount) : " ";
+    const assignmentsBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+      hasAssignments ? "" : " app-ref-badge--placeholder"
+    }`;
     const assignmentsTitle = hasAssignments
       ? t("workOrders.assignmentsReferenceTitle", { count: assignedCount })
       : t("workOrders.assignmentsReference");

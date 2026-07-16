@@ -4,10 +4,12 @@ import { NavLink } from "react-router-dom";
 import { Chart } from "primereact/chart";
 
 import type { DashboardKpiBarChart, DashboardKpiDisplay } from "../../lib/dashboardKpiRegistry";
+import type { DashboardKpiChart } from "../../lib/customDashboardKpiView";
 import { mergeStaticBarChartAnimation, mergeStaticLineChartAnimation } from "../../lib/chartAnimation";
 import {
   buildSparklineChart,
   type SparkAccent,
+  type SparklineOptions,
 } from "../../lib/dashboardSparkCharts";
 
 type Props = {
@@ -20,10 +22,11 @@ type Props = {
   locale: string;
   href?: string;
   series: number[];
-  chart?: DashboardKpiBarChart;
+  chart?: DashboardKpiChart | DashboardKpiBarChart;
   chartAnimationKey?: string;
   loading?: boolean;
   accent?: SparkAccent;
+  sparklineOptions?: SparklineOptions;
   footer?: ReactNode;
   headerActions?: ReactNode;
 };
@@ -55,6 +58,7 @@ export function DashboardSparkCard({
   chartAnimationKey,
   loading = false,
   accent = "green",
+  sparklineOptions,
   footer,
   headerActions,
 }: Props) {
@@ -62,7 +66,8 @@ export function DashboardSparkCard({
   const formattedValue = formatDisplayValue(value, locale);
   const isTextValue = typeof value === "string" && value.length > 0;
   const isBarChart = !isValueOnly && chart?.type === "bar";
-  const showSparkline = !isValueOnly && !isBarChart;
+  const isPieChart = !isValueOnly && chart?.type === "pie";
+  const showSparkline = !isValueOnly && !isBarChart && !isPieChart;
   const showRevealedValue = !loading;
 
   const animateOnceRef = useRef(true);
@@ -82,18 +87,18 @@ export function DashboardSparkCard({
   }, [loading]);
 
   const sparkline = useMemo(
-    () => buildSparklineChart(series, accent),
-    [series, accent],
+    () => buildSparklineChart(series, accent, sparklineOptions),
+    [series, accent, sparklineOptions],
   );
 
   const barChartOptions = useMemo(() => {
-    if (!chart?.options) return undefined;
+    if (!chart || chart.type !== "bar" || !chart.options) return undefined;
     return shouldAnimateChart
       ? chart.options
       : mergeStaticBarChartAnimation(chart.options);
-  }, [chart?.options, shouldAnimateChart]);
+  }, [chart, shouldAnimateChart]);
 
-  const sparklineOptions = useMemo(
+  const sparklineChartOptions = useMemo(
     () =>
       shouldAnimateChart
         ? sparkline.options
@@ -164,19 +169,26 @@ export function DashboardSparkCard({
         >
           {loading ? (
             <div className="app-dashboard-spark-chart-skeleton" aria-hidden />
-          ) : isBarChart && barChartOptions ? (
+          ) : isBarChart && barChartOptions && chart?.type === "bar" ? (
             <Chart
               key={chartAnimationKey}
               type="bar"
               data={chart.data}
               options={barChartOptions}
             />
+          ) : isPieChart && chart?.type === "pie" ? (
+            <Chart
+              key={chartAnimationKey}
+              type="pie"
+              data={chart.data}
+              options={chart.options}
+            />
           ) : showSparkline ? (
             <Chart
               key={chartAnimationKey}
               type="line"
               data={sparkline.data}
-              options={sparklineOptions}
+              options={sparklineChartOptions}
             />
           ) : null}
         </div>

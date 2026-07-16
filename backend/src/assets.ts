@@ -18,6 +18,9 @@ import {
   assetDocumentCountSubquery,
   assetDocumentCountSubqueryOnInsert,
   assetDocumentCountSubqueryOnUpdate,
+  assetWorkOrderCountSubquery,
+  assetWorkOrderCountSubqueryOnInsert,
+  assetWorkOrderCountSubqueryOnUpdate,
   createDocument,
   deleteDocumentForEntity,
   getDocumentContentForAsset,
@@ -63,6 +66,7 @@ export type AssetRow = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  workOrderCount: number;
   /** Present when GN-SAKP enabled; computed server-side. */
   keyPath: string | null;
 };
@@ -218,6 +222,7 @@ const selectAssetsSqlBase = `
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
     COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+    COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
     NULL::text AS "keyPath"
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
@@ -227,6 +232,7 @@ const selectAssetsSqlBase = `
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
   ${assetDocumentCountSubquery}
+  ${assetWorkOrderCountSubquery}
 `;
 
 /** Same as selectAssetsSql but computes keyPath when $2 is the separator character. $1 = site-access user id. */
@@ -259,6 +265,7 @@ const selectAssetsSqlWithKeyPath = `
     COALESCE(created_by."loginName", a."createdBy"::text) AS "createdBy",
     COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+    COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
     (
       s."key" || $2::text || COALESCE(
         (
@@ -285,6 +292,7 @@ const selectAssetsSqlWithKeyPath = `
   LEFT JOIN "users" created_by ON created_by."id" = a."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
   ${assetDocumentCountSubquery}
+  ${assetWorkOrderCountSubquery}
 `;
 
 type AssetTypeRow = QueryResultRow & { type: AssetType; id: string; siteId: string };
@@ -699,6 +707,7 @@ router.post("/", async (req: Request, res: Response) => {
           COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
           COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
           COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+          COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
           NULL::text AS "keyPath"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
@@ -708,6 +717,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         ${assetDocumentCountSubqueryOnInsert}
+        ${assetWorkOrderCountSubqueryOnInsert}
         `,
         [
           resolvedKey,
@@ -892,6 +902,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
           COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
           COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+          COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
           NULL::text AS "keyPath"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
@@ -901,6 +912,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         ${assetDocumentCountSubqueryOnUpdate}
+        ${assetWorkOrderCountSubqueryOnUpdate}
         `,
         [
           keyForUpdate,

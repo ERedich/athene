@@ -318,6 +318,53 @@ html.theme-crossfade-fallback #root {
   background: transparent !important;
 }
 
+.app-asset-refs-sidebar.p-sidebar .app-asset-refs-tabs.p-tabview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.app-asset-refs-sidebar.p-sidebar .app-asset-refs-tabs .p-tabview-panels {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  background: transparent;
+  padding: 0;
+}
+
+/* Glass drawer: sticky tab strip follows sidebar surface, not opaque modal overlay. */
+.app-asset-refs-sidebar.p-sidebar .app-sticky-tabs .p-tabview-nav-container,
+.app-asset-refs-sidebar.p-sidebar .app-sticky-tabs .p-tabview-nav,
+.app-asset-refs-sidebar.p-sidebar .app-sticky-tabs .p-tabview-nav li .p-tabview-nav-link {
+  background: transparent;
+}
+
+.app-asset-refs-sidebar .app-asset-refs-doc-icon {
+  flex: 0 0 1.25rem;
+  box-sizing: border-box;
+  width: 1.25rem;
+  height: 1.25rem;
+  min-width: 1.25rem;
+  max-width: 1.25rem;
+  margin-top: 0.125rem;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.app-asset-refs-sidebar .app-asset-refs-doc-icon svg {
+  display: block;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  max-width: 1.25rem !important;
+  max-height: 1.25rem !important;
+  flex: none;
+}
+
 .app-wo-search-sidebar-footer {
   background: color-mix(in srgb, var(--color-surface-container) 34%, transparent);
   backdrop-filter: blur(14px);
@@ -530,103 +577,80 @@ html.theme-crossfade-fallback #root {
 }
 
 /*
- * Reference buttons with zero entries: outline only (no fill), border + icon in the type color.
- * Documents: hellblau (sky-300); employees: slate (matches filled ref tone).
+ * Reference buttons with zero entries: same filled chrome as active, at 10% opacity
+ * so the type icon stays visible (File / UserPlus / ClipboardList).
  */
 .app-ref-button--employees-empty.p-button:not(:disabled),
 .app-ref-button--employees-empty.p-button:not(.p-disabled) {
-  opacity: 1 !important;
+  opacity: 0.1 !important;
   cursor: pointer !important;
-  background: transparent !important;
-  border: 1px solid rgb(203 213 225) !important; /* slate-300 */
+  background: rgb(203 213 225) !important; /* slate-300 — same as filled */
+  border: 1px solid rgb(203 213 225) !important;
   box-shadow: none !important;
-  color: transparent !important;
+  color: rgb(15 23 42) !important;
 }
 .app-ref-button--employees-empty.p-button:not(:disabled) .p-button-icon,
-.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon {
-  color: rgb(148 163 184) !important; /* slate-400 — gleiche Familie wie gefüllter MA-Button */
-}
+.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon,
 .app-ref-button--employees-empty.p-button:not(:disabled) .p-button-icon .pi,
-.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon .pi {
+.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon .pi,
+.app-ref-button--employees-empty.p-button:not(:disabled) .p-button-icon svg,
+.app-ref-button--employees-empty.p-button:not(.p-disabled) .p-button-icon svg {
   color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
 }
 .app-ref-button--employees-empty.p-button:not(:disabled):hover,
 .app-ref-button--employees-empty.p-button:not(.p-disabled):hover {
-  background: transparent !important;
+  opacity: 0.22 !important;
+  background: rgb(148 163 184) !important; /* slate-400 */
   border-color: rgb(148 163 184) !important;
   box-shadow: none !important;
-}
-.app-ref-button--employees-empty.p-button:not(:disabled):hover .p-button-icon,
-.app-ref-button--employees-empty.p-button:not(.p-disabled):hover .p-button-icon {
-  color: rgb(100 116 139) !important; /* slate-500 */
 }
 
 [data-theme="dark"] .app-ref-button--employees-empty.p-button:not(:disabled),
 [data-theme="dark"] .app-ref-button--employees-empty.p-button:not(.p-disabled) {
-  background: transparent !important;
-  border-color: rgb(148 163 184) !important;
-  box-shadow: none !important;
-  color: transparent !important;
-}
-[data-theme="dark"]
-  .app-ref-button--employees-empty.p-button:not(:disabled)
-  .p-button-icon,
-[data-theme="dark"]
-  .app-ref-button--employees-empty.p-button:not(.p-disabled)
-  .p-button-icon {
-  color: rgb(203 213 225) !important;
+  background: rgb(203 213 225) !important;
+  border-color: rgb(203 213 225) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
 }
 [data-theme="dark"]
   .app-ref-button--employees-empty.p-button:not(:disabled):hover,
 [data-theme="dark"]
   .app-ref-button--employees-empty.p-button:not(.p-disabled):hover {
-  border-color: rgb(203 213 225) !important;
-}
-[data-theme="dark"]
-  .app-ref-button--employees-empty.p-button:not(:disabled):hover
-  .p-button-icon,
-[data-theme="dark"]
-  .app-ref-button--employees-empty.p-button:not(.p-disabled):hover
-  .p-button-icon {
-  color: rgb(226 232 240) !important;
+  opacity: 0.22 !important;
+  background: rgb(148 163 184) !important;
+  border-color: rgb(148 163 184) !important;
 }
 
 /* Employee assignment references with zero entries (disabled state — reserved). */
 .app-ref-button--employees-inactive.p-button.p-disabled,
 .app-ref-button--employees-inactive.p-button:disabled {
-  opacity: 1 !important;
+  opacity: 0.1 !important;
   cursor: not-allowed !important;
-  background: transparent !important;
+  background: rgb(203 213 225) !important;
   border: 1px solid rgb(203 213 225) !important;
   box-shadow: none !important;
-  color: transparent !important;
+  color: rgb(15 23 42) !important;
 }
 
 .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon,
-.app-ref-button--employees-inactive.p-button:disabled .p-button-icon {
-  color: rgb(148 163 184) !important;
-}
-
+.app-ref-button--employees-inactive.p-button:disabled .p-button-icon,
 .app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon .pi,
-.app-ref-button--employees-inactive.p-button:disabled .p-button-icon .pi {
+.app-ref-button--employees-inactive.p-button:disabled .p-button-icon .pi,
+.app-ref-button--employees-inactive.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--employees-inactive.p-button:disabled .p-button-icon svg {
   color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
 }
 
 [data-theme="dark"] .app-ref-button--employees-inactive.p-button.p-disabled,
 [data-theme="dark"] .app-ref-button--employees-inactive.p-button:disabled {
-  background: transparent !important;
-  border-color: rgb(148 163 184) !important;
-  box-shadow: none !important;
-  color: transparent !important;
-}
-
-[data-theme="dark"]
-  .app-ref-button--employees-inactive.p-button.p-disabled
-  .p-button-icon,
-[data-theme="dark"]
-  .app-ref-button--employees-inactive.p-button:disabled
-  .p-button-icon {
-  color: rgb(203 213 225) !important;
+  background: rgb(203 213 225) !important;
+  border-color: rgb(203 213 225) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
 }
 
 [data-theme="dark"]
@@ -640,65 +664,57 @@ html.theme-crossfade-fallback #root {
   color: inherit !important;
 }
 
-/* Document references with zero files: outline hellblau, kein Fill */
+/* Document references with zero files: same chrome as filled, at 10% opacity (icon visible). */
+.app-ref-button--documents-inactive.p-button.p-disabled,
+.app-ref-button--documents-inactive.p-button:disabled,
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) {
+  opacity: 0.1 !important;
+  cursor: pointer !important;
+  background: rgb(103 232 249) !important; /* cyan-300 — same as filled */
+  border: 1px solid rgb(103 232 249) !important;
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+}
+
 .app-ref-button--documents-inactive.p-button.p-disabled,
 .app-ref-button--documents-inactive.p-button:disabled {
-  opacity: 1 !important;
   cursor: not-allowed !important;
-  background: transparent !important;
-  border: 1px solid rgb(125 211 252) !important; /* sky-300 */
-  box-shadow: none !important;
-  color: transparent !important;
 }
 
 .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon,
-.app-ref-button--documents-inactive.p-button:disabled .p-button-icon {
-  color: rgb(125 211 252) !important;
-}
-
+.app-ref-button--documents-inactive.p-button:disabled .p-button-icon,
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) .p-button-icon,
 .app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon .pi,
-.app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi {
+.app-ref-button--documents-inactive.p-button:disabled .p-button-icon .pi,
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) .p-button-icon .pi,
+.app-ref-button--documents-inactive.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--documents-inactive.p-button:disabled .p-button-icon svg,
+.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) .p-button-icon svg {
   color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
 }
 
-/* Zero documents but clickable — open Documents tab */
-.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) {
-  opacity: 1 !important;
-  cursor: pointer !important;
-  background: transparent !important;
-  border: 1px solid rgb(125 211 252) !important;
-  box-shadow: none !important;
-  color: transparent !important;
-}
-.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) .p-button-icon {
-  color: rgb(125 211 252) !important;
-}
 .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover {
-  border-color: rgb(14 165 233) !important; /* sky-500 */
-}
-.app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover .p-button-icon {
-  color: rgb(14 165 233) !important;
+  opacity: 0.22 !important;
+  background: rgb(34 211 238) !important; /* cyan-400 */
+  border-color: rgb(34 211 238) !important;
 }
 
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled,
 [data-theme="dark"] .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled) {
-  background: transparent !important;
-  border-color: rgb(56 189 248) !important;
-  box-shadow: none !important;
-  color: transparent !important;
+  background: rgb(103 232 249) !important;
+  border-color: rgb(103 232 249) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
 }
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled)
-  .p-button-icon {
-  color: rgb(56 189 248) !important;
-}
+
 [data-theme="dark"]
   .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover {
-  border-color: rgb(125 211 252) !important;
-}
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button:not(:disabled):not(.p-disabled):hover
-  .p-button-icon {
-  color: rgb(125 211 252) !important;
+  opacity: 0.22 !important;
+  background: rgb(34 211 238) !important;
+  border-color: rgb(34 211 238) !important;
 }
 
 /* Keep "no documents" icon alignment like rows with a visible badge chip. */
@@ -723,34 +739,6 @@ html.theme-crossfade-fallback #root {
   box-shadow: none !important;
   top: 0.35rem !important;
   right: 0.35rem !important;
-}
-
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button.p-disabled,
-[data-theme="dark"] .app-ref-button--documents-inactive.p-button:disabled {
-  background: transparent !important;
-  border-color: rgb(56 189 248) !important;
-  box-shadow: none !important;
-  color: transparent !important;
-}
-
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button.p-disabled
-  .p-button-icon,
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button:disabled
-  .p-button-icon {
-  color: rgb(56 189 248) !important;
-}
-
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button.p-disabled
-  .p-button-icon
-  .pi,
-[data-theme="dark"]
-  .app-ref-button--documents-inactive.p-button:disabled
-  .p-button-icon
-  .pi {
-  color: inherit !important;
 }
 
 /* Work orders: status column — full cell background, plain text (no badge). */
@@ -962,6 +950,46 @@ html.theme-crossfade-fallback #root {
 .app-ref-button--purchase.p-button:not(.p-disabled):hover {
   background: rgb(244 114 182) !important; /* pink-400 */
   border-color: rgb(244 114 182) !important;
+}
+
+.app-ref-button--work-orders.p-button:not(:disabled),
+.app-ref-button--work-orders.p-button:not(.p-disabled) {
+  background: rgb(196 181 253) !important; /* violet-300 */
+  border-color: rgb(196 181 253) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--work-orders.p-button:not(:disabled):hover,
+.app-ref-button--work-orders.p-button:not(.p-disabled):hover {
+  background: rgb(167 139 250) !important; /* violet-400 */
+  border-color: rgb(167 139 250) !important;
+}
+
+.app-ref-button--work-orders-empty.p-button.p-disabled,
+.app-ref-button--work-orders-empty.p-button:disabled {
+  opacity: 0.1 !important;
+  background: rgb(196 181 253) !important; /* violet-300 — same as filled */
+  border: 1px solid rgb(196 181 253) !important;
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+  cursor: not-allowed !important;
+}
+.app-ref-button--work-orders-empty.p-button.p-disabled .p-button-icon,
+.app-ref-button--work-orders-empty.p-button:disabled .p-button-icon,
+.app-ref-button--work-orders-empty.p-button.p-disabled .p-button-icon .pi,
+.app-ref-button--work-orders-empty.p-button:disabled .p-button-icon .pi,
+.app-ref-button--work-orders-empty.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--work-orders-empty.p-button:disabled .p-button-icon svg {
+  color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+[data-theme="dark"] .app-ref-button--work-orders-empty.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--work-orders-empty.p-button:disabled {
+  background: rgb(196 181 253) !important;
+  border-color: rgb(196 181 253) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
 }
 
 /* PrimeReact Button — restore styling (Tailwind @layer base preflight wins
@@ -1628,6 +1656,136 @@ html.theme-crossfade-fallback #root {
   border-spacing: 0;
 }
 
+/* TreeTable (Baumstruktur): mirror DataTable look without scrollHeight=flex */
+.app-asset-treetable.p-treetable {
+  background: transparent;
+  border: none;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-thead > tr > th,
+.app-asset-treetable.p-treetable .p-treetable-tbody > tr > td {
+  font-size: 0.875rem;
+  border-width: 0 1px 1px 0;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  padding: 0.375rem 0.5rem;
+  vertical-align: middle;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-thead > tr > th {
+  white-space: nowrap;
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-tbody > tr {
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+.app-asset-treetable.p-treetable.p-treetable-striped .p-treetable-tbody > tr.p-row-odd {
+  background: var(--color-surface-container-low);
+}
+
+.app-asset-treetable.p-treetable.p-treetable-striped .p-treetable-tbody > tr.p-row-odd > td {
+  background: transparent;
+}
+
+.app-asset-treetable.p-treetable.p-treetable-selectable .p-treetable-tbody > tr:not(.p-highlight):hover,
+.app-asset-treetable.p-treetable.p-treetable-hoverable-rows .p-treetable-tbody > tr:not(.p-highlight):hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-tbody > tr.p-highlight {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-tbody > tr.p-highlight > td {
+  background: transparent;
+  color: inherit;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-tbody > tr.p-highlight:hover {
+  background: color-mix(in srgb, var(--color-primary) 24%, transparent) !important;
+}
+
+.app-asset-treetable.p-treetable .p-treetable-toggler {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.25rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+  color: var(--color-on-surface-variant);
+}
+
+/* Auto layout so Schlüssel/Typ grow with content; never flex the td (left tint gap). */
+.app-asset-treetable.p-treetable table {
+  table-layout: auto;
+}
+
+.app-asset-treetable-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  vertical-align: middle;
+}
+
+.app-asset-treetable-cell__text {
+  white-space: nowrap;
+}
+
+/* GN-CATR: tint the whole row so expander padding has no edge gap */
+.app-asset-treetable.app-asset-treetable--typed .p-treetable-tbody > tr.app-asset-treetable-row--site {
+  background-color: color-mix(
+    in srgb,
+    var(--app-asset-type-site, #f97316) 10%,
+    transparent
+  ) !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed
+  .p-treetable-tbody
+  > tr.app-asset-treetable-row--structure {
+  background-color: color-mix(
+    in srgb,
+    var(--app-asset-type-structure, #ea580c) 10%,
+    transparent
+  ) !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed .p-treetable-tbody > tr.app-asset-treetable-row--line {
+  background-color: color-mix(
+    in srgb,
+    var(--app-asset-type-line, #78716c) 10%,
+    transparent
+  ) !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed
+  .p-treetable-tbody
+  > tr.app-asset-treetable-row--maintenanceObject {
+  background-color: color-mix(
+    in srgb,
+    var(--app-asset-type-maintenanceObject, #ef4444) 10%,
+    transparent
+  ) !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed .p-treetable-tbody > tr[class*="app-asset-treetable-row--"] > td {
+  background-color: transparent !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed .p-treetable-tbody > tr.p-highlight {
+  background-color: color-mix(in srgb, var(--color-primary) 18%, transparent) !important;
+}
+
+.app-asset-treetable.app-asset-treetable--typed .p-treetable-tbody > tr.p-highlight > td {
+  background-color: transparent !important;
+}
+
 .app-data-table.p-datatable {
   min-width: 0;
 }
@@ -2267,6 +2425,7 @@ html.theme-crossfade-fallback #root {
   flex: 1;
   grid-template-columns: 1fr;
   grid-auto-rows: 1fr;
+  grid-auto-flow: dense;
   border-top: 1px solid var(--dashboard-cell-border);
   border-left: 1px solid var(--dashboard-cell-border);
 }
@@ -2295,6 +2454,25 @@ html.theme-crossfade-fallback #root {
   display: flex;
   border-right: 1px solid var(--dashboard-cell-border);
   border-bottom: 1px solid var(--dashboard-cell-border);
+}
+
+.app-dashboard-grid-cell--span {
+  grid-column: 1 / -1;
+  grid-row: span 2;
+}
+
+@media (min-width: 640px) {
+  .app-dashboard-grid-cell--span {
+    grid-column: span 2;
+    grid-row: span var(--dashboard-row-span, 2);
+  }
+}
+
+@media (min-width: 1100px) {
+  .app-dashboard-grid-cell--span {
+    grid-column: span var(--dashboard-col-span, 2);
+    grid-row: span var(--dashboard-row-span, 2);
+  }
 }
 
 /* 1 column — last row is the last cell */
@@ -2339,6 +2517,235 @@ html.theme-crossfade-fallback #root {
   background: var(--surface-overlay);
   box-shadow: none;
   overflow: hidden;
+}
+
+.app-dashboard-greeting-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-overlay);
+}
+
+.app-dashboard-greeting-card__bg {
+  position: absolute;
+  inset: 0;
+  background-image: var(--greeting-bg-image);
+  background-size: cover;
+  background-position: center;
+  opacity: 1;
+  pointer-events: none;
+}
+
+.app-dashboard-greeting-card__gradient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--surface-overlay) 35%, transparent) 0%,
+    transparent 45%,
+    color-mix(in srgb, var(--surface-overlay) 20%, transparent) 100%
+  );
+}
+
+.app-dashboard-greeting-card__header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem 0.25rem;
+}
+
+.app-dashboard-greeting-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.app-dashboard-greeting-card__header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.app-dashboard-greeting-card:hover .app-dashboard-greeting-card__header-right,
+.app-dashboard-greeting-card:focus-within .app-dashboard-greeting-card__header-right {
+  opacity: 1;
+}
+
+.app-dashboard-greeting-card:hover .app-dashboard-kpi-config-btn,
+.app-dashboard-greeting-card:hover .app-dashboard-kpi-drag-handle,
+.app-dashboard-greeting-card:focus-within .app-dashboard-kpi-config-btn,
+.app-dashboard-greeting-card:focus-within .app-dashboard-kpi-drag-handle {
+  opacity: 1;
+}
+
+.app-dashboard-greeting-card__eyebrow {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-greeting-card__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  padding: 0.5rem 1rem 1rem;
+}
+
+.app-dashboard-greeting-card__title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.2;
+  color: #191c1e;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.35rem 0.55rem;
+  background: #ffffff;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.app-dashboard-greeting-card__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-dashboard-greeting-card__section {
+  min-width: 0;
+}
+
+.app-dashboard-greeting-card__section-title {
+  margin: 0 0 0.35rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  background: #ffffff;
+}
+
+.app-dashboard-greeting-card__summary {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #191c1e;
+  max-width: 42rem;
+  padding: 0.4rem 0.55rem;
+  background: #ffffff;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.app-dashboard-greeting-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+  margin: auto 0 0;
+  padding: 0;
+}
+
+@media (min-width: 640px) {
+  .app-dashboard-greeting-card__stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.app-dashboard-greeting-card__stats > div {
+  min-width: 0;
+}
+
+.app-dashboard-greeting-card__stats dt {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #191c1e;
+}
+
+.app-dashboard-greeting-card__stats dd {
+  margin: 0.15rem 0 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.app-dashboard-greeting-card[data-image-tone="dark"] .app-dashboard-greeting-card__stats dt,
+.app-dashboard-greeting-card[data-image-tone="dark"] .app-dashboard-greeting-card__stats dd {
+  color: #ffffff;
+}
+
+.app-dashboard-greeting-card__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.app-dashboard-greeting-card__skeleton-line {
+  height: 0.7rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  animation: app-dashboard-greeting-pulse 1.2s ease-in-out infinite;
+}
+
+.app-dashboard-greeting-card__skeleton-line--short {
+  width: 65%;
+}
+
+@keyframes app-dashboard-greeting-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.app-dashboard-greeting-card__error {
+  font-size: 0.875rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-greeting-card__error p {
+  margin: 0 0 0.5rem;
+}
+
+.app-dashboard-greeting-card__retry {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .app-dashboard-spark-card:hover .app-dashboard-kpi-config-btn,

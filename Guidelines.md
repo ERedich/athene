@@ -77,6 +77,7 @@ North star differs by theme but shared principles: **precision / industrial**, *
 ### Main application shell (post-login)
 
 - After successful login, users land in the **Dashboard** app first. Dashboard may ship with no feature content until modules are added.
+- **Exception — Dashboard Athene greeting KPI**: the system KPI **`atheneGreeting`** spans **2 columns × 2 rows** on the desktop grid (≥1100px; smaller breakpoints use full-width × 2 rows). It shows a time-of-day greeting (**Guten Morgen / Guten Tag / Guten Abend** only — no night greeting) with the signed-in user’s `name`, a soft period-of-day background (visible opacity fade toward the right), and an Athene AI briefing split into **Nachrichten** (unread Mitteilungszentrale items), **Rückblick** (last 24h), and **Vorschau** (next 48h maintenance) via `GET /api/dashboard/athene-briefing`. It is not a DataTable; header search / row-count rules do not apply. Layout storage key: `athene.dashboardLayout.v2`.
 - **Layout**: fixed **left navbar** (navigation, app switcher, settings entry points); **right main window** for all detail views, lists, and embedded content. Nested routes render inside the main window only.
 - **PrimeReact themes**: use **Lara** (`lara-light-blue` / `lara-dark-blue`) loaded dynamically with `document.documentElement.dataset.theme` (`light` / `dark`) so Prime components match the active mode.
 - **Primary colours (current web tokens)**: map Lara to Athene orange via CSS variables on `:root[data-theme="light"]` and `:root[data-theme="dark"]` — **`--color-primary: #f97316`**, **`--color-primary-container: #ea580c`**. Use these (and Tailwind mappings `primary` / `primary-container`) for accents, CTAs, and focus; override Prime defaults where Lara would otherwise paint blue.
@@ -120,10 +121,11 @@ Use these **background** colors for reference icon buttons (and matching border)
 | **Employees / assignments** | Open planning / assignments for a row; **no numeric badge** — use `pi-user-plus` (plus is in the icon). | **`slate-300`** (neutral gray) | `app-ref-button--employees` |
 | **Material** | Material / stock–related links | **`green-300`** | `app-ref-button--material` |
 | **Purchase (Einkauf)** | Procurement / purchasing links | **`pink-300`** | `app-ref-button--purchase` |
+| **Work orders (Aufträge)** | Asset has linked work orders (`workOrderCount > 0`), e.g. Baumstruktur Referenzen. | **`violet-300`** | `app-ref-button--work-orders` |
 
 - **Foreground**: keep icon and badge text **high contrast** on these pastel fills (the shared classes use a dark slate foreground; adjust only if documented here).
 - **Document colors are not permission states**: for work orders / monitoring, **green means only asset document references exist** (`documentCount = 0`, `assetDocumentCount > 0`), **cyan/blue means at least one work-order document reference exists** (`documentCount > 0`, regardless of whether asset documents also exist), and transparent/soft-blue means no documents (`documentCount = 0`, `assetDocumentCount = 0`). Current permission checks are enforced by API access rules, not by document icon color.
-- **Disabled / empty (other kinds)**: for **material** and **purchase** (when implemented), use neutral surface styling when there is nothing to open — **do not** use the strong green / pink fills. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill).
+- **Disabled / empty (other kinds)**: for **material**, **purchase**, and **work orders** (when count = 0), use neutral/transparent surface styling — **do not** use the strong green / pink / violet fills. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill). Work orders when empty: use **`app-ref-button--work-orders-empty`**.
 
 ---
 

@@ -8,6 +8,15 @@ export const assetDocumentCountSubquery = `
   ) doc_counts ON doc_counts."assetId" = a."id"
 `;
 
+/** Work-order counts for asset list queries (join on asset id). */
+export const assetWorkOrderCountSubquery = `
+  LEFT JOIN (
+    SELECT wo."assetId", COUNT(*)::int AS "workOrderCount"
+    FROM "workOrder" wo
+    GROUP BY wo."assetId"
+  ) wo_counts ON wo_counts."assetId" = a."id"
+`;
+
 /** Document counts for work-order list queries. */
 export const workOrderDocumentCountSubquery = `
   LEFT JOIN (
@@ -37,6 +46,14 @@ export const assetDocumentCountSubqueryOnInsert = `
   ) doc_counts ON doc_counts."assetId" = i."id"
 `;
 
+export const assetWorkOrderCountSubqueryOnInsert = `
+  LEFT JOIN (
+    SELECT wo."assetId", COUNT(*)::int AS "workOrderCount"
+    FROM "workOrder" wo
+    GROUP BY wo."assetId"
+  ) wo_counts ON wo_counts."assetId" = i."id"
+`;
+
 export const assetDocumentCountSubqueryOnUpdate = `
   LEFT JOIN (
     SELECT dl."entityId" AS "assetId", COUNT(*)::int AS "documentCount"
@@ -44,6 +61,14 @@ export const assetDocumentCountSubqueryOnUpdate = `
     WHERE dl."entityType" = 'asset'
     GROUP BY dl."entityId"
   ) doc_counts ON doc_counts."assetId" = u."id"
+`;
+
+export const assetWorkOrderCountSubqueryOnUpdate = `
+  LEFT JOIN (
+    SELECT wo."assetId", COUNT(*)::int AS "workOrderCount"
+    FROM "workOrder" wo
+    GROUP BY wo."assetId"
+  ) wo_counts ON wo_counts."assetId" = u."id"
 `;
 
 export const workOrderDocumentCountSubqueryOnInsert = `

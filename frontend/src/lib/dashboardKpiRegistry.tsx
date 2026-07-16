@@ -10,6 +10,7 @@ import {
   Clock,
   Package,
   Receipt,
+  Sparkles,
   Timer,
   User,
   type LucideProps,
@@ -29,6 +30,7 @@ import {
 } from "./dashboardSparkCharts";
 
 export const DASHBOARD_KPI_IDS = [
+  "atheneGreeting",
   "openActive",
   "completedLast7Days",
   "myOrders",
@@ -43,9 +45,15 @@ export const DASHBOARD_KPI_IDS = [
 
 export type DashboardKpiId = (typeof DASHBOARD_KPI_IDS)[number];
 
-export type DashboardKpiCategory = "transactions" | "workOrders" | "feedback" | "warehouse";
+export type DashboardKpiCategory =
+  | "athene"
+  | "transactions"
+  | "workOrders"
+  | "feedback"
+  | "warehouse";
 
 export const DASHBOARD_KPI_CATEGORIES: DashboardKpiCategory[] = [
+  "athene",
   "transactions",
   "workOrders",
   "feedback",
@@ -54,8 +62,9 @@ export const DASHBOARD_KPI_CATEGORIES: DashboardKpiCategory[] = [
 
 export const DASHBOARD_SLOT_COUNT = 16;
 
+/** Default: Athene greeting (2×2) at slot 0 + remaining normal tiles. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardKpiId[] = [
-  "openActive",
+  "atheneGreeting",
   "delayedOrders",
   "myOrders",
   "transactionsLast24h",
@@ -82,9 +91,22 @@ export type DashboardKpiDefinition = {
   accent: SparkAccent;
   titleKey: string;
   descKey: string;
+  /** Desktop grid span (logical 4×4). Defaults to 1×1. */
+  colSpan?: number;
+  rowSpan?: number;
 };
 
 export const DASHBOARD_KPI_DEFINITIONS: DashboardKpiDefinition[] = [
+  {
+    id: "atheneGreeting",
+    category: "athene",
+    icon: Sparkles,
+    accent: "blue",
+    titleKey: "dashboard.kpiAtheneGreeting",
+    descKey: "dashboard.kpiAtheneGreetingDesc",
+    colSpan: 2,
+    rowSpan: 2,
+  },
   { id: "openActive", category: "workOrders", icon: ClipboardList, accent: "green", titleKey: "dashboard.kpiOpenActive", descKey: "dashboard.kpiOpenActiveDesc" },
   { id: "completedLast7Days", category: "workOrders", icon: CheckCircle2, accent: "teal", titleKey: "dashboard.kpiCompleted7d", descKey: "dashboard.kpiCompleted7dDesc" },
   { id: "myOrders", category: "workOrders", icon: User, accent: "blue", titleKey: "dashboard.kpiMyOrders", descKey: "dashboard.kpiMyOrdersDesc" },
@@ -98,6 +120,14 @@ export const DASHBOARD_KPI_DEFINITIONS: DashboardKpiDefinition[] = [
 ];
 
 const KPI_MAP = new Map(DASHBOARD_KPI_DEFINITIONS.map((d) => [d.id, d]));
+
+export function getDashboardKpiSpan(id: DashboardKpiId): { colSpan: number; rowSpan: number } {
+  const def = KPI_MAP.get(id);
+  return {
+    colSpan: def?.colSpan ?? 1,
+    rowSpan: def?.rowSpan ?? 1,
+  };
+}
 
 export function getDashboardKpiDefinition(id: DashboardKpiId): DashboardKpiDefinition {
   const def = KPI_MAP.get(id);
@@ -160,13 +190,29 @@ export function resolveKpiView(
       title,
       icon: def.icon,
       accent: def.accent,
-      display: kpiId === "avgDelayHours" || kpiId === "topAssetByOrders" || kpiId === "transactionsLastMonth" ? "value" : "chart",
+      display:
+        kpiId === "atheneGreeting" ||
+        kpiId === "avgDelayHours" ||
+        kpiId === "topAssetByOrders" ||
+        kpiId === "transactionsLastMonth"
+          ? "value"
+          : "chart",
       value: null,
       series: demoSparkSeries(0),
     };
   }
 
   switch (kpiId) {
+    case "atheneGreeting":
+      return {
+        title,
+        icon: def.icon,
+        accent: def.accent,
+        display: "value",
+        value: null,
+        series: [],
+      };
+
     case "openActive":
       return {
         title,

@@ -5,19 +5,26 @@ import { OverlayPanel } from "primereact/overlaypanel";
 import { PanelMenu } from "primereact/panelmenu";
 
 import type { DashboardMetrics } from "../../hooks/useDashboardMetrics";
-import { buildDashboardKpiMenuModel } from "../../lib/dashboardKpiMenu";
-import { resolveKpiView, type DashboardKpiId } from "../../lib/dashboardKpiRegistry";
+import type { DashboardSlotId } from "../../hooks/useDashboardLayout";
+import { buildDashboardKpiMenuModel, isSystemDashboardKpiId } from "../../lib/dashboardKpiMenu";
+import { resolveKpiView } from "../../lib/dashboardKpiRegistry";
+import { resolveCustomKpiView, type DashboardKpiChart } from "../../lib/customDashboardKpiView";
+import { parseCustomKpiSlotId, type CustomKpi, type KpiEvaluateEntry } from "../../lib/kpiBuilderApi";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
 import { lucidePrimeBtnIcon } from "../../icons/lucide";
 import { DashboardSparkCard } from "./DashboardSparkCard";
+import { AtheneGreetingCard } from "./AtheneGreetingCard";
 
 type Props = {
   slotIndex: number;
-  kpiId: DashboardKpiId;
+  kpiId: DashboardSlotId;
   metrics: DashboardMetrics | null;
   loading: boolean;
   locale: string;
-  onSelectKpi: (kpiId: DashboardKpiId) => void;
+  customCatalog: CustomKpi[];
+  customEvaluations: Record<string, KpiEvaluateEntry>;
+  customLoading: boolean;
+  onSelectKpi: (kpiId: DashboardSlotId) => void;
   onArm: () => void;
 };
 
@@ -27,19 +34,33 @@ export function DashboardGridCell({
   metrics,
   loading,
   locale,
+  customCatalog,
+  customEvaluations,
+  customLoading,
   onSelectKpi,
   onArm,
 }: Props) {
   const { t } = useTranslation();
   const panelRef = useRef<OverlayPanel>(null);
+  const isGreeting = kpiId === "atheneGreeting";
 
-  const view = useMemo(
-    () => resolveKpiView(kpiId, metrics, locale, t),
-    [kpiId, metrics, locale, t],
-  );
+  const customUuid = parseCustomKpiSlotId(kpiId);
+
+  const view = useMemo(() => {
+    if (isGreeting) {
+      return null;
+    }
+    if (customUuid) {
+      return resolveCustomKpiView(customEvaluations[customUuid], t);
+    }
+    if (isSystemDashboardKpiId(kpiId)) {
+      return resolveKpiView(kpiId, metrics, locale, t);
+    }
+    return resolveCustomKpiView(undefined, t);
+  }, [isGreeting, customUuid, customEvaluations, kpiId, metrics, locale, t]);
 
   const selectKpi = useCallback(
-    (id: DashboardKpiId) => {
+    (id: DashboardSlotId) => {
       onSelectKpi(id);
       panelRef.current?.hide();
     },
@@ -47,9 +68,25 @@ export function DashboardGridCell({
   );
 
   const menuModel = useMemo(
-    () => buildDashboardKpiMenuModel(kpiId, selectKpi, t),
-    [kpiId, selectKpi, t],
+    () => buildDashboardKpiMenuModel(kpiId, selectKpi, t, customCatalog),
+    [kpiId, selectKpi, t, customCatalog],
   );
+
+  if (isGreeting) {
+    return (
+      <AtheneGreetingCard
+        slotIndex={slotIndex}
+        kpiId={kpiId}
+        customCatalog={customCatalog}
+        onSelectKpi={onSelectKpi}
+        onArm={onArm}
+      />
+    );
+  }
+
+  if (!view) return null;
+
+  const cellLoading = customUuid ? customLoading || loading : loading;
 
   const dragHandle = (
     <button
@@ -88,17 +125,18 @@ export function DashboardGridCell({
       dragHandle={dragHandle}
       title={view.title}
       display={view.display}
-      value={loading ? null : view.value}
+      value={cellLoading ? null : view.value}
       valueSuffix={view.valueSuffix}
-      detail={loading ? undefined : view.detail}
+      detail={cellLoading ? undefined : view.detail}
       locale={locale}
       href={view.href}
       series={view.series}
-      chart={view.chart}
+      chart={view.chart as DashboardKpiChart | undefined}
       chartAnimationKey={kpiId}
-      loading={loading}
+      loading={cellLoading}
       accent={view.accent}
-      footer={loading ? null : view.footer}
+      sparklineOptions={"sparklineOptions" in view ? view.sparklineOptions : undefined}
+      footer={cellLoading ? null : view.footer}
       headerActions={configureButton}
     />
   );

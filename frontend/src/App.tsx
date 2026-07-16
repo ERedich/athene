@@ -5,6 +5,7 @@ import { AppShellLayout } from "./layout/AppShellLayout";
 import { AppParametersPage } from "./pages/AppParametersPage";
 import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
+import { BaumstrukturPage } from "./pages/BaumstrukturPage";
 import { ClassificationsPage } from "./pages/ClassificationsPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
@@ -29,6 +30,7 @@ import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
+import { KpiBuilderPage } from "./pages/KpiBuilderPage";
 
 export default function App() {
   return (
@@ -39,12 +41,14 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
           <Route path="assets" element={<AssetsPage />} />
+          <Route path="baumstruktur" element={<BaumstrukturPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
           <Route path="kalendar" element={<KalendarPage />} />
           <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="tabellen-layouts" element={<TableLayoutsPage />} />
+          <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />

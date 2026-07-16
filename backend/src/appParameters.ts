@@ -24,6 +24,9 @@ export const APP_PARAM_KEY_ASSET_KEY_GEN = "GN-AAKG";
 /** Allgemein: Asset-Schlüssel-Pfad in Listen anzeigen (JSON). */
 export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP";
 
+/** Allgemein: Asset-TreeTable-Zeilen mit Asset-Typ-Farbe (10% Opazität). */
+export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR";
+
 /** Material: Lagerdaten in der Ersatzteil-App nachträglich bearbeiten. */
 export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD";
 

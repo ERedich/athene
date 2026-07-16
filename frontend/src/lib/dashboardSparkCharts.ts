@@ -2,6 +2,7 @@ import type { ChartData, ChartOptions } from "chart.js";
 
 import type { DayCount } from "../hooks/useDashboardMetrics";
 import { mergeInitialLineChartAnimation } from "./chartAnimation";
+import { readThemeChartColors } from "./workOrderOverviewCharts";
 
 const SPARK_GREEN = {
   line: "rgb(34, 197, 94)",
@@ -40,6 +41,12 @@ const ACCENT_MAP = {
   teal: SPARK_TEAL,
 } as const;
 
+export type SparklineOptions = {
+  labels?: string[];
+  showAxes?: boolean;
+  showTooltip?: boolean;
+};
+
 export function seriesFromByDay(byDay: DayCount[]): number[] {
   return byDay.map((d) => d.count);
 }
@@ -62,9 +69,16 @@ export function demoSparkSeries(endValue: number, days = 7): number[] {
 export function buildSparklineChart(
   series: number[],
   accent: SparkAccent = "green",
+  opts: SparklineOptions = {},
 ): { data: ChartData<"line">; options: ChartOptions<"line"> } {
   const colors = ACCENT_MAP[accent];
-  const labels = series.map((_, i) => String(i + 1));
+  const showAxes = opts.showAxes === true;
+  const showTooltip = opts.showTooltip === true;
+  const labels =
+    opts.labels && opts.labels.length === series.length
+      ? opts.labels
+      : series.map((_, i) => String(i + 1));
+  const theme = readThemeChartColors();
 
   return {
     data: {
@@ -84,7 +98,7 @@ export function buildSparklineChart(
           },
           fill: true,
           tension: 0.4,
-          pointRadius: 0,
+          pointRadius: showTooltip || showAxes ? 2 : 0,
           pointHitRadius: 12,
           borderWidth: 2,
         },
@@ -94,18 +108,24 @@ export function buildSparklineChart(
       {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 4, bottom: 0, left: 0, right: 0 } },
+        layout: { padding: { top: 4, bottom: showAxes ? 2 : 0, left: 0, right: 0 } },
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: false },
-          tooltip: { enabled: false },
+          tooltip: { enabled: showTooltip },
         },
         scales: {
-          x: { display: false },
+          x: {
+            display: showAxes,
+            ticks: { color: theme.text, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 7 },
+            grid: { display: false },
+          },
           y: {
-            display: false,
+            display: showAxes,
             min: 0,
             grace: "5%",
+            ticks: { color: theme.text, font: { size: 9 }, precision: 0 },
+            grid: { color: theme.grid },
           },
         },
         elements: {

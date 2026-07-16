@@ -13,6 +13,8 @@ import {
   MapPin,
   MessageSquare,
   Columns3,
+  FolderTree,
+  Gauge,
   Monitor,
   Network,
   Package,
@@ -90,6 +92,11 @@ export const navGroups: NavGroup[] = [
         labelKey: "tableLayouts.navTableLayouts",
       },
       {
+        to: "/kpi-builder",
+        Icon: Gauge,
+        labelKey: "kpiBuilder.navKpiBuilder",
+      },
+      {
         to: "/suchkonfig",
         Icon: Share2,
         labelKey: "suchkonfig.navSuchkonfig",
@@ -107,6 +114,11 @@ export const navGroups: NavGroup[] = [
     Icon: Tags,
     items: [
       { to: "/assets", Icon: Package, labelKey: "assets.navAssets" },
+      {
+        to: "/baumstruktur",
+        Icon: FolderTree,
+        labelKey: "baumstruktur.navBaumstruktur",
+      },
       {
         to: "/employees",
         Icon: IdCard,
