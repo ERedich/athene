@@ -12,6 +12,7 @@ const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const messageBodyMax = 4000;
+const photoPreviewFallback = "Photo";
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
@@ -27,10 +28,12 @@ function sendPgError(res: Response, err: unknown) {
   res.status(500).json({ error: "internal_error" });
 }
 
-function parseMessageBody(raw: unknown): string | null {
+/** Trimmed body, or empty string if omitted/blank. Null only when over max length. */
+function parseOptionalMessageBody(raw: unknown): string | null {
+  if (raw == null || raw === "") return "";
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
-  if (!trimmed || trimmed.length > messageBodyMax) return null;
+  if (trimmed.length > messageBodyMax) return null;
   return trimmed;
 }
 
@@ -44,6 +47,13 @@ type WorkOrderMetaRow = {
   responsibleEmployeeIds: string[];
 };
 
+type MessageDocumentMeta = {
+  documentId: string | null;
+  documentDisplayName: string | null;
+  documentMimeType: string | null;
+  documentFileName: string | null;
+};
+
 type MessageRow = {
   id: string;
   workOrderId: string;
@@ -55,7 +65,7 @@ type MessageRow = {
   replyToBodyPreview: string | null;
   replyToCreatedAt: string | null;
   createdAt: string;
-};
+} & MessageDocumentMeta;
 
 async function loadWorkOrderMeta(workOrderId: string): Promise<WorkOrderMetaRow | null> {
   const { rows } = await pool.query<WorkOrderMetaRow>(
@@ -112,6 +122,41 @@ async function resolveUserIdsForEmployees(employeeIds: string[]): Promise<string
   return rows.map((row) => row.id);
 }
 
+async function loadDocumentForWorkOrder(
+  workOrderId: string,
+  documentId: string,
+): Promise<MessageDocumentMeta | null> {
+  const { rows } = await pool.query<{
+    documentId: string;
+    documentDisplayName: string;
+    documentMimeType: string;
+    documentFileName: string;
+  }>(
+    `
+    SELECT
+      d."id"::text AS "documentId",
+      d."displayName" AS "documentDisplayName",
+      d."mimeType" AS "documentMimeType",
+      d."fileName" AS "documentFileName"
+    FROM "document" d
+    JOIN "documentLink" dl ON dl."documentId" = d."id"
+    WHERE d."id" = $1::uuid
+      AND dl."entityType" = 'workOrder'
+      AND dl."entityId" = $2::uuid
+    LIMIT 1
+    `,
+    [documentId, workOrderId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    documentId: row.documentId,
+    documentDisplayName: row.documentDisplayName,
+    documentMimeType: row.documentMimeType,
+    documentFileName: row.documentFileName,
+  };
+}
+
 async function loadMessages(workOrderId: string): Promise<MessageRow[]> {
   const { rows } = await pool.query<MessageRow>(
     `
@@ -124,16 +169,24 @@ async function loadMessages(workOrderId: string): Promise<MessageRow[]> {
       m."replyToMessageId"::text AS "replyToMessageId",
       reply_author."name" AS "replyToAuthorUserName",
       CASE
-        WHEN reply_m."body" IS NULL THEN NULL
-        WHEN length(reply_m."body") > 120 THEN left(reply_m."body", 117) || '...'
-        ELSE reply_m."body"
+        WHEN reply_m."id" IS NULL THEN NULL
+        WHEN length(trim(reply_m."body")) > 0 AND length(reply_m."body") > 120 THEN left(reply_m."body", 117) || '...'
+        WHEN length(trim(reply_m."body")) > 0 THEN reply_m."body"
+        WHEN reply_doc."displayName" IS NOT NULL THEN reply_doc."displayName"
+        ELSE NULL
       END AS "replyToBodyPreview",
       reply_m."createdAt"::text AS "replyToCreatedAt",
-      m."createdAt"::text AS "createdAt"
+      m."createdAt"::text AS "createdAt",
+      m."documentId"::text AS "documentId",
+      d."displayName" AS "documentDisplayName",
+      d."mimeType" AS "documentMimeType",
+      d."fileName" AS "documentFileName"
     FROM "workOrderMessage" m
     JOIN "users" author_u ON author_u."id" = m."authorUserId"
     LEFT JOIN "workOrderMessage" reply_m ON reply_m."id" = m."replyToMessageId"
     LEFT JOIN "users" reply_author ON reply_author."id" = reply_m."authorUserId"
+    LEFT JOIN "document" d ON d."id" = m."documentId"
+    LEFT JOIN "document" reply_doc ON reply_doc."id" = reply_m."documentId"
     WHERE m."workOrderId" = $1::uuid
     ORDER BY m."createdAt" ASC
     `,
@@ -142,9 +195,13 @@ async function loadMessages(workOrderId: string): Promise<MessageRow[]> {
   return rows;
 }
 
-function messagePreview(body: string): string {
-  if (body.length <= 120) return body;
-  return `${body.slice(0, 117)}...`;
+function messagePreview(body: string, documentDisplayName: string | null): string {
+  const trimmed = body.trim();
+  if (trimmed) {
+    if (trimmed.length <= 120) return trimmed;
+    return `${trimmed.slice(0, 117)}...`;
+  }
+  return documentDisplayName?.trim() || photoPreviewFallback;
 }
 
 async function createMessageNotifications(
@@ -159,6 +216,7 @@ async function createMessageNotifications(
     siteName: string;
     authorUserName: string;
     body: string;
+    documentDisplayName: string | null;
     isReply: boolean;
   },
 ): Promise<ChatNotificationPayload[]> {
@@ -187,7 +245,7 @@ async function createMessageNotifications(
       workOrderName: params.workOrderName,
       siteKey: params.siteKey,
       siteName: params.siteName,
-      messagePreview: messagePreview(params.body),
+      messagePreview: messagePreview(params.body, params.documentDisplayName),
       authorUserName: params.authorUserName,
       isReply: params.isReply,
       createdAt: row.createdAt,
@@ -234,9 +292,20 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_id" });
     return;
   }
-  const body = parseMessageBody(req.body?.body);
-  if (!body) {
+  const body = parseOptionalMessageBody(req.body?.body);
+  if (body === null) {
     res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  const documentIdRaw =
+    typeof req.body?.documentId === "string" ? req.body.documentId.trim() : "";
+  const documentId = documentIdRaw && isUuid(documentIdRaw) ? documentIdRaw : null;
+  if (!body && !documentId) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  if (documentIdRaw && !documentId) {
+    res.status(400).json({ error: "invalid_document_id" });
     return;
   }
   const replyToMessageIdRaw =
@@ -251,6 +320,21 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
       return;
     }
     await assertSiteAccess(pool, userId, meta.siteId);
+
+    let documentMeta: MessageDocumentMeta = {
+      documentId: null,
+      documentDisplayName: null,
+      documentMimeType: null,
+      documentFileName: null,
+    };
+    if (documentId) {
+      const linked = await loadDocumentForWorkOrder(workOrderId, documentId);
+      if (!linked) {
+        res.status(400).json({ error: "invalid_document_id" });
+        return;
+      }
+      documentMeta = linked;
+    }
 
     let replyAuthorUserId: string | null = null;
     if (replyToMessageId) {
@@ -280,11 +364,11 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
 
     const { rows: insertedRows } = await client.query<{ id: string; createdAt: string }>(
       `
-      INSERT INTO "workOrderMessage" ("workOrderId", "authorUserId", "body", "replyToMessageId")
-      VALUES ($1::uuid, $2::uuid, $3, $4::uuid)
+      INSERT INTO "workOrderMessage" ("workOrderId", "authorUserId", "body", "replyToMessageId", "documentId")
+      VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid)
       RETURNING "id"::text AS "id", "createdAt"::text AS "createdAt"
       `,
-      [workOrderId, userId, body, replyToMessageId],
+      [workOrderId, userId, body, replyToMessageId, documentMeta.documentId],
     );
     const inserted = insertedRows[0];
     if (!inserted) {
@@ -318,6 +402,7 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
       siteName: meta.siteName,
       authorUserName,
       body,
+      documentDisplayName: documentMeta.documentDisplayName,
       isReply,
     });
 
@@ -334,6 +419,7 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
       replyToBodyPreview: null,
       replyToCreatedAt: null,
       createdAt: inserted.createdAt,
+      ...documentMeta,
     };
 
     if (replyToMessageId) {
@@ -346,13 +432,15 @@ router.post("/:id/messages", async (req: Request, res: Response) => {
         SELECT
           reply_author."name" AS "replyToAuthorUserName",
           CASE
-            WHEN reply_m."body" IS NULL THEN NULL
-            WHEN length(reply_m."body") > 120 THEN left(reply_m."body", 117) || '...'
-            ELSE reply_m."body"
+            WHEN length(trim(reply_m."body")) > 0 AND length(reply_m."body") > 120 THEN left(reply_m."body", 117) || '...'
+            WHEN length(trim(reply_m."body")) > 0 THEN reply_m."body"
+            WHEN reply_doc."displayName" IS NOT NULL THEN reply_doc."displayName"
+            ELSE NULL
           END AS "replyToBodyPreview",
           reply_m."createdAt"::text AS "replyToCreatedAt"
         FROM "workOrderMessage" reply_m
         LEFT JOIN "users" reply_author ON reply_author."id" = reply_m."authorUserId"
+        LEFT JOIN "document" reply_doc ON reply_doc."id" = reply_m."documentId"
         WHERE reply_m."id" = $1::uuid
         LIMIT 1
         `,

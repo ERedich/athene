@@ -11,6 +11,13 @@
       "expo-router",
       "@react-native-community/datetimepicker",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Athene needs photo library access so you can attach photos to order messages.",
+          "cameraPermission": "Athene needs camera access so you can take photos for orders and messages."
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "Athene needs microphone access so you can dictate feedback and questions."
@@ -20,11 +27,17 @@
     "ios": {
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Athene needs microphone access so you can dictate questions.",
-        "NSSpeechRecognitionUsageDescription": "Athene needs speech recognition so you can dictate questions."
+        "NSSpeechRecognitionUsageDescription": "Athene needs speech recognition so you can dictate questions.",
+        "NSCameraUsageDescription": "Athene needs camera access so you can take photos for orders and messages.",
+        "NSPhotoLibraryUsageDescription": "Athene needs photo library access so you can attach photos to order messages."
       }
     },
     "android": {
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "experiments": {
       "typedRoutes": true

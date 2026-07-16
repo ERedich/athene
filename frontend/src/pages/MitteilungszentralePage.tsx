@@ -558,13 +558,15 @@ export function MitteilungszentralePage() {
             </header>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-              <WorkOrderMessagesTabContent
-                messages={historyMessages}
-                loading={historyLoading}
-                sending={historySending}
-                currentUserId={user.id}
-                onSend={sendHistoryMessage}
-              />
+              <div className="flex h-full min-h-0 flex-1 flex-col">
+                <WorkOrderMessagesTabContent
+                  messages={historyMessages}
+                  loading={historyLoading}
+                  sending={historySending}
+                  currentUserId={user.id}
+                  onSend={sendHistoryMessage}
+                />
+              </div>
             </div>
           </section>
         </div>

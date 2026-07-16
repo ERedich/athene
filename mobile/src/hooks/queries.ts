@@ -14,12 +14,15 @@ import {
 } from "../lib/workOrderSearchPresetsApi";
 import type {
   AssetRow,
+  AtheneBriefing,
   ClassificationRow,
   CostCenterRow,
+  DashboardMetrics,
   SiteRow,
   WorkOrderDocumentCategory,
   WorkOrderDocumentRow,
   WorkOrderAssignmentRow,
+  WorkOrderMessage,
   TransactionRow,
   WorkOrderRow,
   WorkOrderType,
@@ -36,8 +39,11 @@ export const queryKeys = {
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
   workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
   workOrderFeedback: (orderId: string) => ["workOrders", orderId, "feedback"] as const,
+  workOrderMessages: (orderId: string) => ["workOrders", orderId, "messages"] as const,
   workgroups: ["workgroups"] as const,
   employees: ["employees"] as const,
+  dashboardMetrics: ["dashboard", "metrics"] as const,
+  atheneBriefing: (lang: string) => ["dashboard", "athene-briefing", lang] as const,
 };
 
 export type WorkOrderActionErrorCode =
@@ -82,6 +88,29 @@ async function readActionErrorCode(r: Response): Promise<WorkOrderActionErrorCod
     // Ignore JSON parsing failures and fallback to unknown.
   }
   return "unknown";
+}
+
+export function useDashboardMetricsQuery() {
+  return useQuery({
+    queryKey: queryKeys.dashboardMetrics,
+    queryFn: async (): Promise<DashboardMetrics> => {
+      const r = await apiFetch("/api/dashboard/metrics");
+      if (!r.ok) throw new Error("dashboardMetrics");
+      return r.json() as Promise<DashboardMetrics>;
+    },
+  });
+}
+
+export function useAtheneBriefingQuery(lang: string) {
+  const langParam = lang.toLowerCase().startsWith("en") ? "en" : "de";
+  return useQuery({
+    queryKey: queryKeys.atheneBriefing(langParam),
+    queryFn: async (): Promise<AtheneBriefing> => {
+      const r = await apiFetch(`/api/dashboard/athene-briefing?lang=${langParam}`);
+      if (!r.ok) throw new Error("atheneBriefing");
+      return r.json() as Promise<AtheneBriefing>;
+    },
+  });
 }
 
 export function useSitesQuery() {
@@ -576,6 +605,45 @@ export async function fetchWorkOrderDocumentBlob(orderId: string, documentId: st
     throw new Error(err || "fetch_document_content");
   }
   return r.blob();
+}
+
+export function workOrderDocumentContentUrl(orderId: string, documentId: string): string {
+  return apiUrl(`/api/work-orders/${orderId}/documents/${documentId}/content`);
+}
+
+export async function fetchWorkOrderMessages(orderId: string): Promise<WorkOrderMessage[]> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/messages`);
+  if (!r.ok) throw new Error("load_messages");
+  const body = (await r.json()) as { rows?: WorkOrderMessage[] };
+  return Array.isArray(body.rows) ? body.rows : [];
+}
+
+export async function sendWorkOrderMessage(
+  orderId: string,
+  payload: { body?: string; replyToMessageId?: string | null; documentId?: string | null },
+): Promise<WorkOrderMessage> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      body: payload.body ?? "",
+      ...(payload.replyToMessageId ? { replyToMessageId: payload.replyToMessageId } : {}),
+      ...(payload.documentId ? { documentId: payload.documentId } : {}),
+    }),
+  });
+  if (!r.ok) throw new Error("send_message");
+  return (await r.json()) as WorkOrderMessage;
+}
+
+export function useWorkOrderMessagesQuery(orderId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.workOrderMessages(orderId ?? ""),
+    enabled: Boolean(orderId) && enabled,
+    queryFn: async (): Promise<WorkOrderMessage[]> => {
+      if (!orderId) return [];
+      return fetchWorkOrderMessages(orderId);
+    },
+  });
 }
 
 export async function fetchAssetDocumentBlob(assetId: string, documentId: string): Promise<Blob> {

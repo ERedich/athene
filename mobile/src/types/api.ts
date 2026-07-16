@@ -207,3 +207,63 @@ export type WorkOrderDocumentRow = {
   updatedAt: string;
   updatedBy: string;
 };
+
+export type WorkOrderMessage = {
+  id: string;
+  workOrderId: string;
+  authorUserId: string;
+  authorUserName: string;
+  body: string;
+  replyToMessageId: string | null;
+  replyToAuthorUserName: string | null;
+  replyToBodyPreview: string | null;
+  replyToCreatedAt: string | null;
+  createdAt: string;
+  documentId: string | null;
+  documentDisplayName: string | null;
+  documentMimeType: string | null;
+  documentFileName: string | null;
+};
+
+export type DashboardStatusCount = { status: string; count: number };
+export type DashboardDayCount = { date: string; count: number };
+export type DashboardOrderTypeCount = { orderType: string; count: number };
+
+export type DashboardMetrics = {
+  openActive: { total: number; byStatus: DashboardStatusCount[] };
+  completedLast7Days: { total: number; byDay: DashboardDayCount[] };
+  myOrders: { total: number; byStatus: DashboardStatusCount[]; employeeLinked: boolean };
+  transactionsLast7Days: { total: number; byDay: DashboardDayCount[] };
+  ordersByType: { total: number; byType: DashboardOrderTypeCount[] };
+  delayedOrders: { total: number };
+  avgDelayHours: { hours: number | null };
+  topAssetByOrders: {
+    assetId: string | null;
+    assetKey: string | null;
+    assetName: string | null;
+    count: number;
+  };
+  transactionsLast24h: { total: number };
+  transactionsLastMonth: { total: number };
+};
+
+export type AtheneBriefingCounts = {
+  created24h: number;
+  completed24h: number;
+  bookings24h: number;
+  maintenanceNext48h: number;
+  unreadNotifications: number;
+};
+
+export type AtheneBriefing = {
+  counts: AtheneBriefingCounts;
+  news: string;
+  lookback: string;
+  outlook: string;
+  summarySource: "ai" | "fallback";
+  maintenancePreview: Array<{
+    orderNumber: number | null;
+    name: string;
+    plannedStart: string;
+  }>;
+};

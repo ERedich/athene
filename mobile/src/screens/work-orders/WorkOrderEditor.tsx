@@ -9,8 +9,10 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
+  Image,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -23,7 +25,8 @@ import { SceneRendererProps, TabBar, TabView } from "react-native-tab-view";
 
 import { useAuth } from "../../auth/AuthContext";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../../lib/appParameterKeys";
-import { API_BASE_URL } from "../../lib/api";
+import { resolveAssetDocumentUri, resolveWorkOrderDocumentUri } from "../../lib/documentLocalUri";
+import { isImageMime, openNativeLocalDocument } from "../../lib/openNativeDocument";
 import { AssetPicker } from "../../components/AssetPicker";
 import { ClassificationPicker } from "../../components/ClassificationPicker";
 import { CostCenterPicker } from "../../components/CostCenterPicker";
@@ -33,11 +36,11 @@ import { FeedbackRemarkInput } from "../../components/FeedbackRemarkInput";
 import { HapticPressable } from "../../components/HapticPressable";
 import { MultiSelectModal } from "../../components/MultiSelectModal";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
+import { WorkOrderChatFab } from "../../components/WorkOrderChatFab";
+import { WorkOrderChatSheet } from "../../components/WorkOrderChatSheet";
 import {
   WorkOrderActionError,
   deleteWorkOrderDocument,
-  fetchAssetDocumentBlob,
-  fetchWorkOrderDocumentBlob,
   postWorkOrderFeedback,
   postWorkOrderStart,
   type WorkOrderFeedbackBody,
@@ -195,6 +198,8 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [feedbackEntryMode, setFeedbackEntryMode] = useState<FeedbackEntryMode>("create");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [showRequiredHints, setShowRequiredHints] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false);
+  const [imagePreviewUri, setImagePreviewUri] = useState<string | null>(null);
 
   const { data: documents = [], isLoading: docsLoading, refetch: refetchDocs } = useWorkOrderDocumentsQuery(effectiveOrderId);
   const { data: assignments = [], isLoading: assignmentsLoading } = useWorkOrderAssignmentsQuery(effectiveOrderId);
@@ -981,25 +986,27 @@ export function WorkOrderEditor({ orderId }: Props) {
   };
 
   const openDocument = async (doc: WorkOrderDocumentRow) => {
-    if (Platform.OS === "web") {
-      try {
-        const blob =
-          doc.source === "asset"
-            ? await fetchAssetDocumentBlob(doc.assetId ?? "", doc.id)
-            : await fetchWorkOrderDocumentBlob(doc.workOrderId ?? "", doc.id);
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank", "noopener,noreferrer");
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } catch {
-        Alert.alert("", t("workOrders.documentsOpenError"));
+    try {
+      const uri =
+        doc.source === "asset"
+          ? await resolveAssetDocumentUri(doc.assetId ?? "", doc.id, doc.mimeType)
+          : await resolveWorkOrderDocumentUri(doc.workOrderId ?? "", doc.id, doc.mimeType);
+      if (Platform.OS === "web") {
+        window.open(uri, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(uri), 60000);
+        return;
       }
-      return;
+      if (isImageMime(doc.mimeType)) {
+        setImagePreviewUri(uri);
+        return;
+      }
+      await openNativeLocalDocument(uri, {
+        mimeType: doc.mimeType,
+        displayName: doc.displayName || doc.fileName,
+      });
+    } catch {
+      Alert.alert("", t("workOrders.documentsOpenError"));
     }
-    const url =
-      doc.source === "asset"
-        ? `${API_BASE_URL}/api/assets/${doc.assetId}/documents/${doc.id}/content`
-        : `${API_BASE_URL}/api/work-orders/${doc.workOrderId}/documents/${doc.id}/content`;
-    await Linking.openURL(url);
   };
 
   const updateDurationFromEnd = (nextEnd: Date | null) => {
@@ -1644,6 +1651,52 @@ export function WorkOrderEditor({ orderId }: Props) {
           </HapticPressable>
         </View>
       </View>
+
+      {effectiveOrderId ? (
+        <>
+          <WorkOrderChatFab
+            accessibilityLabel={t("workOrders.messagesOpen")}
+            onPress={() => setChatVisible(true)}
+          />
+          <WorkOrderChatSheet
+            visible={chatVisible}
+            onClose={() => setChatVisible(false)}
+            orderId={effectiveOrderId}
+            orderLabel={
+              currentOrder
+                ? `${currentOrder.orderNumber} · ${currentOrder.name}`
+                : form.name.trim() || undefined
+            }
+            currentUserId={user?.id ?? null}
+          />
+        </>
+      ) : null}
+
+      <Modal
+        visible={Boolean(imagePreviewUri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImagePreviewUri(null)}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.92)",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onPress={() => setImagePreviewUri(null)}
+        >
+          {imagePreviewUri ? (
+            <Image
+              source={{ uri: imagePreviewUri }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </View>
   );
 }

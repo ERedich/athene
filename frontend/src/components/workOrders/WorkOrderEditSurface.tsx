@@ -883,13 +883,15 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           }
           disabled={!editingId}
         >
-          <WorkOrderMessagesTabContent
-            messages={workOrderMessages}
-            loading={workOrderMessagesLoading}
-            sending={workOrderMessageSending}
-            currentUserId={currentUserId}
-            onSend={sendMessage}
-          />
+          <div className="app-wo-messages-tab">
+            <WorkOrderMessagesTabContent
+              messages={workOrderMessages}
+              loading={workOrderMessagesLoading}
+              sending={workOrderMessageSending}
+              currentUserId={currentUserId}
+              onSend={sendMessage}
+            />
+          </div>
         </TabPanel>
       </TabView>
     </div>

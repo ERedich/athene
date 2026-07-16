@@ -294,6 +294,8 @@
     "documentsLoadError": "Dokumente konnten nicht geladen werden.",
     "documentsEmpty": "Keine Dokumente vorhanden.",
     "documentsFileName": "Dateiname",
+    "documentsImagePreview": "Vorschau: {{name}}",
+    "documentsImagePreviewHint": "Vorschau beim Hovern · Klicken zum Öffnen",
     "workOrdersLoadError": "Aufträge konnten nicht geladen werden.",
     "workOrdersEmpty": "Keine Aufträge vorhanden."
   },
@@ -626,6 +628,8 @@
     "messagesDefaultRecipients": "Neue Nachricht geht an die Verantwortlichen des Auftrags.",
     "messagesLoadError": "Mitteilungen konnten nicht geladen werden.",
     "messagesSendError": "Nachricht konnte nicht gesendet werden.",
+    "messagesPhotoAlt": "Angehängtes Foto",
+    "messagesAttachment": "Anhang",
     "feedbackDoneBy": "Erledigt von",
     "feedbackDoneByEmpty": "Keine Angabe",
     "feedbackReportingEmployee": "Mitarbeiter",

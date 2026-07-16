@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
   ChevronsDownUp,
@@ -72,6 +73,31 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+function isImageDocument(doc: AssetDocumentRow): boolean {
+  const mt = (doc.mimeType ?? "").toLowerCase().split(";")[0]?.trim() ?? "";
+  if (mt.startsWith("image/")) return true;
+  const i = doc.fileName.lastIndexOf(".");
+  const ext = i >= 0 ? doc.fileName.slice(i + 1).toLowerCase() : "";
+  return (
+    ext === "png" ||
+    ext === "jpg" ||
+    ext === "jpeg" ||
+    ext === "gif" ||
+    ext === "webp" ||
+    ext === "bmp" ||
+    ext === "svg"
+  );
+}
+
+type ImageHoverPreview = {
+  docId: string;
+  title: string;
+  url: string | null;
+  loading: boolean;
+  top: number;
+  left: number;
+};
 
 function parseDocumentRow(raw: unknown): AssetDocumentRow | null {
   if (!raw || typeof raw !== "object") return null;
@@ -217,6 +243,10 @@ export function BaumstrukturPage() {
   const [woLoading, setWoLoading] = useState(false);
   const [woRows, setWoRows] = useState<WorkOrder[]>([]);
   const [woLoadedAssetId, setWoLoadedAssetId] = useState<string | null>(null);
+  const [imageHoverPreview, setImageHoverPreview] = useState<ImageHoverPreview | null>(null);
+  const imagePreviewCacheRef = useRef<Map<string, string>>(new Map());
+  const imagePreviewHoverTimerRef = useRef<number | null>(null);
+  const imagePreviewReqSeqRef = useRef(0);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -368,8 +398,109 @@ export function BaumstrukturPage() {
   );
 
   const closeRefsDrawer = useCallback(() => {
+    if (imagePreviewHoverTimerRef.current != null) {
+      window.clearTimeout(imagePreviewHoverTimerRef.current);
+      imagePreviewHoverTimerRef.current = null;
+    }
+    setImageHoverPreview(null);
     setRefsAsset(null);
   }, []);
+
+  const clearImageHoverPreview = useCallback(() => {
+    if (imagePreviewHoverTimerRef.current != null) {
+      window.clearTimeout(imagePreviewHoverTimerRef.current);
+      imagePreviewHoverTimerRef.current = null;
+    }
+    imagePreviewReqSeqRef.current += 1;
+    setImageHoverPreview(null);
+  }, []);
+
+  const showImageHoverPreview = useCallback(
+    (assetId: string, doc: AssetDocumentRow, anchor: DOMRect) => {
+      if (!isImageDocument(doc)) return;
+      if (imagePreviewHoverTimerRef.current != null) {
+        window.clearTimeout(imagePreviewHoverTimerRef.current);
+      }
+      const title = doc.displayName?.trim() || doc.fileName;
+      const previewW = 280;
+      const previewH = 220;
+      const gap = 12;
+      const left = Math.max(8, Math.min(anchor.left - previewW - gap, window.innerWidth - previewW - 8));
+      const top = Math.max(8, Math.min(anchor.top, window.innerHeight - previewH - 8));
+      const cacheKey = `${assetId}:${doc.id}`;
+      const cached = imagePreviewCacheRef.current.get(cacheKey);
+
+      imagePreviewHoverTimerRef.current = window.setTimeout(() => {
+        imagePreviewHoverTimerRef.current = null;
+        if (cached) {
+          setImageHoverPreview({
+            docId: doc.id,
+            title,
+            url: cached,
+            loading: false,
+            top,
+            left,
+          });
+          return;
+        }
+        const seq = ++imagePreviewReqSeqRef.current;
+        setImageHoverPreview({
+          docId: doc.id,
+          title,
+          url: null,
+          loading: true,
+          top,
+          left,
+        });
+        void (async () => {
+          try {
+            const res = await apiFetch(`/api/assets/${assetId}/documents/${doc.id}/content`);
+            if (!res.ok) throw new Error("preview");
+            const blob = await res.blob();
+            if (imagePreviewReqSeqRef.current !== seq) return;
+            const blobUrl = URL.createObjectURL(blob);
+            const prev = imagePreviewCacheRef.current.get(cacheKey);
+            if (prev) URL.revokeObjectURL(prev);
+            imagePreviewCacheRef.current.set(cacheKey, blobUrl);
+            setImageHoverPreview({
+              docId: doc.id,
+              title,
+              url: blobUrl,
+              loading: false,
+              top,
+              left,
+            });
+          } catch {
+            if (imagePreviewReqSeqRef.current !== seq) return;
+            setImageHoverPreview(null);
+          }
+        })();
+      }, 220);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewHoverTimerRef.current != null) {
+        window.clearTimeout(imagePreviewHoverTimerRef.current);
+      }
+      for (const url of imagePreviewCacheRef.current.values()) {
+        URL.revokeObjectURL(url);
+      }
+      imagePreviewCacheRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (refsAsset != null) return;
+    clearImageHoverPreview();
+  }, [clearImageHoverPreview, refsAsset]);
+
+  useEffect(() => {
+    if (refsTab === 0) return;
+    clearImageHoverPreview();
+  }, [clearImageHoverPreview, refsTab]);
 
   const onRefsTabChange = useCallback(
     (index: number) => {
@@ -779,6 +910,7 @@ export function BaumstrukturPage() {
                         const spec = documentTypeMimeIcon(doc.mimeType ?? "application/octet-stream", doc.fileName);
                         const MimeIco = spec.Icon;
                         const title = doc.displayName?.trim() || doc.fileName;
+                        const imageDoc = isImageDocument(doc);
                         return (
                           <div
                             key={doc.id}
@@ -786,8 +918,24 @@ export function BaumstrukturPage() {
                             tabIndex={0}
                             className="app-card-cascade app-asset-refs-doc-card flex cursor-pointer items-center gap-2 rounded-sm border border-solid border-outline-variant px-3 py-2 transition-colors hover:bg-[color-mix(in_srgb,var(--color-on-surface)_4%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                             style={{ ["--app-cascade-index" as string]: index }}
-                            title={t("assets.documentsOpen")}
+                            title={
+                              imageDoc
+                                ? t("baumstruktur.documentsImagePreviewHint")
+                                : t("assets.documentsOpen")
+                            }
                             onClick={() => void openDocumentContent(refsAsset.id, doc.id)}
+                            onMouseEnter={(e) => {
+                              if (!imageDoc) return;
+                              showImageHoverPreview(
+                                refsAsset.id,
+                                doc,
+                                e.currentTarget.getBoundingClientRect(),
+                              );
+                            }}
+                            onMouseLeave={() => {
+                              if (!imageDoc) return;
+                              clearImageHoverPreview();
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
@@ -893,6 +1041,32 @@ export function BaumstrukturPage() {
           </div>
         ) : null}
       </Sidebar>
+
+      {imageHoverPreview && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="app-asset-refs-image-preview"
+              style={{ top: imageHoverPreview.top, left: imageHoverPreview.left }}
+              role="img"
+              aria-label={t("baumstruktur.documentsImagePreview", {
+                name: imageHoverPreview.title,
+              })}
+            >
+              {imageHoverPreview.loading || !imageHoverPreview.url ? (
+                <div className="app-asset-refs-image-preview__loading">
+                  <LucideSpinner className="h-5 w-5" strokeWidth={1.75} />
+                </div>
+              ) : (
+                <img
+                  src={imageHoverPreview.url}
+                  alt={imageHoverPreview.title}
+                  className="app-asset-refs-image-preview__img"
+                />
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

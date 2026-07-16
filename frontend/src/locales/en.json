@@ -294,6 +294,8 @@
     "documentsLoadError": "Could not load documents.",
     "documentsEmpty": "No documents found.",
     "documentsFileName": "File name",
+    "documentsImagePreview": "Preview: {{name}}",
+    "documentsImagePreviewHint": "Hover for preview · click to open",
     "workOrdersLoadError": "Could not load work orders.",
     "workOrdersEmpty": "No work orders found."
   },
@@ -626,6 +628,8 @@
     "messagesDefaultRecipients": "New messages are addressed to the work order's responsible persons.",
     "messagesLoadError": "Could not load messages.",
     "messagesSendError": "Could not send message.",
+    "messagesPhotoAlt": "Attached photo",
+    "messagesAttachment": "Attachment",
     "feedbackDoneBy": "Done by",
     "feedbackDoneByEmpty": "Not recorded",
     "feedbackReportingEmployee": "Employee",

@@ -157,6 +157,10 @@ export type WorkOrderMessageRealtimePayload = {
   replyToBodyPreview: string | null;
   replyToCreatedAt: string | null;
   createdAt: string;
+  documentId: string | null;
+  documentDisplayName: string | null;
+  documentMimeType: string | null;
+  documentFileName: string | null;
 };
 
 /** Fan-out new thread messages to all users with site access (not only inbox recipients). */

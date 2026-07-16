@@ -11,6 +11,10 @@ export type WorkOrderMessage = {
   replyToBodyPreview: string | null;
   replyToCreatedAt: string | null;
   createdAt: string;
+  documentId: string | null;
+  documentDisplayName: string | null;
+  documentMimeType: string | null;
+  documentFileName: string | null;
 };
 
 type MessagesResponse = {
@@ -21,12 +25,19 @@ export async function fetchWorkOrderMessages(workOrderId: string): Promise<WorkO
   const res = await apiFetch(`/api/work-orders/${workOrderId}/messages`);
   if (!res.ok) throw new Error("load_messages");
   const body = (await res.json()) as MessagesResponse;
-  return Array.isArray(body.rows) ? body.rows : [];
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  return rows.map((row) => ({
+    ...row,
+    documentId: row.documentId ?? null,
+    documentDisplayName: row.documentDisplayName ?? null,
+    documentMimeType: row.documentMimeType ?? null,
+    documentFileName: row.documentFileName ?? null,
+  }));
 }
 
 export async function sendWorkOrderMessage(
   workOrderId: string,
-  payload: { body: string; replyToMessageId?: string | null },
+  payload: { body: string; replyToMessageId?: string | null; documentId?: string | null },
 ): Promise<WorkOrderMessage> {
   const res = await apiFetch(`/api/work-orders/${workOrderId}/messages`, {
     method: "POST",
@@ -34,6 +45,7 @@ export async function sendWorkOrderMessage(
     body: JSON.stringify({
       body: payload.body,
       ...(payload.replyToMessageId ? { replyToMessageId: payload.replyToMessageId } : {}),
+      ...(payload.documentId ? { documentId: payload.documentId } : {}),
     }),
   });
   if (!res.ok) throw new Error("send_message");
