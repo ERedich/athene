@@ -1,6 +1,6 @@
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
-import { ClipboardList, Factory, Home, Landmark, Moon, Sparkles, Sun } from "lucide-react-native";
+import { ClipboardList, Factory, FolderTree, Home, Landmark, Moon, Sparkles, Sun } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
@@ -33,6 +33,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const activeHome = pathname === "/home" || pathname.endsWith("/home");
   const activeCc = pathname.startsWith("/cost-centers");
   const activeAssets = pathname.startsWith("/assets");
+  const activeBaumstruktur = pathname.startsWith("/baumstruktur");
   const activeWorkOrders = pathname.startsWith("/work-orders");
 
   const styles = useMemo(
@@ -81,7 +82,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
     [colors, isDark],
   );
 
-  function closeAndGo(href: "/home" | "/cost-centers" | "/assets" | "/work-orders") {
+  function closeAndGo(href: "/home" | "/cost-centers" | "/assets" | "/baumstruktur" | "/work-orders") {
     router.push(href as never);
     navigation.closeDrawer();
   }
@@ -122,6 +123,21 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
       >
         <Factory size={24} color={activeAssets ? colors.primary : colors.onSurfaceVariant} />
         <Text style={activeAssets ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navAssets")}</Text>
+      </HapticPressable>
+
+      <HapticPressable
+        onPress={() => closeAndGo("/baumstruktur")}
+        {...androidRippleProps(navRipple)}
+        style={({ pressed }) => [
+          styles.navItem,
+          activeBaumstruktur && styles.navItemActive,
+          pressedOpacity(pressed, PRESSED_OPACITY_ROW),
+        ]}
+      >
+        <FolderTree size={24} color={activeBaumstruktur ? colors.primary : colors.onSurfaceVariant} />
+        <Text style={activeBaumstruktur ? styles.navLabel : styles.navLabelMuted}>
+          {t("drawer.navBaumstruktur")}
+        </Text>
       </HapticPressable>
 
       <HapticPressable

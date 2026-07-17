@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  History,
   Package,
   Receipt,
   Sparkles,
@@ -31,6 +32,7 @@ import {
 
 export const DASHBOARD_KPI_IDS = [
   "atheneGreeting",
+  "auditFeed",
   "openActive",
   "completedLast7Days",
   "myOrders",
@@ -62,10 +64,11 @@ export const DASHBOARD_KPI_CATEGORIES: DashboardKpiCategory[] = [
 
 export const DASHBOARD_SLOT_COUNT = 16;
 
-/** Default: Athene greeting (2×2) at slot 0 + remaining normal tiles. */
+/** Default: Athene greeting (2×2) at slot 0 + Audit feed (2×2) at slot 2 + remaining tiles. */
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardKpiId[] = [
   "atheneGreeting",
   "delayedOrders",
+  "auditFeed",
   "myOrders",
   "transactionsLast24h",
   "ordersByType",
@@ -79,7 +82,6 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardKpiId[] = [
   "myOrders",
   "transactionsLast24h",
   "ordersByType",
-  "completedLast7Days",
 ];
 
 type IconComponent = ComponentType<LucideProps>;
@@ -104,6 +106,16 @@ export const DASHBOARD_KPI_DEFINITIONS: DashboardKpiDefinition[] = [
     accent: "blue",
     titleKey: "dashboard.kpiAtheneGreeting",
     descKey: "dashboard.kpiAtheneGreetingDesc",
+    colSpan: 2,
+    rowSpan: 2,
+  },
+  {
+    id: "auditFeed",
+    category: "athene",
+    icon: History,
+    accent: "teal",
+    titleKey: "dashboard.kpiAudit",
+    descKey: "dashboard.kpiAuditDesc",
     colSpan: 2,
     rowSpan: 2,
   },
@@ -192,6 +204,7 @@ export function resolveKpiView(
       accent: def.accent,
       display:
         kpiId === "atheneGreeting" ||
+        kpiId === "auditFeed" ||
         kpiId === "avgDelayHours" ||
         kpiId === "topAssetByOrders" ||
         kpiId === "transactionsLastMonth"
@@ -204,6 +217,16 @@ export function resolveKpiView(
 
   switch (kpiId) {
     case "atheneGreeting":
+      return {
+        title,
+        icon: def.icon,
+        accent: def.accent,
+        display: "value",
+        value: null,
+        series: [],
+      };
+
+    case "auditFeed":
       return {
         title,
         icon: def.icon,

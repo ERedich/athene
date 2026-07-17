@@ -12,6 +12,7 @@ import {
 import { apiFetch } from "../lib/api";
 import type { WorkOrderMessage } from "../lib/notificationCenter";
 import type { WorkOrder } from "../lib/workOrderTypes";
+import type { DashboardAuditFeedItem } from "../hooks/useDashboardAuditFeed";
 
 type SubscriptionChangeKind = "status" | "temporal" | "data" | "references";
 
@@ -69,6 +70,7 @@ type SubscriptionContextValue = {
   onWorkOrderEvent: (handler: (message: WorkOrderEventMessage) => void) => () => void;
   onWorkOrderMessageEvent: (handler: (message: WorkOrderMessageEventMessage) => void) => () => void;
   onNotificationEvent: (handler: NotificationEventHandler) => () => void;
+  onAuditFeedEvent: (handler: (item: DashboardAuditFeedItem) => void) => () => void;
 };
 
 const WorkOrderSubscriptionContext = createContext<SubscriptionContextValue | null>(null);
@@ -108,6 +110,16 @@ function isWorkOrderMessage(value: unknown): value is WorkOrderMessage {
   );
 }
 
+function isAuditFeedItem(value: unknown): value is DashboardAuditFeedItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as DashboardAuditFeedItem;
+  return (
+    typeof item.id === "string" &&
+    typeof item.occurredAt === "string" &&
+    (item.kind === "work_order_status" || item.kind === "transaction_created")
+  );
+}
+
 export function WorkOrderSubscriptionProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [subscribedIds, setSubscribedIds] = useState<Set<string>>(new Set());
@@ -116,6 +128,7 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
     new Set<(message: WorkOrderMessageEventMessage) => void>(),
   );
   const notificationEventListenersRef = useRef(new Set<NotificationEventHandler>());
+  const auditFeedEventListenersRef = useRef(new Set<(item: DashboardAuditFeedItem) => void>());
 
   const refreshUnreadCount = useCallback(async () => {
     const res = await apiFetch("/api/notification-center/unread-count");
@@ -165,6 +178,7 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
           workOrder?: WorkOrder;
           notification?: unknown;
           message?: unknown;
+          item?: unknown;
         };
         if (
           (message.type === "work_order_created" || message.type === "work_order_updated") &&
@@ -183,6 +197,10 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
             message: message.message,
           };
           for (const listener of workOrderMessageEventListenersRef.current) listener(casted);
+          return;
+        }
+        if (message.type === "audit_feed_item" && isAuditFeedItem(message.item)) {
+          for (const listener of auditFeedEventListenersRef.current) listener(message.item);
           return;
         }
         if (message.type === "subscription_notification" && isSubscriptionNotification(message.notification)) {
@@ -280,6 +298,13 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
     [],
   );
 
+  const onAuditFeedEvent = useCallback((handler: (item: DashboardAuditFeedItem) => void) => {
+    auditFeedEventListenersRef.current.add(handler);
+    return () => {
+      auditFeedEventListenersRef.current.delete(handler);
+    };
+  }, []);
+
   const value = useMemo<SubscriptionContextValue>(
     () => ({
       unreadCount,
@@ -292,9 +317,11 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
       onWorkOrderEvent,
       onWorkOrderMessageEvent,
       onNotificationEvent,
+      onAuditFeedEvent,
     }),
     [
       isSubscribed,
+      onAuditFeedEvent,
       onNotificationEvent,
       onWorkOrderEvent,
       onWorkOrderMessageEvent,

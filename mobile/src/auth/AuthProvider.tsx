@@ -6,6 +6,7 @@ import {
   setMobileBearerToken,
 } from "../lib/api";
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
+import { parseAssetTypeDisplayConfig, type AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import type { AuthUser } from "../types/api";
 
 import { AuthContext } from "./AuthContext";
@@ -18,6 +19,7 @@ type MeResponse = {
   appParameterAssetKeyMode?: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath?: boolean;
   appParameterAssetKeyPathSeparator?: string;
+  appParameterAssetTypes?: AssetTypeDisplayConfig | null;
 };
 
 async function clearMobileCredentials(): Promise<void> {
@@ -32,6 +34,7 @@ async function clearMobileCredentials(): Promise<void> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
+  const [appParameterAssetTypes, setAppParameterAssetTypes] = useState<AssetTypeDisplayConfig | null>(null);
   const [appParameterDefaultWorkgroupId, setAppParameterDefaultWorkgroupId] = useState<string | null>(null);
   const [appParameterDefaultShiftHours, setAppParameterDefaultShiftHours] = useState(8);
   const [appParameterAssetKeyMode, setAppParameterAssetKeyMode] = useState<AppParameterAssetKeyMode>("manual");
@@ -46,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearMobileCredentials();
         setUser(null);
         setAppParameterBooleans({});
+        setAppParameterAssetTypes(null);
         setAppParameterDefaultWorkgroupId(null);
         setAppParameterDefaultShiftHours(8);
         setAppParameterAssetKeyMode("manual");
@@ -56,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = (await res.json()) as MeResponse;
       setUser(data.user);
       setAppParameterBooleans(data.appParameterBooleans ?? {});
+      setAppParameterAssetTypes(parseAssetTypeDisplayConfig(data.appParameterAssetTypes));
       setAppParameterDefaultWorkgroupId(data.appParameterDefaultWorkgroupId ?? null);
       setAppParameterDefaultShiftHours(
         typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
@@ -70,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearMobileCredentials();
       setUser(null);
       setAppParameterBooleans({});
+      setAppParameterAssetTypes(null);
       setAppParameterDefaultWorkgroupId(null);
       setAppParameterDefaultShiftHours(8);
       setAppParameterAssetKeyMode("manual");
@@ -141,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearMobileCredentials();
     setUser(null);
     setAppParameterBooleans({});
+    setAppParameterAssetTypes(null);
     setAppParameterDefaultWorkgroupId(null);
     setAppParameterDefaultShiftHours(8);
     setAppParameterAssetKeyMode("manual");
@@ -152,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       appParameterBooleans,
+      appParameterAssetTypes,
       appParameterDefaultWorkgroupId,
       appParameterDefaultShiftHours,
       appParameterAssetKeyMode,
@@ -165,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       appParameterBooleans,
+      appParameterAssetTypes,
       appParameterDefaultWorkgroupId,
       appParameterDefaultShiftHours,
       appParameterAssetKeyMode,

@@ -8,7 +8,7 @@ import {
 } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
-import { useNavigation, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -20,9 +20,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import PagerView from "react-native-pager-view";
-
 import { ShellHeaderActions } from "../../../src/components/ShellHeaderActions";
+import PagerView from "../../../src/components/PagerView";
 import { HapticPressable } from "../../../src/components/HapticPressable";
 import { WorkOrderActionsSheet } from "../../../src/components/WorkOrderActionsSheet";
 import { WorkOrderFeedbackModal } from "../../../src/components/WorkOrderFeedbackModal";
@@ -37,6 +36,7 @@ import {
   type WorkOrderFeedbackBody,
   queryKeys,
   useWorkOrderSearchPresetsBootstrapQuery,
+  useWorkOrdersByAssetQuery,
   useWorkOrdersByPresetQuery,
   useWorkOrdersQuery,
 } from "../../../src/hooks/queries";
@@ -80,16 +80,20 @@ function filterWorkOrders(rows: WorkOrderRow[], q: string, t: ReturnType<typeof 
   );
 }
 
+type TempAssetFilter = { id: string; key: string };
+
 type ListPageProps = {
   pageIndex: number;
   active: boolean;
   presets: WorkOrderSearchPresetListItem[];
   bootstrapReady: boolean;
   searchQ: string;
+  tempAssetId: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   styles: any;
   renderItem: ({ item }: { item: WorkOrderRow }) => React.JSX.Element;
   t: ReturnType<typeof useTranslation>["t"];
+  onFilteredCountChange?: (count: number) => void;
 };
 
 function WorkOrdersListPage({
@@ -98,27 +102,59 @@ function WorkOrdersListPage({
   presets,
   bootstrapReady,
   searchQ,
+  tempAssetId,
   styles,
   renderItem,
   t,
+  onFilteredCountChange,
 }: ListPageProps) {
   const { colors, isDark } = useAppTheme();
   const rowRipple = surfaceRippleColor(isDark);
   const isAll = pageIndex === 0;
   const presetId = !isAll ? presets[pageIndex - 1]?.id : undefined;
+  const useAssetFilter = isAll && Boolean(tempAssetId);
 
   const allOrdersQuery = useWorkOrdersQuery({
-    enabled: bootstrapReady && active && isAll,
+    enabled: bootstrapReady && active && isAll && !useAssetFilter,
   });
+  const assetOrdersQuery = useWorkOrdersByAssetQuery(
+    tempAssetId,
+    bootstrapReady && active && useAssetFilter,
+  );
   const presetQuery = useWorkOrdersByPresetQuery(presetId, bootstrapReady && active && !isAll);
 
-  const listData = isAll ? (allOrdersQuery.data ?? []) : (presetQuery.data ?? []);
-  const listLoading = isAll ? allOrdersQuery.isLoading : presetQuery.isLoading;
-  const listError = isAll ? allOrdersQuery.isError : presetQuery.isError;
-  const listFetching = isAll ? allOrdersQuery.isFetching : presetQuery.isFetching;
-  const refetchList = isAll ? allOrdersQuery.refetch : presetQuery.refetch;
+  const listData = useAssetFilter
+    ? (assetOrdersQuery.data ?? [])
+    : isAll
+      ? (allOrdersQuery.data ?? [])
+      : (presetQuery.data ?? []);
+  const listLoading = useAssetFilter
+    ? assetOrdersQuery.isLoading
+    : isAll
+      ? allOrdersQuery.isLoading
+      : presetQuery.isLoading;
+  const listError = useAssetFilter
+    ? assetOrdersQuery.isError
+    : isAll
+      ? allOrdersQuery.isError
+      : presetQuery.isError;
+  const listFetching = useAssetFilter
+    ? assetOrdersQuery.isFetching
+    : isAll
+      ? allOrdersQuery.isFetching
+      : presetQuery.isFetching;
+  const refetchList = useAssetFilter
+    ? assetOrdersQuery.refetch
+    : isAll
+      ? allOrdersQuery.refetch
+      : presetQuery.refetch;
 
   const filtered = useMemo(() => filterWorkOrders(listData, searchQ, t), [listData, searchQ, t]);
+
+  useEffect(() => {
+    if (!active || !onFilteredCountChange) return;
+    onFilteredCountChange(filtered.length);
+  }, [active, filtered.length, onFilteredCountChange]);
 
   const listEmpty = listLoading ? (
     <View style={[styles.center, { flex: undefined, paddingVertical: 48 }]}>
@@ -157,6 +193,7 @@ export default function WorkOrdersListScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const navigation = useNavigation();
+  const params = useLocalSearchParams<{ filterAssetId?: string | string[]; filterAssetKey?: string | string[] }>();
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
   const athene = useAtheneAssistant();
@@ -164,6 +201,8 @@ export default function WorkOrdersListScreen() {
   const rowRipple = surfaceRippleColor(isDark);
   const [searchByIndex, setSearchByIndex] = useState<Record<number, string>>({});
   const [activePresetIndex, setActivePresetIndex] = useState(0);
+  const [tempAssetFilter, setTempAssetFilter] = useState<TempAssetFilter | null>(null);
+  const [activeFilteredCount, setActiveFilteredCount] = useState<number | null>(null);
   const [detailsPresetId, setDetailsPresetId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrderRow | null>(null);
@@ -173,6 +212,8 @@ export default function WorkOrdersListScreen() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [headerRefreshPending, setHeaderRefreshPending] = useState(false);
   const pagerRef = useRef<PagerView>(null);
+  const appliedInitialPresetRef = useRef(false);
+  const consumedFilterAssetIdRef = useRef<string | null>(null);
 
   const bootstrap = useWorkOrderSearchPresetsBootstrapQuery();
   const presets = bootstrap.data?.presets ?? [];
@@ -185,12 +226,43 @@ export default function WorkOrdersListScreen() {
     return idx >= 0 ? idx + 1 : 0;
   }, [bootstrap.data?.defaults.mobilePresetId, hasPresets, presets]);
 
+  const filterAssetIdParam = useMemo(() => {
+    const raw = params.filterAssetId;
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+    if (Array.isArray(raw) && typeof raw[0] === "string" && raw[0].trim()) return raw[0].trim();
+    return null;
+  }, [params.filterAssetId]);
+
+  const filterAssetKeyParam = useMemo(() => {
+    const raw = params.filterAssetKey;
+    if (typeof raw === "string") return raw.trim();
+    if (Array.isArray(raw) && typeof raw[0] === "string") return raw[0].trim();
+    return "";
+  }, [params.filterAssetKey]);
+
   useEffect(() => {
-    if (bootstrap.isSuccess && hasPresets) {
+    if (!filterAssetIdParam) {
+      consumedFilterAssetIdRef.current = null;
+      return;
+    }
+    if (consumedFilterAssetIdRef.current === filterAssetIdParam) return;
+    consumedFilterAssetIdRef.current = filterAssetIdParam;
+    appliedInitialPresetRef.current = true;
+    setTempAssetFilter({ id: filterAssetIdParam, key: filterAssetKeyParam });
+    setActivePresetIndex(0);
+    pagerRef.current?.setPage(0);
+    router.setParams({ filterAssetId: undefined, filterAssetKey: undefined });
+  }, [filterAssetIdParam, filterAssetKeyParam, router]);
+
+  useEffect(() => {
+    if (appliedInitialPresetRef.current || filterAssetIdParam) return;
+    if (!bootstrap.isSuccess) return;
+    appliedInitialPresetRef.current = true;
+    if (hasPresets) {
       setActivePresetIndex(initialActiveIndex);
       pagerRef.current?.setPage(initialActiveIndex);
     }
-  }, [bootstrap.isSuccess, hasPresets, initialActiveIndex]);
+  }, [bootstrap.isSuccess, filterAssetIdParam, hasPresets, initialActiveIndex]);
 
   const q = searchByIndex[activePresetIndex] ?? "";
   const setQ = useCallback(
@@ -201,12 +273,22 @@ export default function WorkOrdersListScreen() {
   );
 
   const selectPresetIndex = useCallback((index: number) => {
+    setTempAssetFilter(null);
     setActivePresetIndex(index);
     pagerRef.current?.setPage(index);
   }, []);
 
   const onPagerPageSelected = useCallback((position: number) => {
+    if (position !== 0) setTempAssetFilter(null);
     setActivePresetIndex(position);
+  }, []);
+
+  const clearTempAssetFilter = useCallback(() => {
+    setTempAssetFilter(null);
+  }, []);
+
+  const onFilteredCountChange = useCallback((count: number) => {
+    setActiveFilteredCount(count);
   }, []);
 
   const styles = useMemo(
@@ -528,12 +610,15 @@ export default function WorkOrdersListScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.stickyHeader}>
-        {hasPresets ? (
+        {hasPresets || tempAssetFilter ? (
           <WorkOrderFilterPills
             presets={presets}
             activeIndex={activePresetIndex}
             onSelect={selectPresetIndex}
             onShowDetails={openPresetDetails}
+            tempAssetFilter={tempAssetFilter}
+            onClearTempFilter={clearTempAssetFilter}
+            activeCount={activeFilteredCount}
           />
         ) : null}
         <View style={styles.searchWrap}>
@@ -561,9 +646,11 @@ export default function WorkOrdersListScreen() {
               presets={presets}
               bootstrapReady={bootstrapReady}
               searchQ={searchByIndex[0] ?? ""}
+              tempAssetId={tempAssetFilter?.id ?? null}
               styles={styles}
               renderItem={renderItem}
               t={t}
+              onFilteredCountChange={onFilteredCountChange}
             />
           </View>
           {presets.map((preset, i) => {
@@ -576,9 +663,11 @@ export default function WorkOrdersListScreen() {
                   presets={presets}
                   bootstrapReady={bootstrapReady}
                   searchQ={searchByIndex[pageIndex] ?? ""}
+                  tempAssetId={null}
                   styles={styles}
                   renderItem={renderItem}
                   t={t}
+                  onFilteredCountChange={onFilteredCountChange}
                 />
               </View>
             );
@@ -591,9 +680,11 @@ export default function WorkOrdersListScreen() {
           presets={presets}
           bootstrapReady={bootstrapReady}
           searchQ={searchByIndex[0] ?? ""}
+          tempAssetId={tempAssetFilter?.id ?? null}
           styles={styles}
           renderItem={renderItem}
           t={t}
+          onFilteredCountChange={onFilteredCountChange}
         />
       )}
       <WorkOrderPresetDetailsSheet

@@ -13,6 +13,7 @@ import {
   type WorkOrderSearchPresetListItem,
 } from "../lib/workOrderSearchPresetsApi";
 import type {
+  AssetDocumentRow,
   AssetRow,
   AtheneBriefing,
   ClassificationRow,
@@ -35,7 +36,9 @@ export const queryKeys = {
   costCenters: ["costCenters"] as const,
   classifications: ["classifications"] as const,
   assets: ["assets"] as const,
+  assetDocuments: (assetId: string) => ["assets", assetId, "documents"] as const,
   workOrders: ["workOrders"] as const,
+  workOrdersByAsset: (assetId: string) => ["workOrders", "byAsset", assetId] as const,
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
   workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
   workOrderFeedback: (orderId: string) => ["workOrders", orderId, "feedback"] as const,
@@ -153,6 +156,34 @@ export function useAssetsQuery() {
       const r = await apiFetch("/api/assets");
       if (!r.ok) throw new Error("assets");
       return r.json() as Promise<AssetRow[]>;
+    },
+  });
+}
+
+export function useAssetDocumentsQuery(assetId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.assetDocuments(assetId ?? ""),
+    enabled: Boolean(assetId) && enabled,
+    queryFn: async (): Promise<AssetDocumentRow[]> => {
+      if (!assetId) return [];
+      const r = await apiFetch(`/api/assets/${assetId}/documents`);
+      if (!r.ok) throw new Error("asset_documents");
+      const data = (await r.json()) as unknown;
+      return Array.isArray(data) ? (data as AssetDocumentRow[]) : [];
+    },
+  });
+}
+
+export function useWorkOrdersByAssetQuery(assetId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.workOrdersByAsset(assetId ?? ""),
+    enabled: Boolean(assetId) && enabled,
+    queryFn: async (): Promise<WorkOrderRow[]> => {
+      if (!assetId) return [];
+      const r = await apiFetch(`/api/work-orders?assetId=${encodeURIComponent(assetId)}`);
+      if (!r.ok) throw new Error("work_orders_by_asset");
+      const data = (await r.json()) as unknown;
+      return Array.isArray(data) ? (data as WorkOrderRow[]) : [];
     },
   });
 }

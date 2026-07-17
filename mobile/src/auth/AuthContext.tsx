@@ -1,11 +1,13 @@
 import { createContext, useContext } from "react";
 
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
+import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import type { AuthUser } from "../types/api";
 
 export type AuthSession = {
   user: AuthUser | null;
   appParameterBooleans: Record<string, boolean>;
+  appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;
   appParameterDefaultShiftHours: number;
   appParameterAssetKeyMode: AppParameterAssetKeyMode;

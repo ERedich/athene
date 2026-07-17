@@ -19,6 +19,27 @@ export type AssetTreeAsset = {
   workOrderCount: number;
 };
 
+/** Descendant ref flags attached to TreeNode after `annotateDescendantRefs`. */
+export type AssetTreeRefFlags = {
+  hasDescendantDocuments: boolean;
+  hasDescendantWorkOrders: boolean;
+};
+
+export type AnnotatedTreeNode = TreeNode & AssetTreeRefFlags;
+
+export type RefButtonAppearance = "empty" | "outline" | "filled" | "outlineFilled";
+
+export function refButtonAppearance(
+  ownCount: number,
+  hasDescendant: boolean,
+): RefButtonAppearance {
+  const hasOwn = ownCount > 0;
+  if (hasOwn && hasDescendant) return "outlineFilled";
+  if (hasOwn) return "filled";
+  if (hasDescendant) return "outline";
+  return "empty";
+}
+
 function compareAssetKey(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
@@ -59,7 +80,36 @@ export function buildAssetTree(assets: AssetTreeAsset[]): TreeNode[] {
     }
   };
   pruneEmpty(roots);
-  return roots;
+  return annotateDescendantRefs(roots);
+}
+
+/**
+ * Bottom-up: mark each node when any descendant has own document/work-order refs.
+ * Mutates nodes in place and returns the same array.
+ */
+export function annotateDescendantRefs(nodes: TreeNode[]): TreeNode[] {
+  const walk = (list: TreeNode[]) => {
+    for (const node of list) {
+      if (node.children?.length) walk(node.children);
+      let hasDescendantDocuments = false;
+      let hasDescendantWorkOrders = false;
+      for (const child of node.children ?? []) {
+        const asset = child.data as AssetTreeAsset | undefined;
+        const flags = child as AnnotatedTreeNode;
+        if ((asset?.documentCount ?? 0) > 0 || flags.hasDescendantDocuments) {
+          hasDescendantDocuments = true;
+        }
+        if ((asset?.workOrderCount ?? 0) > 0 || flags.hasDescendantWorkOrders) {
+          hasDescendantWorkOrders = true;
+        }
+      }
+      const annotated = node as AnnotatedTreeNode;
+      annotated.hasDescendantDocuments = hasDescendantDocuments;
+      annotated.hasDescendantWorkOrders = hasDescendantWorkOrders;
+    }
+  };
+  walk(nodes);
+  return nodes;
 }
 
 /** Keys of all non-leaf nodes (for expand-all). */

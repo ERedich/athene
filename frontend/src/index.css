@@ -588,6 +588,34 @@ html.theme-crossfade-fallback #root {
   border-color: rgb(34 211 238) !important;
 }
 
+/* Descendant has docs, node itself does not — outline only. */
+.app-ref-button--documents-outline.p-button:not(:disabled),
+.app-ref-button--documents-outline.p-button:not(.p-disabled) {
+  opacity: 1 !important;
+  background: transparent !important;
+  border: 2px solid rgb(103 232 249) !important; /* cyan-300 */
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--documents-outline.p-button:not(:disabled):hover,
+.app-ref-button--documents-outline.p-button:not(.p-disabled):hover {
+  background: rgb(207 250 254) !important; /* cyan-100 */
+  border-color: rgb(34 211 238) !important; /* cyan-400 */
+}
+
+/* Own docs + descendant docs — fill and stronger outline. */
+.app-ref-button--documents-outline-filled.p-button:not(:disabled),
+.app-ref-button--documents-outline-filled.p-button:not(.p-disabled) {
+  background: rgb(103 232 249) !important; /* cyan-300 */
+  border: 2px solid rgb(8 145 178) !important; /* cyan-600 */
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--documents-outline-filled.p-button:not(:disabled):hover,
+.app-ref-button--documents-outline-filled.p-button:not(.p-disabled):hover {
+  background: rgb(34 211 238) !important; /* cyan-400 */
+  border-color: rgb(14 116 144) !important; /* cyan-700 */
+}
+
 .app-ref-button--documents-asset.p-button:not(:disabled),
 .app-ref-button--documents-asset.p-button:not(.p-disabled) {
   background: rgb(134 239 172) !important; /* green-300 */
@@ -998,6 +1026,52 @@ html.theme-crossfade-fallback #root {
 .app-ref-button--work-orders.p-button:not(.p-disabled):hover {
   background: rgb(167 139 250) !important; /* violet-400 */
   border-color: rgb(167 139 250) !important;
+}
+
+/* Descendant has work orders, node itself does not — outline only. */
+.app-ref-button--work-orders-outline.p-button:not(:disabled),
+.app-ref-button--work-orders-outline.p-button:not(.p-disabled),
+.app-ref-button--work-orders-outline.p-button.p-disabled,
+.app-ref-button--work-orders-outline.p-button:disabled {
+  opacity: 1 !important;
+  background: transparent !important;
+  border: 2px solid rgb(196 181 253) !important; /* violet-300 */
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--work-orders-outline.p-button.p-disabled,
+.app-ref-button--work-orders-outline.p-button:disabled {
+  cursor: not-allowed !important;
+}
+.app-ref-button--work-orders-outline.p-button:not(:disabled):hover,
+.app-ref-button--work-orders-outline.p-button:not(.p-disabled):hover {
+  background: rgb(237 233 254) !important; /* violet-100 */
+  border-color: rgb(167 139 250) !important; /* violet-400 */
+}
+.app-ref-button--work-orders-outline.p-button.p-disabled .p-button-icon,
+.app-ref-button--work-orders-outline.p-button:disabled .p-button-icon,
+.app-ref-button--work-orders-outline.p-button:not(:disabled) .p-button-icon,
+.app-ref-button--work-orders-outline.p-button:not(.p-disabled) .p-button-icon,
+.app-ref-button--work-orders-outline.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--work-orders-outline.p-button:disabled .p-button-icon svg,
+.app-ref-button--work-orders-outline.p-button:not(:disabled) .p-button-icon svg,
+.app-ref-button--work-orders-outline.p-button:not(.p-disabled) .p-button-icon svg {
+  color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+/* Own work orders + descendant work orders — fill and stronger outline. */
+.app-ref-button--work-orders-outline-filled.p-button:not(:disabled),
+.app-ref-button--work-orders-outline-filled.p-button:not(.p-disabled) {
+  background: rgb(196 181 253) !important; /* violet-300 */
+  border: 2px solid rgb(124 58 237) !important; /* violet-600 */
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--work-orders-outline-filled.p-button:not(:disabled):hover,
+.app-ref-button--work-orders-outline-filled.p-button:not(.p-disabled):hover {
+  background: rgb(167 139 250) !important; /* violet-400 */
+  border-color: rgb(109 40 217) !important; /* violet-700 */
 }
 
 .app-ref-button--work-orders-empty.p-button.p-disabled,
@@ -2792,6 +2866,207 @@ html.theme-crossfade-fallback #root {
 }
 
 .app-dashboard-greeting-card__retry {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.app-dashboard-audit-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-overlay);
+  padding: 0.75rem 0.85rem 0.65rem;
+}
+
+.app-dashboard-audit-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.app-dashboard-audit-card__header-left {
+  min-width: 0;
+}
+
+.app-dashboard-audit-card__header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.app-dashboard-audit-card:hover .app-dashboard-audit-card__header-right,
+.app-dashboard-audit-card:focus-within .app-dashboard-audit-card__header-right {
+  opacity: 1;
+}
+
+.app-dashboard-audit-card:hover .app-dashboard-kpi-config-btn,
+.app-dashboard-audit-card:hover .app-dashboard-kpi-drag-handle,
+.app-dashboard-audit-card:focus-within .app-dashboard-kpi-config-btn,
+.app-dashboard-audit-card:focus-within .app-dashboard-kpi-drag-handle {
+  opacity: 1;
+}
+
+.app-dashboard-audit-card__title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-audit-card__body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  margin-top: 0.55rem;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.app-dashboard-audit-card__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-dashboard-audit-card__day {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-dashboard-audit-card__day-line {
+  flex: 1;
+  min-width: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-on-surface) 16%, transparent);
+}
+
+.app-dashboard-audit-card__day-label {
+  flex-shrink: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-audit-card__line {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--color-on-surface);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  padding: 0.15rem 0.25rem;
+  border-radius: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-dashboard-audit-card__wo-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  cursor: pointer;
+}
+
+.app-dashboard-audit-card__wo-link:hover {
+  color: color-mix(in srgb, var(--color-primary) 82%, #000);
+}
+
+@keyframes app-dashboard-audit-line-flash {
+  0%,
+  90% {
+    background-color: color-mix(in srgb, #16a34a 30%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes app-dashboard-audit-line-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-dashboard-audit-card__line--fresh {
+  animation:
+    app-dashboard-audit-line-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards,
+    app-dashboard-audit-line-flash 11s ease-out forwards;
+}
+
+.app-dashboard-audit-card__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-audit-card__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.app-dashboard-audit-card__skeleton-line {
+  height: 0.7rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  animation: app-dashboard-greeting-pulse 1.2s ease-in-out infinite;
+}
+
+.app-dashboard-audit-card__skeleton-line--short {
+  width: 62%;
+}
+
+.app-dashboard-audit-card__error {
+  font-size: 0.875rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-dashboard-audit-card__error p {
+  margin: 0 0 0.5rem;
+}
+
+.app-dashboard-audit-card__retry {
   font-size: 0.8rem;
   color: var(--color-primary);
   background: none;

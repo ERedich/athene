@@ -23,6 +23,7 @@
     "navStart": "Home",
     "navCostCenters": "Cost centers",
     "navAssets": "Assets",
+    "navBaumstruktur": "Tree structure",
     "navWorkOrders": "Work orders",
     "navAthene": "Ask Athene",
     "hint": "Open the menu (☰) in the top-left corner to switch between apps."
@@ -141,6 +142,30 @@
       "maintenanceObject": "Maintenance object"
     }
   },
+  "baumstruktur": {
+    "appName": "Tree structure",
+    "searchPlaceholder": "Search assets",
+    "loadError": "Could not load assets.",
+    "loading": "Loading assets…",
+    "empty": "No assets found.",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "detailTitle": "Asset details",
+    "detailEmpty": "Select an asset in the tree.",
+    "detailKey": "Key",
+    "detailName": "Name",
+    "detailType": "Type",
+    "detailSite": "Site",
+    "references": "References",
+    "referencesDrawerTitle": "References — {{key}}",
+    "referencesDocuments": "Documents",
+    "referencesWorkOrders": "Work orders",
+    "documentsLoadError": "Could not load documents.",
+    "documentsEmpty": "No documents.",
+    "documentsFileName": "File name",
+    "workOrdersLoadError": "Could not load work orders.",
+    "workOrdersEmpty": "No work orders."
+  },
   "workOrders": {
     "appName": "Orders",
     "navOrders": "Orders",
@@ -190,6 +215,9 @@
     "filterDetailsLoadError": "Could not load filters.",
     "filterDetailsQuickSearch": "Quick search",
     "filterDetailsInfo": "Show filter details",
+    "filterActiveCount": "{{count}} work orders",
+    "tempFilterAsset": "Asset: {{key}}",
+    "tempFilterClear": "Clear temporary asset filter",
     "filterFields": {
       "from": "from",
       "to": "to",

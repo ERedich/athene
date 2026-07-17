@@ -31,7 +31,12 @@ import {
   type DocumentCategory,
 } from "./documents/index.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
-import { broadcastWorkOrderCreated, broadcastWorkOrderUpdated } from "./workOrderRealtime.js";
+import {
+  broadcastAuditFeedItem,
+  broadcastWorkOrderCreated,
+  broadcastWorkOrderUpdated,
+} from "./workOrderRealtime.js";
+import type { DashboardAuditFeedItem } from "./dashboard.js";
 import { workOrderMessagesRouter } from "./workOrderMessages.js";
 import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
 import {
@@ -360,6 +365,65 @@ function auditMeta(req: Request) {
     ipAddress: req.ip,
     userAgent: req.get("user-agent") ?? "",
   };
+}
+
+async function resolveActorLogin(userId: string): Promise<string | null> {
+  const { rows } = await pool.query<{ loginName: string }>(
+    `SELECT "loginName" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+    [userId],
+  );
+  return rows[0]?.loginName ?? null;
+}
+
+function emitAuditFeedItem(siteId: string, item: DashboardAuditFeedItem): void {
+  void broadcastAuditFeedItem(siteId, item).catch((err) => {
+    console.error("[work-order-realtime] audit feed broadcast failed", err);
+  });
+}
+
+function emitWorkOrderStatusAudit(params: {
+  siteId: string;
+  workOrderId: string;
+  orderNumber: number;
+  status: string;
+  actorLogin: string | null;
+}): void {
+  emitAuditFeedItem(params.siteId, {
+    id: randomUUID(),
+    occurredAt: new Date().toISOString(),
+    actorLogin: params.actorLogin,
+    kind: "work_order_status",
+    workOrderId: params.workOrderId,
+    orderNumber: params.orderNumber,
+    status: params.status,
+    transactionType: null,
+    quantity: null,
+  });
+}
+
+function emitTransactionCreatedAudit(params: {
+  siteId: string;
+  workOrderId: string;
+  orderNumber: number;
+  transactionType: string;
+  quantity: number | string;
+  actorLogin: string | null;
+}): void {
+  const quantity =
+    typeof params.quantity === "number"
+      ? String(Math.round(params.quantity * 10_000) / 10_000)
+      : params.quantity;
+  emitAuditFeedItem(params.siteId, {
+    id: randomUUID(),
+    occurredAt: new Date().toISOString(),
+    actorLogin: params.actorLogin,
+    kind: "transaction_created",
+    workOrderId: params.workOrderId,
+    orderNumber: params.orderNumber,
+    status: null,
+    transactionType: params.transactionType,
+    quantity,
+  });
 }
 
 const responsibleEmployeeColumnsSql = (workOrderIdRef: string) => `
@@ -894,6 +958,7 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
   }
   try {
     const meta = auditMeta(req);
+    let statusChangedToAssigned = false;
     const row = await withAuditContext(meta, async (client) => {
       const workOrder = await client.query<
         QueryResultRow & { id: string; siteId: string; status: string; workgroupId: string | null }
@@ -928,6 +993,7 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       );
       if (wo.status === "open") {
         await client.query(`UPDATE "workOrder" SET "status" = 'assigned' WHERE "id" = $1::uuid`, [id]);
+        statusChangedToAssigned = true;
       }
       const { rows } = await client.query<WorkOrderAssignmentRow>(
         `
@@ -960,6 +1026,16 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       void broadcastWorkOrderUpdated(updatedOrder.siteId, updatedOrder).catch((err) => {
         console.error("[work-order-realtime] broadcast updated failed", err);
       });
+      if (statusChangedToAssigned) {
+        const actorLogin = await resolveActorLogin(meta.userId);
+        emitWorkOrderStatusAudit({
+          siteId: updatedOrder.siteId,
+          workOrderId: updatedOrder.id,
+          orderNumber: updatedOrder.orderNumber,
+          status: "assigned",
+          actorLogin,
+        });
+      }
     }
   } catch (err) {
     const message = (err as Error).message;
@@ -1096,6 +1172,14 @@ router.post("/:id/start", async (req: Request, res: Response) => {
     void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast updated failed", err);
     });
+    const actorLogin = await resolveActorLogin(meta.userId);
+    emitWorkOrderStatusAudit({
+      siteId: row.siteId,
+      workOrderId: row.id,
+      orderNumber: row.orderNumber,
+      status: row.status,
+      actorLogin,
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -1168,6 +1252,14 @@ router.post("/:id/pause", async (req: Request, res: Response) => {
     void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast updated failed", err);
     });
+    const actorLogin = await resolveActorLogin(meta.userId);
+    emitWorkOrderStatusAudit({
+      siteId: row.siteId,
+      workOrderId: row.id,
+      orderNumber: row.orderNumber,
+      status: "paused",
+      actorLogin,
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -1230,6 +1322,14 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
     void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast updated failed", err);
     });
+    const actorLogin = await resolveActorLogin(meta.userId);
+    emitWorkOrderStatusAudit({
+      siteId: row.siteId,
+      workOrderId: row.id,
+      orderNumber: row.orderNumber,
+      status: "cancelled",
+      actorLogin,
+    });
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {
@@ -1266,6 +1366,8 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
   }
   try {
     const meta = auditMeta(req);
+    let nextStatus: string | null = null;
+    const bookedQuantities: number[] = [];
     const row = await withAuditContext(meta, async (client) => {
       const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
         `
@@ -1320,6 +1422,7 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
         `,
         [current.siteId, qtyRounded, id, parsed.remark, sessionEmployeeId],
       );
+      bookedQuantities.push(qtyRounded);
 
       for (const extra of parsed.additionalHours) {
         const extraQty = Math.round(extra.hours * 10_000) / 10_000;
@@ -1330,6 +1433,7 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
           `,
           [current.siteId, extraQty, id, extra.employeeId],
         );
+        bookedQuantities.push(extraQty);
       }
 
       if (parsed.statusAction === "pause") {
@@ -1341,6 +1445,7 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
           `,
           [id, parsed.pauseRemark],
         );
+        nextStatus = "paused";
       } else if (parsed.statusAction === "end" && current.status !== "ended") {
         await client.query(
           `
@@ -1352,6 +1457,7 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
           `,
           [id, sessionEmployeeId],
         );
+        nextStatus = "ended";
       }
       const { rows } = await client.query<WorkOrderRow>(
         `
@@ -1371,6 +1477,26 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
     void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
       console.error("[work-order-realtime] broadcast updated failed", err);
     });
+    const actorLogin = await resolveActorLogin(meta.userId);
+    for (const quantity of bookedQuantities) {
+      emitTransactionCreatedAudit({
+        siteId: row.siteId,
+        workOrderId: row.id,
+        orderNumber: row.orderNumber,
+        transactionType: "IN",
+        quantity,
+        actorLogin,
+      });
+    }
+    if (nextStatus) {
+      emitWorkOrderStatusAudit({
+        siteId: row.siteId,
+        workOrderId: row.id,
+        orderNumber: row.orderNumber,
+        status: nextStatus,
+        actorLogin,
+      });
+    }
   } catch (err) {
     const message = (err as Error).message;
     if (message === "missing_session_user") {

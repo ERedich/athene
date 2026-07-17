@@ -84,6 +84,7 @@ export type AssetRow = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  workOrderCount: number;
   keyPath?: string | null;
 };
 
@@ -190,6 +191,15 @@ export type TransactionRow = {
 };
 
 export type DocumentReferenceApp = "assets" | "workOrders";
+
+export type AssetDocumentRow = {
+  id: string;
+  fileName: string;
+  displayName: string | null;
+  category: WorkOrderDocumentCategory;
+  mimeType: string | null;
+  fileSize: number;
+};
 
 export type WorkOrderDocumentRow = {
   id: string;

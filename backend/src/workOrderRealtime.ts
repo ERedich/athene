@@ -5,6 +5,7 @@ import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
 import { readSessionUserIdFromCookieHeader } from "./sessionToken.js";
 import { notifyWorkOrderSubscribers, type WorkOrderSubscriptionChangeKind } from "./workOrderSubscriptionNotify.js";
+import type { DashboardAuditFeedItem } from "./dashboard.js";
 
 export type WorkOrderRealtimePayload = {
   id: string;
@@ -191,6 +192,22 @@ async function broadcastWorkOrderEvent(
   const recipientUserIds = await getRecipientUserIds(siteId);
   if (recipientUserIds.size === 0) return;
   const message = JSON.stringify({ type, workOrder });
+  for (const [socket, userId] of sockets.entries()) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    if (!recipientUserIds.has(userId)) continue;
+    socket.send(message);
+  }
+}
+
+/** Fan-out dashboard audit feed lines to users with access to the site. */
+export async function broadcastAuditFeedItem(
+  siteId: string,
+  item: DashboardAuditFeedItem,
+): Promise<void> {
+  if (sockets.size === 0) return;
+  const recipientUserIds = await getRecipientUserIds(siteId);
+  if (recipientUserIds.size === 0) return;
+  const message = JSON.stringify({ type: "audit_feed_item", item });
   for (const [socket, userId] of sockets.entries()) {
     if (socket.readyState !== WebSocket.OPEN) continue;
     if (!recipientUserIds.has(userId)) continue;

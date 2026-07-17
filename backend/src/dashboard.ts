@@ -431,4 +431,89 @@ router.get("/metrics", async (req: Request, res: Response) => {
   }
 });
 
+export type DashboardAuditFeedItem = {
+  id: string;
+  occurredAt: string;
+  actorLogin: string | null;
+  kind: "work_order_status" | "transaction_created";
+  workOrderId: string | null;
+  orderNumber: number | null;
+  status: string | null;
+  transactionType: string | null;
+  quantity: string | null;
+};
+
+function parseLimitParam(raw: unknown, fallback: number, max: number): number {
+  const n = typeof raw === "string" ? Number.parseInt(raw, 10) : Number.NaN;
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, max);
+}
+
+router.get("/audit-feed", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const limit = parseLimitParam(req.query.limit, 50, 100);
+
+  try {
+    const siteFilterWo = siteAccessSql(`(a."newData"->>'siteId')::uuid`, "$1");
+    const siteFilterTx = siteAccessSql(`(a."newData"->>'siteId')::uuid`, "$1");
+
+    const { rows } = await pool.query<DashboardAuditFeedItem>(
+      `
+      (
+        SELECT
+          a."id"::text AS "id",
+          a."changedAt" AS "occurredAt",
+          u."loginName" AS "actorLogin",
+          'work_order_status'::text AS "kind",
+          a."recordId" AS "workOrderId",
+          NULLIF(a."newData"->>'orderNumber', '')::int AS "orderNumber",
+          NULLIF(a."newData"->>'status', '') AS "status",
+          NULL::text AS "transactionType",
+          NULL::text AS "quantity"
+        FROM "auditLog" a
+        LEFT JOIN "users" u ON u."id" = a."changedBy"
+        WHERE a."tableName" = 'workOrder'
+          AND a."operation" = 'UPDATE'
+          AND a."changedFields" IS NOT NULL
+          AND 'status' = ANY(a."changedFields")
+          AND a."newData"->>'siteId' IS NOT NULL
+          AND ${siteFilterWo}
+      )
+      UNION ALL
+      (
+        SELECT
+          a."id"::text AS "id",
+          a."changedAt" AS "occurredAt",
+          u."loginName" AS "actorLogin",
+          'transaction_created'::text AS "kind",
+          NULLIF(a."newData"->>'workOrderId', '') AS "workOrderId",
+          w."orderNumber" AS "orderNumber",
+          NULL::text AS "status",
+          NULLIF(a."newData"->>'type', '') AS "transactionType",
+          NULLIF(a."newData"->>'quantity', '') AS "quantity"
+        FROM "auditLog" a
+        LEFT JOIN "users" u ON u."id" = a."changedBy"
+        LEFT JOIN "workOrder" w ON w."id" = NULLIF(a."newData"->>'workOrderId', '')::uuid
+        WHERE a."tableName" = 'transaction'
+          AND a."operation" = 'INSERT'
+          AND a."newData"->>'siteId' IS NOT NULL
+          AND ${siteFilterTx}
+      )
+      ORDER BY "occurredAt" DESC
+      LIMIT $2
+      `,
+      [userId, limit],
+    );
+
+    res.json({ items: rows });
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 export const dashboardRouter = router;

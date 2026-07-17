@@ -14,6 +14,7 @@ import { overlayAppendTo } from "../../lib/overlayAppendTo";
 import { lucidePrimeBtnIcon } from "../../icons/lucide";
 import { DashboardSparkCard } from "./DashboardSparkCard";
 import { AtheneGreetingCard } from "./AtheneGreetingCard";
+import { AuditFeedCard } from "./AuditFeedCard";
 
 type Props = {
   slotIndex: number;
@@ -43,11 +44,12 @@ export function DashboardGridCell({
   const { t } = useTranslation();
   const panelRef = useRef<OverlayPanel>(null);
   const isGreeting = kpiId === "atheneGreeting";
+  const isAuditFeed = kpiId === "auditFeed";
 
   const customUuid = parseCustomKpiSlotId(kpiId);
 
   const view = useMemo(() => {
-    if (isGreeting) {
+    if (isGreeting || isAuditFeed) {
       return null;
     }
     if (customUuid) {
@@ -57,7 +59,7 @@ export function DashboardGridCell({
       return resolveKpiView(kpiId, metrics, locale, t);
     }
     return resolveCustomKpiView(undefined, t);
-  }, [isGreeting, customUuid, customEvaluations, kpiId, metrics, locale, t]);
+  }, [isGreeting, isAuditFeed, customUuid, customEvaluations, kpiId, metrics, locale, t]);
 
   const selectKpi = useCallback(
     (id: DashboardSlotId) => {
@@ -75,6 +77,18 @@ export function DashboardGridCell({
   if (isGreeting) {
     return (
       <AtheneGreetingCard
+        slotIndex={slotIndex}
+        kpiId={kpiId}
+        customCatalog={customCatalog}
+        onSelectKpi={onSelectKpi}
+        onArm={onArm}
+      />
+    );
+  }
+
+  if (isAuditFeed) {
+    return (
+      <AuditFeedCard
         slotIndex={slotIndex}
         kpiId={kpiId}
         customCatalog={customCatalog}

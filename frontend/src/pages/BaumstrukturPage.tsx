@@ -48,8 +48,11 @@ import {
   buildAssetTree,
   collectExpandableKeys,
   filterAssetTree,
+  refButtonAppearance,
+  type AnnotatedTreeNode,
   type AssetTreeAsset,
   type AssetTreeType,
+  type RefButtonAppearance,
 } from "../lib/assetTree";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import type { WorkOrder, WorkOrderStatus } from "../lib/workOrderTypes";
@@ -180,6 +183,34 @@ function nodeAsset(node: TreeNode): AssetTreeAsset | null {
   if (!data || typeof data !== "object") return null;
   const asset = data as AssetTreeAsset;
   return isAssetType(asset.type) ? asset : null;
+}
+
+function documentsRefClass(appearance: RefButtonAppearance): string {
+  switch (appearance) {
+    case "filled":
+      return "app-ref-button--documents";
+    case "outline":
+      return "app-ref-button--documents-outline";
+    case "outlineFilled":
+      return "app-ref-button--documents-outline-filled";
+    case "empty":
+    default:
+      return "app-ref-button--documents-inactive";
+  }
+}
+
+function workOrdersRefClass(appearance: RefButtonAppearance): string {
+  switch (appearance) {
+    case "filled":
+      return "app-ref-button--work-orders";
+    case "outline":
+      return "app-ref-button--work-orders-outline";
+    case "outlineFilled":
+      return "app-ref-button--work-orders-outline-filled";
+    case "empty":
+    default:
+      return "app-ref-button--work-orders-empty";
+  }
 }
 
 function parseCount(raw: unknown): number {
@@ -614,6 +645,15 @@ export function BaumstrukturPage() {
     (node: TreeNode) => {
       const asset = nodeAsset(node);
       if (!asset) return null;
+      const flags = node as AnnotatedTreeNode;
+      const docsAppearance = refButtonAppearance(
+        asset.documentCount,
+        flags.hasDescendantDocuments === true,
+      );
+      const woAppearance = refButtonAppearance(
+        asset.workOrderCount,
+        flags.hasDescendantWorkOrders === true,
+      );
       const hasDocuments = asset.documentCount > 0;
       const hasWorkOrders = asset.workOrderCount > 0;
       const docsBadge = hasDocuments ? String(asset.documentCount) : " ";
@@ -628,9 +668,7 @@ export function BaumstrukturPage() {
             icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
             badge={docsBadge}
             badgeClassName={`${refBadgeClass} ${hasDocuments ? "" : "app-ref-badge--placeholder"}`}
-            className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-              hasDocuments ? "app-ref-button--documents" : "app-ref-button--documents-inactive"
-            }`}
+            className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${documentsRefClass(docsAppearance)}`}
             onClick={() => openRefsDrawer(asset, 0)}
             aria-label={t("baumstruktur.referencesDocuments")}
             title={t("baumstruktur.referencesDocuments")}
@@ -640,9 +678,7 @@ export function BaumstrukturPage() {
             icon={<ClipboardList className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
             badge={woBadge}
             badgeClassName={`${refBadgeClass} ${hasWorkOrders ? "" : "app-ref-badge--placeholder"}`}
-            className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-              hasWorkOrders ? "app-ref-button--work-orders" : "app-ref-button--work-orders-empty"
-            }`}
+            className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${workOrdersRefClass(woAppearance)}`}
             disabled={!hasWorkOrders}
             onClick={() => openRefsDrawer(asset, 1)}
             aria-label={t("baumstruktur.referencesWorkOrders")}

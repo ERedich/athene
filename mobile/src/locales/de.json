@@ -23,6 +23,7 @@
     "navStart": "Start",
     "navCostCenters": "Kostenstellen",
     "navAssets": "Assets",
+    "navBaumstruktur": "Baumstruktur",
     "navWorkOrders": "Aufträge",
     "navAthene": "Athene fragen",
     "hint": "Öffnen Sie das Menü (☰) oben links, um zwischen den Apps zu wechseln."
@@ -141,6 +142,30 @@
       "maintenanceObject": "Maintenance object"
     }
   },
+  "baumstruktur": {
+    "appName": "Baumstruktur",
+    "searchPlaceholder": "Assets durchsuchen",
+    "loadError": "Assets konnten nicht geladen werden.",
+    "loading": "Assets werden geladen…",
+    "empty": "Keine Assets gefunden.",
+    "expandAll": "Alle aufklappen",
+    "collapseAll": "Alle zuklappen",
+    "detailTitle": "Asset-Details",
+    "detailEmpty": "Wählen Sie ein Asset im Baum aus.",
+    "detailKey": "Schlüssel",
+    "detailName": "Name",
+    "detailType": "Typ",
+    "detailSite": "Buchungskreis",
+    "references": "Referenzen",
+    "referencesDrawerTitle": "Referenzen — {{key}}",
+    "referencesDocuments": "Dokumente",
+    "referencesWorkOrders": "Aufträge",
+    "documentsLoadError": "Dokumente konnten nicht geladen werden.",
+    "documentsEmpty": "Keine Dokumente vorhanden.",
+    "documentsFileName": "Dateiname",
+    "workOrdersLoadError": "Aufträge konnten nicht geladen werden.",
+    "workOrdersEmpty": "Keine Aufträge vorhanden."
+  },
   "workOrders": {
     "appName": "Aufträge",
     "navOrders": "Aufträge",
@@ -190,6 +215,9 @@
     "filterDetailsLoadError": "Filter konnten nicht geladen werden.",
     "filterDetailsQuickSearch": "Kurzsuche",
     "filterDetailsInfo": "Filterdetails anzeigen",
+    "filterActiveCount": "{{count}} Aufträge",
+    "tempFilterAsset": "Asset: {{key}}",
+    "tempFilterClear": "Temporären Asset-Filter entfernen",
     "filterFields": {
       "from": "ab",
       "to": "bis",

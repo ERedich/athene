@@ -137,6 +137,49 @@ function spansOverlap(layout: DashboardSlotId[]): boolean {
   return false;
 }
 
+/**
+ * Prefer `preferredIndex` as 2×2 anchor; otherwise any valid anchor that covers
+ * that slot; finally any free valid anchor that does not overlap other spans.
+ */
+function resolveSpanAnchor(
+  layout: DashboardSlotId[],
+  preferredIndex: number,
+  kpiId: DashboardSlotId,
+  span: KpiSpan,
+): number | null {
+  const tryAnchor = (anchor: number): boolean => {
+    if (!canPlaceSpanAt(anchor, span)) return false;
+    const next = [...layout];
+    // Drop duplicate instances of this spanning KPI
+    if (isDashboardKpiId(kpiId)) {
+      for (let i = 0; i < next.length; i++) {
+        if (next[i] === kpiId) next[i] = "openActive";
+      }
+    }
+    next[anchor] = kpiId;
+    return !spansOverlap(next);
+  };
+
+  if (tryAnchor(preferredIndex)) return preferredIndex;
+
+  // Anchors that cover the clicked cell (so the selection still "lands" on it)
+  for (let anchor = 0; anchor < DASHBOARD_SLOT_COUNT; anchor++) {
+    if (anchor === preferredIndex) continue;
+    if (!canPlaceSpanAt(anchor, span)) continue;
+    const covered = getCoveredSlots(anchor, span);
+    if (!covered.includes(preferredIndex)) continue;
+    if (tryAnchor(anchor)) return anchor;
+  }
+
+  // Any free valid anchor
+  for (let anchor = 0; anchor < DASHBOARD_SLOT_COUNT; anchor++) {
+    if (anchor === preferredIndex) continue;
+    if (tryAnchor(anchor)) return anchor;
+  }
+
+  return null;
+}
+
 /** Place a KPI into a slot; spanning KPIs may only exist once and must fit. */
 export function placeKpiInLayout(
   layout: DashboardSlotId[],
@@ -146,23 +189,26 @@ export function placeKpiInLayout(
 ): DashboardSlotId[] | null {
   if (slotIndex < 0 || slotIndex >= layout.length) return null;
   const span = getSlotSpan(kpiId);
+
   if (span.colSpan > 1 || span.rowSpan > 1) {
-    if (!canPlaceSpanAt(slotIndex, span)) return null;
+    const anchor = resolveSpanAnchor(layout, slotIndex, kpiId, span);
+    if (anchor == null) return null;
+
+    const next = [...layout];
+    if (isDashboardKpiId(kpiId)) {
+      for (let i = 0; i < next.length; i++) {
+        if (i !== anchor && next[i] === kpiId) {
+          next[i] = fallbackId;
+        }
+      }
+    }
+    next[anchor] = kpiId;
+    if (spansOverlap(next)) return null;
+    return next;
   }
 
   const next = [...layout];
-
-  // Ensure spanning KPI appears at most once
-  if (isDashboardKpiId(kpiId) && (span.colSpan > 1 || span.rowSpan > 1)) {
-    for (let i = 0; i < next.length; i++) {
-      if (i !== slotIndex && next[i] === kpiId) {
-        next[i] = fallbackId;
-      }
-    }
-  }
-
   next[slotIndex] = kpiId;
-
   if (spansOverlap(next)) return null;
   return next;
 }
