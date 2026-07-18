@@ -78,7 +78,7 @@ export function WorkOrderFeedbackTabContent(props: Props) {
   };
 
   return (
-    <div className="grid grid-cols-2 gap-4 pt-1 md:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 pt-1 md:grid-cols-6" style={{ margin: 0, display: "grid" }}>
       <div className="space-y-2 col-span-1 md:col-span-4">
         <label htmlFor="order-feedback-employee" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
           {t("workOrders.feedbackReportingEmployee")}
@@ -124,7 +124,11 @@ export function WorkOrderFeedbackTabContent(props: Props) {
         ) : (
           <div className="space-y-2">
             {additionalHoursRows.map((row) => (
-              <div key={row.localId} className="grid grid-cols-1 gap-2 md:grid-cols-12 md:items-end">
+              <div
+                key={row.localId}
+                className="grid grid-cols-1 gap-2 md:grid-cols-12 md:items-end"
+                style={{ margin: 0, display: "grid" }}
+              >
                 <div className="md:col-span-7">
                   <Dropdown
                     value={row.employeeId || null}

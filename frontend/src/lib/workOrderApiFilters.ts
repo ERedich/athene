@@ -2,6 +2,8 @@
 export const WORKGROUP_PSEUDO_MY = "__MY_WORKGROUPS__";
 export const EMPLOYEE_PSEUDO_ME = "__ME__";
 
+export type WorkOrderPlanningDateMode = "absolute" | "relative";
+
 /** LIKE filters only on real free-text columns (`w.name`, `w.description`). All FKs use discrete multi-select params. */
 export type WorkOrderAdvancedSearchState = {
   orderNumberFrom: string;
@@ -20,10 +22,18 @@ export type WorkOrderAdvancedSearchState = {
   createdBy: string[];
   /** User IDs (discrete filter on w."updatedBy") */
   updatedBy: string[];
+  plannedStartMode: WorkOrderPlanningDateMode;
   plannedStartFrom: string;
   plannedStartTo: string;
+  /** Non-negative days before now (relative mode). Empty = no lower bound. */
+  plannedStartPastDays: string;
+  /** Non-negative days after now (relative mode). Empty = no upper bound. */
+  plannedStartFutureDays: string;
+  plannedEndMode: WorkOrderPlanningDateMode;
   plannedEndFrom: string;
   plannedEndTo: string;
+  plannedEndPastDays: string;
+  plannedEndFutureDays: string;
   createdAtFrom: string;
   createdAtTo: string;
   updatedAtFrom: string;
@@ -41,7 +51,14 @@ export type WorkOrderAdvancedSearchState = {
   /** Responsible only (`w.responsibleEmployeeId`); distinct from assignment filter */
   responsibleEmployeeId: string[];
   employeeId: string[];
+  /** Maintenance plan IDs (discrete filter on w."maintenancePlanId") */
+  maintenancePlanId: string[];
 };
+
+const PLANNING_MODE_KEYS = new Set<keyof WorkOrderAdvancedSearchState>([
+  "plannedStartMode",
+  "plannedEndMode",
+]);
 
 export function emptyWorkOrderAdvancedSearch(): WorkOrderAdvancedSearchState {
   return {
@@ -59,10 +76,16 @@ export function emptyWorkOrderAdvancedSearch(): WorkOrderAdvancedSearchState {
     description: "",
     createdBy: [],
     updatedBy: [],
+    plannedStartMode: "relative",
     plannedStartFrom: "",
     plannedStartTo: "",
+    plannedStartPastDays: "",
+    plannedStartFutureDays: "",
+    plannedEndMode: "relative",
     plannedEndFrom: "",
     plannedEndTo: "",
+    plannedEndPastDays: "",
+    plannedEndFutureDays: "",
     createdAtFrom: "",
     createdAtTo: "",
     updatedAtFrom: "",
@@ -78,7 +101,40 @@ export function emptyWorkOrderAdvancedSearch(): WorkOrderAdvancedSearchState {
     workgroupId: [],
     responsibleEmployeeId: [],
     employeeId: [],
+    maintenancePlanId: [],
   };
+}
+
+/** Merge partial / legacy preset payloads into a full search state. */
+export function coerceWorkOrderAdvancedSearch(
+  partial: Partial<WorkOrderAdvancedSearchState> | null | undefined,
+): WorkOrderAdvancedSearchState {
+  const base = emptyWorkOrderAdvancedSearch();
+  if (!partial || typeof partial !== "object") return base;
+  const merged: WorkOrderAdvancedSearchState = { ...base, ...partial };
+
+  const startMode = partial.plannedStartMode;
+  if (startMode !== "absolute" && startMode !== "relative") {
+    merged.plannedStartMode =
+      String(partial.plannedStartFrom ?? "").trim() || String(partial.plannedStartTo ?? "").trim()
+        ? "absolute"
+        : "relative";
+  }
+  const endMode = partial.plannedEndMode;
+  if (endMode !== "absolute" && endMode !== "relative") {
+    merged.plannedEndMode =
+      String(partial.plannedEndFrom ?? "").trim() || String(partial.plannedEndTo ?? "").trim()
+        ? "absolute"
+        : "relative";
+  }
+
+  if (!Array.isArray(merged.maintenancePlanId)) merged.maintenancePlanId = [];
+  if (typeof merged.plannedStartPastDays !== "string") merged.plannedStartPastDays = "";
+  if (typeof merged.plannedStartFutureDays !== "string") merged.plannedStartFutureDays = "";
+  if (typeof merged.plannedEndPastDays !== "string") merged.plannedEndPastDays = "";
+  if (typeof merged.plannedEndFutureDays !== "string") merged.plannedEndFutureDays = "";
+
+  return merged;
 }
 
 function setParam(p: URLSearchParams, key: string, value: string) {
@@ -98,6 +154,7 @@ export function hasActiveWorkOrderAdvancedSearch(a: WorkOrderAdvancedSearchState
   if (a.overdue) return true;
   const keys = Object.keys(a) as (keyof WorkOrderAdvancedSearchState)[];
   for (const k of keys) {
+    if (PLANNING_MODE_KEYS.has(k)) continue;
     const v = a[k];
     if (Array.isArray(v)) {
       if (v.length > 0) return true;
@@ -131,10 +188,20 @@ export function buildWorkOrderListQueryString(quickSearch: string, adv: WorkOrde
   appendEach(p, "createdBy", adv.createdBy);
   appendEach(p, "updatedBy", adv.updatedBy);
 
-  setParam(p, "plannedStartFrom", adv.plannedStartFrom);
-  setParam(p, "plannedStartTo", adv.plannedStartTo);
-  setParam(p, "plannedEndFrom", adv.plannedEndFrom);
-  setParam(p, "plannedEndTo", adv.plannedEndTo);
+  if (adv.plannedStartMode === "relative") {
+    setParam(p, "plannedStartPastDays", adv.plannedStartPastDays);
+    setParam(p, "plannedStartFutureDays", adv.plannedStartFutureDays);
+  } else {
+    setParam(p, "plannedStartFrom", adv.plannedStartFrom);
+    setParam(p, "plannedStartTo", adv.plannedStartTo);
+  }
+  if (adv.plannedEndMode === "relative") {
+    setParam(p, "plannedEndPastDays", adv.plannedEndPastDays);
+    setParam(p, "plannedEndFutureDays", adv.plannedEndFutureDays);
+  } else {
+    setParam(p, "plannedEndFrom", adv.plannedEndFrom);
+    setParam(p, "plannedEndTo", adv.plannedEndTo);
+  }
   setParam(p, "createdAtFrom", adv.createdAtFrom);
   setParam(p, "createdAtTo", adv.createdAtTo);
   setParam(p, "updatedAtFrom", adv.updatedAtFrom);
@@ -146,6 +213,7 @@ export function buildWorkOrderListQueryString(quickSearch: string, adv: WorkOrde
   appendEach(p, "assetId", adv.assetId);
   appendEach(p, "costCenterId", adv.costCenterId);
   appendEach(p, "classificationId", adv.classificationId);
+  appendEach(p, "maintenancePlanId", adv.maintenancePlanId);
   if (adv.classificationUnassigned) p.set("classificationUnassigned", "1");
   if (adv.overdue) p.set("overdue", "1");
   appendEach(p, "workgroupId", adv.workgroupId);
@@ -204,10 +272,38 @@ export function parseWorkOrderDeeplinkParams(
   multi("createdBy", (v) => (advanced.createdBy = v));
   multi("updatedBy", (v) => (advanced.updatedBy = v));
 
-  single("plannedStartFrom", (v) => (advanced.plannedStartFrom = v));
-  single("plannedStartTo", (v) => (advanced.plannedStartTo = v));
-  single("plannedEndFrom", (v) => (advanced.plannedEndFrom = v));
-  single("plannedEndTo", (v) => (advanced.plannedEndTo = v));
+  single("plannedStartFrom", (v) => {
+    advanced.plannedStartFrom = v;
+    advanced.plannedStartMode = "absolute";
+  });
+  single("plannedStartTo", (v) => {
+    advanced.plannedStartTo = v;
+    advanced.plannedStartMode = "absolute";
+  });
+  single("plannedStartPastDays", (v) => {
+    advanced.plannedStartPastDays = v;
+    advanced.plannedStartMode = "relative";
+  });
+  single("plannedStartFutureDays", (v) => {
+    advanced.plannedStartFutureDays = v;
+    advanced.plannedStartMode = "relative";
+  });
+  single("plannedEndFrom", (v) => {
+    advanced.plannedEndFrom = v;
+    advanced.plannedEndMode = "absolute";
+  });
+  single("plannedEndTo", (v) => {
+    advanced.plannedEndTo = v;
+    advanced.plannedEndMode = "absolute";
+  });
+  single("plannedEndPastDays", (v) => {
+    advanced.plannedEndPastDays = v;
+    advanced.plannedEndMode = "relative";
+  });
+  single("plannedEndFutureDays", (v) => {
+    advanced.plannedEndFutureDays = v;
+    advanced.plannedEndMode = "relative";
+  });
   single("createdAtFrom", (v) => (advanced.createdAtFrom = v));
   single("createdAtTo", (v) => (advanced.createdAtTo = v));
   single("updatedAtFrom", (v) => (advanced.updatedAtFrom = v));
@@ -219,6 +315,7 @@ export function parseWorkOrderDeeplinkParams(
   multi("assetId", (v) => (advanced.assetId = v));
   multi("costCenterId", (v) => (advanced.costCenterId = v));
   multi("classificationId", (v) => (advanced.classificationId = v));
+  multi("maintenancePlanId", (v) => (advanced.maintenancePlanId = v));
   if (params.get("classificationUnassigned") === "1") {
     advanced.classificationUnassigned = true;
     hasAny = true;

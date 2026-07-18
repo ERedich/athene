@@ -170,6 +170,9 @@ function workOrderRowFromMeta(
     originalWo: form.originalWoId || null,
     originalWoOrderNumber: form.copySourceOrderNumber,
     originalWoName: null,
+    maintenancePlanId: null,
+    maintenancePlanKey: null,
+    maintenancePlanName: null,
   };
 }
 

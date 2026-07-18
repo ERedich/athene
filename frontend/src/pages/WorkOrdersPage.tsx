@@ -47,6 +47,7 @@ import { orderDialogTabs, type FeedbackEntryMode } from "../lib/workOrderDialog"
 import { mergeWorkOrderIntoAdvancedSearch } from "../lib/workOrderCleverSearch";
 import {
   buildWorkOrderListQueryString,
+  coerceWorkOrderAdvancedSearch,
   emptyWorkOrderAdvancedSearch,
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
@@ -174,6 +175,9 @@ export function WorkOrdersPage() {
             originalWo: null,
             originalWoOrderNumber: null,
             originalWoName: null,
+            maintenancePlanId: null,
+            maintenancePlanKey: null,
+            maintenancePlanName: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             createdBy: "…",
@@ -247,8 +251,8 @@ export function WorkOrdersPage() {
         const q = d.payload.quickSearch ?? "";
         setSearchTerm(q);
         setDebouncedSearch(q.trim());
-        setAppliedAdvanced({ ...d.payload.advanced });
-        setPanelDraft({ ...d.payload.advanced });
+        setAppliedAdvanced(coerceWorkOrderAdvancedSearch(d.payload.advanced));
+        setPanelDraft(coerceWorkOrderAdvancedSearch(d.payload.advanced));
         setHeaderPresetSelectionId(match.id);
       }
     } catch {
@@ -293,8 +297,8 @@ export function WorkOrdersPage() {
         const q = d.payload.quickSearch ?? "";
         setSearchTerm(q);
         setDebouncedSearch(q.trim());
-        setAppliedAdvanced({ ...d.payload.advanced });
-        setPanelDraft({ ...d.payload.advanced });
+        setAppliedAdvanced(coerceWorkOrderAdvancedSearch(d.payload.advanced));
+        setPanelDraft(coerceWorkOrderAdvancedSearch(d.payload.advanced));
         setHeaderPresetSelectionId(presetId);
       } catch {
         toastRef.current?.show({
@@ -971,6 +975,7 @@ export function WorkOrdersPage() {
         classificationOptions={refData.searchClassificationOptions}
         workgroupOptions={refData.searchWorkgroupOptions}
         employeeOptions={refData.searchEmployeeOptions}
+        maintenancePlanOptions={refData.searchMaintenancePlanOptions}
         userOptions={refData.searchUserOptions}
         typeOrder={refData.typeOrder}
         typeLabel={refData.typeLabel}
@@ -1047,6 +1052,19 @@ export function WorkOrdersPage() {
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => (isPreloadMode ? "…" : formatOriginalWoCell(row))}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
+          />
+          <Column
+            field="maintenancePlanKey"
+            header={t("workOrders.maintenancePlan")}
+            sortable={!isPreloadMode}
+            body={(row: WorkOrder) =>
+              isPreloadMode
+                ? "…"
+                : row.maintenancePlanKey
+                  ? `${row.maintenancePlanKey}${row.maintenancePlanName ? ` — ${row.maintenancePlanName}` : ""}`
+                  : "—"
+            }
+            style={{ minWidth: "10rem" }}
           />
           <Column field="name" header={t("workOrders.name")} sortable={!isPreloadMode} />
           <Column

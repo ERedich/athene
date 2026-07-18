@@ -15,6 +15,7 @@ import { Button } from "primereact/button";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { SidebarSweepTimer } from "../components/SidebarSweepTimer";
 import { apiFetch } from "../lib/api";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
@@ -50,6 +51,7 @@ function headerTitleKey(pathname: string): string {
     workgroups: "workgroups.appName",
     employees: "employees.appName",
     "cost-centers": "costCenters.appName",
+    "maintenance-plans": "maintenancePlans.appName",
     shifts: "shifts.appName",
     warehouses: "warehouses.appName",
     "spare-parts": "spareParts.appName",
@@ -153,14 +155,16 @@ export function AppShellLayout() {
           }`}
         >
           {collapsed ? (
-            <div className="font-mono text-lg font-bold leading-none">
+            <div className="flex flex-col items-center font-mono text-lg font-bold leading-none">
               <AtheneWordmark brand="A" />
+              <SidebarSweepTimer collapsed />
             </div>
           ) : (
             <div className="min-w-0">
               <div className="font-mono text-lg font-bold tracking-tight">
                 <AtheneWordmark brand={t("dashboard.brand")} />
               </div>
+              <SidebarSweepTimer collapsed={false} />
               <div className="text-[11px] uppercase tracking-widest text-on-surface-variant mt-1">
                 {t("shell.product")}
               </div>

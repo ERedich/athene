@@ -9,6 +9,7 @@ import type {
   WorkOrderReferenceClassification,
   WorkOrderReferenceCostCenter,
   WorkOrderReferenceEmployee,
+  WorkOrderReferenceMaintenancePlan,
   WorkOrderReferenceWorkgroup,
   WorkOrderSiteOption,
   WorkOrderUserDirectoryRow,
@@ -36,21 +37,31 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
   const [classifications, setClassifications] = useState<WorkOrderReferenceClassification[]>([]);
   const [employees, setEmployees] = useState<WorkOrderReferenceEmployee[]>([]);
   const [workgroups, setWorkgroups] = useState<WorkOrderReferenceWorkgroup[]>([]);
+  const [maintenancePlans, setMaintenancePlans] = useState<WorkOrderReferenceMaintenancePlan[]>([]);
   const [directoryUsers, setDirectoryUsers] = useState<WorkOrderUserDirectoryRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetsRes, costCentersRes, classificationsRes, employeesRes, workgroupsRes, sitesRes, usersRes] =
-        await Promise.all([
-          apiFetch("/api/assets"),
-          apiFetch("/api/cost-centers"),
-          apiFetch("/api/classifications"),
-          apiFetch("/api/employees"),
-          apiFetch("/api/workgroups"),
-          apiFetch("/api/sites"),
-          apiFetch("/api/users"),
-        ]);
+      const [
+        assetsRes,
+        costCentersRes,
+        classificationsRes,
+        employeesRes,
+        workgroupsRes,
+        sitesRes,
+        usersRes,
+        maintenancePlansRes,
+      ] = await Promise.all([
+        apiFetch("/api/assets"),
+        apiFetch("/api/cost-centers"),
+        apiFetch("/api/classifications"),
+        apiFetch("/api/employees"),
+        apiFetch("/api/workgroups"),
+        apiFetch("/api/sites"),
+        apiFetch("/api/users"),
+        apiFetch("/api/maintenance-plans"),
+      ]);
       if (
         !assetsRes.ok ||
         !costCentersRes.ok ||
@@ -58,28 +69,39 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         !employeesRes.ok ||
         !workgroupsRes.ok ||
         !sitesRes.ok ||
-        !usersRes.ok
+        !usersRes.ok ||
+        !maintenancePlansRes.ok
       ) {
         throw new Error("load_ref");
       }
-      const [assetsData, costCentersData, classificationsData, employeesData, workgroupsRaw, sitesData, usersData] =
-        (await Promise.all([
-          assetsRes.json(),
-          costCentersRes.json(),
-          classificationsRes.json(),
-          employeesRes.json(),
-          workgroupsRes.json(),
-          sitesRes.json(),
-          usersRes.json(),
-        ])) as [
-          WorkOrderReferenceAsset[],
-          WorkOrderReferenceCostCenter[],
-          WorkOrderReferenceClassification[],
-          WorkOrderReferenceEmployee[],
-          WorkOrderReferenceWorkgroup[],
-          WorkOrderSiteOption[],
-          WorkOrderUserDirectoryRow[],
-        ];
+      const [
+        assetsData,
+        costCentersData,
+        classificationsData,
+        employeesData,
+        workgroupsRaw,
+        sitesData,
+        usersData,
+        maintenancePlansData,
+      ] = (await Promise.all([
+        assetsRes.json(),
+        costCentersRes.json(),
+        classificationsRes.json(),
+        employeesRes.json(),
+        workgroupsRes.json(),
+        sitesRes.json(),
+        usersRes.json(),
+        maintenancePlansRes.json(),
+      ])) as [
+        WorkOrderReferenceAsset[],
+        WorkOrderReferenceCostCenter[],
+        WorkOrderReferenceClassification[],
+        WorkOrderReferenceEmployee[],
+        WorkOrderReferenceWorkgroup[],
+        WorkOrderSiteOption[],
+        WorkOrderUserDirectoryRow[],
+        WorkOrderReferenceMaintenancePlan[],
+      ];
 
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setCostCenters(Array.isArray(costCentersData) ? costCentersData : []);
@@ -96,6 +118,17 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
           ? workgroupsRaw.map((wg) => ({
               ...wg,
               employeeIds: Array.isArray(wg.employeeIds) ? wg.employeeIds : [],
+              leaderEmployeeIds: Array.isArray(wg.leaderEmployeeIds) ? wg.leaderEmployeeIds : [],
+            }))
+          : [],
+      );
+      setMaintenancePlans(
+        Array.isArray(maintenancePlansData)
+          ? maintenancePlansData.map((mp) => ({
+              id: mp.id,
+              key: mp.key,
+              name: mp.name,
+              siteId: mp.siteId,
             }))
           : [],
       );
@@ -106,6 +139,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
       setClassifications([]);
       setEmployees([]);
       setWorkgroups([]);
+      setMaintenancePlans([]);
       setSites([]);
       setDirectoryUsers([]);
     } finally {
@@ -167,6 +201,14 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
     [employees, siteFieldLocked, user.workingSiteId],
   );
 
+  const searchMaintenancePlanOptions = useMemo(
+    () =>
+      maintenancePlans
+        .filter((mp) => !siteFieldLocked || mp.siteId === user.workingSiteId)
+        .map((mp) => ({ label: `${mp.key} - ${mp.name}`, value: mp.id })),
+    [maintenancePlans, siteFieldLocked, user.workingSiteId],
+  );
+
   const searchUserOptions = useMemo<WorkOrderSearchReferenceSelectOption[]>(
     () => directoryUsers.map((u) => ({ label: `${u.loginName} — ${u.name}`, value: u.id })),
     [directoryUsers],
@@ -188,6 +230,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
     classifications,
     employees,
     workgroups,
+    maintenancePlans,
     sites,
     directoryUsers,
     searchSiteOptions,
@@ -196,6 +239,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
     searchClassificationOptions,
     searchWorkgroupOptions,
     searchEmployeeOptions,
+    searchMaintenancePlanOptions,
     searchUserOptions,
     calendarDateFormat,
     typeOrder,

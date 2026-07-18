@@ -415,6 +415,53 @@ html.theme-crossfade-fallback #root {
   );
 }
 
+/* Unified control height inside advanced search sidebar (InputText h-9 ≈ 2.25rem). */
+.app-wo-search-sidebar .p-inputtext,
+.app-wo-search-sidebar .p-multiselect,
+.app-wo-search-sidebar .p-calendar,
+.app-wo-search-sidebar .p-calendar .p-inputtext,
+.app-wo-search-sidebar .p-inputnumber,
+.app-wo-search-sidebar .p-inputnumber .p-inputtext,
+.app-wo-search-sidebar .p-selectbutton .p-button {
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  box-sizing: border-box;
+}
+
+.app-wo-search-sidebar .p-multiselect {
+  align-items: center;
+}
+
+.app-wo-search-sidebar .p-multiselect .p-multiselect-label {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+  line-height: 1.25rem !important;
+}
+
+.app-wo-search-sidebar .p-calendar,
+.app-wo-search-sidebar .p-inputnumber {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+}
+
+.app-wo-search-sidebar .p-calendar .p-inputtext,
+.app-wo-search-sidebar .p-inputnumber .p-inputtext {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.app-wo-search-sidebar .p-selectbutton {
+  display: inline-flex;
+}
+
+.app-wo-search-sidebar .p-selectbutton .p-button {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 0.75rem !important;
+  line-height: 2.25rem !important;
+}
+
 [data-theme="light"] .professional-panel {
   background: rgba(255, 255, 255, 0.94);
   background: color-mix(

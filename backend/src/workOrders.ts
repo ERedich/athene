@@ -15,6 +15,14 @@ import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext, type AuditSessionMeta } from "./auditContext.js";
 import { pool } from "./db.js";
 import {
+  assertAssetAndCostCenterContext,
+  assertResponsibleEmployeesContext,
+  assertWorkgroupForOrderSite,
+  createWorkOrderRecord,
+  setWorkOrderResponsibles,
+  type WorkOrderCreateInput,
+} from "./workOrderCreate.js";
+import {
   DOCUMENT_MAX_BYTES,
   createDocument,
   deleteDocumentForEntity,
@@ -105,6 +113,9 @@ type WorkOrderRow = {
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   originalWoName: string | null;
+  maintenancePlanId: string | null;
+  maintenancePlanKey: string | null;
+  maintenancePlanName: string | null;
 };
 
 type WorkOrderAssignmentRow = {
@@ -117,23 +128,8 @@ type WorkOrderAssignmentRow = {
   createdBy: string;
 };
 
-type ParsedBody = {
-  name: string;
-  description: string | null;
-  assetId: string;
-  costCenterId: string;
-  plannedStart: string;
-  plannedEnd: string | null;
-  plannedDurationMinutes: number | null;
-  orderType: WorkOrderType;
-  responsibleEmployeeIds: string[];
-  workgroupId: string;
-  classificationId: string | null;
-  originalWo: string | null;
-};
+type ParsedBody = WorkOrderCreateInput;
 
-type AssetSiteRow = QueryResultRow & { id: string; siteId: string };
-type CostCenterSiteRow = QueryResultRow & { id: string; siteId: string };
 type WorkOrderAccessRow = QueryResultRow & { id: string; siteId: string };
 
 const router = Router();
@@ -318,6 +314,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const originalWoRaw = readTrimmedOptionalString(o.originalWo);
   if (originalWoRaw !== null && !isUuid(originalWoRaw)) return null;
 
+  const maintenancePlanIdRaw = readTrimmedOptionalString(o.maintenancePlanId);
+  if (maintenancePlanIdRaw !== null && !isUuid(maintenancePlanIdRaw)) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -331,6 +330,7 @@ function parseBody(body: unknown): ParsedBody | null {
     workgroupId: workgroupIdTrimmed,
     classificationId: classificationIdRaw,
     originalWo: originalWoRaw,
+    maintenancePlanId: maintenancePlanIdRaw,
   };
 }
 
@@ -489,6 +489,9 @@ const selectWorkOrdersSql = `
     w."originalWo",
     orig."orderNumber" AS "originalWoOrderNumber",
     orig."name" AS "originalWoName",
+    w."maintenancePlanId",
+    mp."key" AS "maintenancePlanKey",
+    mp."name" AS "maintenancePlanName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -505,6 +508,7 @@ const selectWorkOrdersSql = `
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
+  LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${workOrderDocumentCountSubquery}
@@ -520,127 +524,6 @@ const selectWorkOrdersSql = `
     GROUP BY "workOrderId"
   ) tx_counts ON tx_counts."workOrderId" = w."id"
 `;
-
-async function assertAssetAndCostCenterContext(
-  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
-  userId: string,
-  assetId: string,
-  costCenterId: string,
-  siteIdOverride?: string,
-): Promise<string> {
-  const asset = await client.query<AssetSiteRow>(
-    `
-    SELECT "id", "siteId"
-    FROM "asset"
-    WHERE "id" = $1::uuid
-      AND ${siteAccessSql('"siteId"', "$2")}
-    `,
-    [assetId, userId],
-  );
-  const assetRow = asset.rows[0];
-  if (!assetRow) throw new Error("invalid_asset");
-
-  if (siteIdOverride && assetRow.siteId !== siteIdOverride) {
-    throw new Error("asset_site_mismatch");
-  }
-
-  const cc = await client.query<CostCenterSiteRow>(
-    `
-    SELECT "id", "siteId"
-    FROM "costCenter"
-    WHERE "id" = $1::uuid
-      AND ${siteAccessSql('"siteId"', "$2")}
-    `,
-    [costCenterId, userId],
-  );
-  const ccRow = cc.rows[0];
-  if (!ccRow) throw new Error("invalid_cost_center");
-  if (ccRow.siteId !== assetRow.siteId) throw new Error("asset_cost_center_mismatch");
-
-  return assetRow.siteId;
-}
-
-async function assertWorkgroupForOrderSite(
-  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
-  userId: string,
-  workgroupId: string | null,
-  orderSiteId: string,
-): Promise<void> {
-  if (!workgroupId) return;
-  const { rows } = await client.query<{ id: string }>(
-    `
-    SELECT w."id"
-    FROM "workgroup" w
-    WHERE w."id" = $1::uuid
-      AND w."siteId" = $2::uuid
-      AND ${siteAccessSql('w."siteId"', "$3")}
-    `,
-    [workgroupId, orderSiteId, userId],
-  );
-  if (!rows[0]) throw new Error("invalid_workgroup");
-}
-
-async function assertResponsibleEmployeesContext(
-  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
-  userId: string,
-  responsibleEmployeeIds: string[],
-  siteId: string,
-  workgroupId: string | null,
-): Promise<void> {
-  if (responsibleEmployeeIds.length === 0) {
-    throw new Error("responsible_required");
-  }
-  for (const responsibleEmployeeId of responsibleEmployeeIds) {
-    const employee = await client.query<QueryResultRow & { id: string; siteId: string }>(
-      `
-      SELECT "id", "siteId"::text AS "siteId"
-      FROM "employee"
-      WHERE "id" = $1::uuid
-        AND ${siteAccessSql('"siteId"', "$2")}
-      `,
-      [responsibleEmployeeId, userId],
-    );
-    const employeeRow = employee.rows[0];
-    if (!employeeRow) throw new Error("invalid_responsible_employee");
-    if (employeeRow.siteId !== siteId) throw new Error("responsible_employee_site_mismatch");
-    if (workgroupId) {
-      const m = await client.query<{ ok: string }>(
-        `
-        SELECT '1' AS ok
-        FROM "workgroupUser"
-        WHERE "workgroupId" = $1::uuid
-          AND "employeeId" = $2::uuid
-          AND "isLeader" = true
-        LIMIT 1
-        `,
-        [workgroupId, responsibleEmployeeId],
-      );
-      if (!m.rows[0]) {
-        throw new Error("responsible_employee_not_leader");
-      }
-    }
-  }
-}
-
-async function setWorkOrderResponsibles(
-  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
-  workOrderId: string,
-  employeeIds: string[],
-): Promise<void> {
-  await client.query(`DELETE FROM "workOrderResponsibleEmployee" WHERE "workOrderId" = $1::uuid`, [
-    workOrderId,
-  ]);
-  if (employeeIds.length === 0) return;
-  const placeholders = employeeIds.map((_, idx) => `($1::uuid, $${idx + 2}::uuid)`).join(", ");
-  await client.query(
-    `
-    INSERT INTO "workOrderResponsibleEmployee" ("workOrderId", "employeeId")
-    VALUES ${placeholders}
-    ON CONFLICT ("workOrderId", "employeeId") DO NOTHING
-    `,
-    [workOrderId, ...employeeIds],
-  );
-}
 
 async function fetchWorkOrderRow(
   client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
@@ -762,7 +645,7 @@ async function getAccessibleWorkOrder(
   return result.rows[0] ?? null;
 }
 
-async function getWorkOrderRowForRealtime(workOrderId: string): Promise<WorkOrderRow | null> {
+export async function getWorkOrderRowForRealtime(workOrderId: string): Promise<WorkOrderRow | null> {
   const { rows } = await pool.query<WorkOrderRow>(
     `
     ${selectWorkOrdersSql}
@@ -1712,68 +1595,8 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
-      const siteIdFromRelations = await assertAssetAndCostCenterContext(
-        client,
-        meta.userId,
-        parsed.assetId,
-        parsed.costCenterId,
-      );
-      const allowSiteChange = await getAllowSiteChange(client);
-      const effectiveSiteId = allowSiteChange
-        ? siteIdFromRelations
-        : await getWorkingSiteId(client, meta.userId);
-      if (effectiveSiteId !== siteIdFromRelations) {
-        throw new Error("site_access_denied");
-      }
-      await assertSiteAccess(client, meta.userId, effectiveSiteId);
-      await assertWorkgroupForOrderSite(client, meta.userId, parsed.workgroupId, effectiveSiteId);
-      await assertResponsibleEmployeesContext(
-        client,
-        meta.userId,
-        parsed.responsibleEmployeeIds,
-        effectiveSiteId,
-        parsed.workgroupId,
-      );
-      await assertClassificationForSiteAndScope(
-        client,
-        meta.userId,
-        effectiveSiteId,
-        parsed.classificationId,
-        "work_order",
-      );
-
-      if (parsed.originalWo) {
-        const template = await getAccessibleWorkOrder(meta.userId, parsed.originalWo);
-        if (!template) throw new Error("invalid_original_wo");
-      }
-
-      const inserted = await client.query<{ id: string }>(
-        `
-        INSERT INTO "workOrder"
-          ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId", "originalWo")
-        VALUES
-          ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
-        RETURNING "id"
-        `,
-        [
-          parsed.name,
-          parsed.description,
-          effectiveSiteId,
-          parsed.assetId,
-          parsed.costCenterId,
-          parsed.plannedStart,
-          parsed.plannedEnd,
-          parsed.plannedDurationMinutes,
-          parsed.orderType,
-          parsed.workgroupId,
-          parsed.classificationId,
-          parsed.originalWo,
-        ],
-      );
-      const workOrderId = inserted.rows[0]?.id;
-      if (!workOrderId) return null;
-      await setWorkOrderResponsibles(client, workOrderId, parsed.responsibleEmployeeIds);
-      return await fetchWorkOrderRow(client, workOrderId);
+      const created = await createWorkOrderRecord(client, meta.userId, parsed);
+      return await fetchWorkOrderRow(client, created.id);
     });
     if (!row) {
       res.status(500).json({ error: "no_row" });
@@ -1836,6 +1659,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
     if (message === "invalid_original_wo") {
       res.status(400).json({ error: "invalid_original_wo" });
+      return;
+    }
+    if (message === "invalid_maintenance_plan") {
+      res.status(400).json({ error: "invalid_maintenance_plan" });
       return;
     }
     sendPgError(res, err);

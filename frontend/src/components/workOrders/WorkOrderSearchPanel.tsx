@@ -5,8 +5,10 @@ import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
 import { Dialog } from "primereact/dialog";
+import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
+import { SelectButton } from "primereact/selectbutton";
 import { Sidebar } from "primereact/sidebar";
 
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
@@ -14,6 +16,7 @@ import {
   EMPLOYEE_PSEUDO_ME,
   WORKGROUP_PSEUDO_MY,
   type WorkOrderAdvancedSearchState,
+  type WorkOrderPlanningDateMode,
   emptyWorkOrderAdvancedSearch,
 } from "../../lib/workOrderApiFilters";
 import {
@@ -48,6 +51,7 @@ type WorkOrderSearchPanelProps = {
   classificationOptions: SelectOption[];
   workgroupOptions: SelectOption[];
   employeeOptions: SelectOption[];
+  maintenancePlanOptions: SelectOption[];
   /** Users for discrete „Angelegt von“ / „Geändert von“ filters */
   userOptions: SelectOption[];
   typeOrder: readonly string[];
@@ -60,6 +64,8 @@ type WorkOrderSearchPanelProps = {
   onSaveSearchPreset?: (name: string, payload: WorkOrderSearchPresetPayloadV1) => Promise<void>;
   cleverSearchEnabled?: boolean;
 };
+
+const RANGE_CONTROL = "h-9 w-full min-w-0 flex-1";
 
 function RangeText({
   label,
@@ -83,11 +89,11 @@ function RangeText({
           onChange={(e) => {
             onFrom(e.target.value);
           }}
-          className="h-9 flex-1 min-w-[6rem]"
+          className={RANGE_CONTROL}
           placeholder="…"
         />
         <span className="text-on-surface-variant">—</span>
-        <InputText value={to} onChange={(e) => onTo(e.target.value)} className="h-9 flex-1 min-w-[6rem]" placeholder="…" />
+        <InputText value={to} onChange={(e) => onTo(e.target.value)} className={RANGE_CONTROL} placeholder="…" />
       </div>
     </div>
   );
@@ -110,7 +116,7 @@ function RangeCalendar({
   onTo,
   dateFormat,
 }: {
-  label: string;
+  label?: string;
   fromIso: string;
   toIso: string;
   onFrom: (iso: string) => void;
@@ -119,7 +125,7 @@ function RangeCalendar({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-on-surface-variant">{label}</span>
+      {label ? <span className="text-xs font-medium text-on-surface-variant">{label}</span> : null}
       <div className="flex flex-wrap items-center gap-2">
         <Calendar
           value={fromIso ? new Date(fromIso) : null}
@@ -129,7 +135,7 @@ function RangeCalendar({
           showTime
           hourFormat="24"
           dateFormat={dateFormat}
-          className="flex-1 min-w-[10rem]"
+          className={RANGE_CONTROL}
           appendTo={overlayAppendTo}
         />
         <span className="text-on-surface-variant">—</span>
@@ -139,10 +145,131 @@ function RangeCalendar({
           showTime
           hourFormat="24"
           dateFormat={dateFormat}
-          className="flex-1 min-w-[10rem]"
+          className={RANGE_CONTROL}
           appendTo={overlayAppendTo}
         />
       </div>
+    </div>
+  );
+}
+
+function daysToNumber(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number.parseInt(t, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function RelativePlanningRange({
+  pastDays,
+  futureDays,
+  onPastDays,
+  onFutureDays,
+  nowLabel,
+  daysLabel,
+}: {
+  pastDays: string;
+  futureDays: string;
+  onPastDays: (v: string) => void;
+  onFutureDays: (v: string) => void;
+  nowLabel: string;
+  daysLabel: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="shrink-0 text-sm text-on-surface-variant" aria-hidden>
+        −
+      </span>
+      <InputNumber
+        value={daysToNumber(pastDays)}
+        onValueChange={(e) => onPastDays(e.value == null ? "" : String(e.value))}
+        min={0}
+        useGrouping={false}
+        className="w-[5.5rem]"
+        inputClassName="h-9 w-full"
+        placeholder="…"
+      />
+      <span className="shrink-0 text-xs text-on-surface-variant">{daysLabel}</span>
+      <span className="shrink-0 rounded-sm bg-surface-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-on-surface dark:bg-surface-800">
+        {nowLabel}
+      </span>
+      <span className="shrink-0 text-sm text-on-surface-variant" aria-hidden>
+        +
+      </span>
+      <InputNumber
+        value={daysToNumber(futureDays)}
+        onValueChange={(e) => onFutureDays(e.value == null ? "" : String(e.value))}
+        min={0}
+        useGrouping={false}
+        className="w-[5.5rem]"
+        inputClassName="h-9 w-full"
+        placeholder="…"
+      />
+      <span className="shrink-0 text-xs text-on-surface-variant">{daysLabel}</span>
+    </div>
+  );
+}
+
+function PlanningDateField({
+  label,
+  mode,
+  onMode,
+  fromIso,
+  toIso,
+  onFrom,
+  onTo,
+  pastDays,
+  futureDays,
+  onPastDays,
+  onFutureDays,
+  dateFormat,
+  modeOptions,
+  nowLabel,
+  daysLabel,
+}: {
+  label: string;
+  mode: WorkOrderPlanningDateMode;
+  onMode: (mode: WorkOrderPlanningDateMode) => void;
+  fromIso: string;
+  toIso: string;
+  onFrom: (iso: string) => void;
+  onTo: (iso: string) => void;
+  pastDays: string;
+  futureDays: string;
+  onPastDays: (v: string) => void;
+  onFutureDays: (v: string) => void;
+  dateFormat: string;
+  modeOptions: { label: string; value: WorkOrderPlanningDateMode }[];
+  nowLabel: string;
+  daysLabel: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-medium text-on-surface-variant">{label}</span>
+        <SelectButton
+          value={mode}
+          options={modeOptions}
+          optionLabel="label"
+          optionValue="value"
+          onChange={(e) => {
+            if (e.value === "absolute" || e.value === "relative") onMode(e.value);
+          }}
+          allowEmpty={false}
+        />
+      </div>
+      {mode === "relative" ? (
+        <RelativePlanningRange
+          pastDays={pastDays}
+          futureDays={futureDays}
+          onPastDays={onPastDays}
+          onFutureDays={onFutureDays}
+          nowLabel={nowLabel}
+          daysLabel={daysLabel}
+        />
+      ) : (
+        <RangeCalendar fromIso={fromIso} toIso={toIso} onFrom={onFrom} onTo={onTo} dateFormat={dateFormat} />
+      )}
     </div>
   );
 }
@@ -160,6 +287,7 @@ export function WorkOrderSearchPanel({
   classificationOptions,
   workgroupOptions,
   employeeOptions,
+  maintenancePlanOptions,
   userOptions,
   typeOrder,
   typeLabel,
@@ -200,11 +328,20 @@ export function WorkOrderSearchPanel({
     [statusLabel],
   );
 
+  const planningModeOptions = useMemo(
+    () => [
+      { label: t("workOrders.searchPanel.modeRelative"), value: "relative" as const },
+      { label: t("workOrders.searchPanel.modeAbsolute"), value: "absolute" as const },
+    ],
+    [t],
+  );
+
   const appliedForSave = appliedSearchForSave ?? emptyWorkOrderAdvancedSearch();
 
   const section =
     "rounded-sm border border-solid app-wo-detail-outline-border bg-surface-50/80 p-3 dark:bg-surface-900/40";
   const sectionTitle = "mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-variant";
+  const multiClass = "w-full";
 
   const saveFooter = (
     <div className="flex justify-end gap-2">
@@ -325,7 +462,7 @@ export function WorkOrderSearchPanel({
                     optionValue="value"
                     onChange={(e) => patch({ orderType: (e.value as string[]) ?? [] })}
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -340,7 +477,7 @@ export function WorkOrderSearchPanel({
                     optionValue="value"
                     onChange={(e) => patch({ status: (e.value as string[]) ?? [] })}
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -355,7 +492,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -370,7 +507,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -385,7 +522,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -400,7 +537,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -414,6 +551,23 @@ export function WorkOrderSearchPanel({
                   <span>{t("workOrders.searchPanel.classificationUnassigned")}</span>
                 </label>
                 <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-on-surface-variant">
+                    {t("workOrders.searchPanel.maintenancePlanKey")}
+                  </span>
+                  <MultiSelect
+                    value={value.maintenancePlanId}
+                    options={maintenancePlanOptions}
+                    onChange={(e) => patch({ maintenancePlanId: (e.value as string[]) ?? [] })}
+                    optionLabel="label"
+                    optionValue="value"
+                    display="chip"
+                    className={multiClass}
+                    filter
+                    appendTo={overlayAppendTo}
+                    placeholder={t("workOrders.searchPanel.selectPlaceholder")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
                   <span className="text-xs font-medium text-on-surface-variant">{t("workOrders.workgroup")}</span>
                   <MultiSelect
                     value={value.workgroupId}
@@ -422,7 +576,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -437,7 +591,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.responsiblePlaceholder")}
@@ -452,7 +606,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.employeeHint")}
@@ -471,22 +625,69 @@ export function WorkOrderSearchPanel({
 
             <div className={`${section} col-span-1`}>
               <div className={sectionTitle}>{t("workOrders.searchPanel.sectionPlanning")}</div>
-              <div className="flex flex-col gap-3">
-                <RangeCalendar
+              <p className="mb-3 mt-0 text-xs text-on-surface-variant">{t("workOrders.searchPanel.relativePlanningHint")}</p>
+              <div className="flex flex-col gap-4">
+                <PlanningDateField
                   label={t("workOrders.plannedStart")}
+                  mode={value.plannedStartMode}
+                  onMode={(mode) =>
+                    patch(
+                      mode === "relative"
+                        ? {
+                            plannedStartMode: "relative",
+                            plannedStartFrom: "",
+                            plannedStartTo: "",
+                          }
+                        : {
+                            plannedStartMode: "absolute",
+                            plannedStartPastDays: "",
+                            plannedStartFutureDays: "",
+                          },
+                    )
+                  }
                   fromIso={value.plannedStartFrom}
                   toIso={value.plannedStartTo}
                   onFrom={(v) => patch({ plannedStartFrom: v, plannedStartTo: v })}
                   onTo={(v) => patch({ plannedStartTo: v })}
+                  pastDays={value.plannedStartPastDays}
+                  futureDays={value.plannedStartFutureDays}
+                  onPastDays={(v) => patch({ plannedStartPastDays: v })}
+                  onFutureDays={(v) => patch({ plannedStartFutureDays: v })}
                   dateFormat={calendarDateFormat}
+                  modeOptions={planningModeOptions}
+                  nowLabel={t("workOrders.searchPanel.relativeNow")}
+                  daysLabel={t("workOrders.searchPanel.relativeDays")}
                 />
-                <RangeCalendar
+                <PlanningDateField
                   label={t("workOrders.plannedEnd")}
+                  mode={value.plannedEndMode}
+                  onMode={(mode) =>
+                    patch(
+                      mode === "relative"
+                        ? {
+                            plannedEndMode: "relative",
+                            plannedEndFrom: "",
+                            plannedEndTo: "",
+                          }
+                        : {
+                            plannedEndMode: "absolute",
+                            plannedEndPastDays: "",
+                            plannedEndFutureDays: "",
+                          },
+                    )
+                  }
                   fromIso={value.plannedEndFrom}
                   toIso={value.plannedEndTo}
                   onFrom={(v) => patch({ plannedEndFrom: v, plannedEndTo: v })}
                   onTo={(v) => patch({ plannedEndTo: v })}
+                  pastDays={value.plannedEndPastDays}
+                  futureDays={value.plannedEndFutureDays}
+                  onPastDays={(v) => patch({ plannedEndPastDays: v })}
+                  onFutureDays={(v) => patch({ plannedEndFutureDays: v })}
                   dateFormat={calendarDateFormat}
+                  modeOptions={planningModeOptions}
+                  nowLabel={t("workOrders.searchPanel.relativeNow")}
+                  daysLabel={t("workOrders.searchPanel.relativeDays")}
                 />
               </div>
             </div>
@@ -503,7 +704,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}
@@ -518,7 +719,7 @@ export function WorkOrderSearchPanel({
                     optionLabel="label"
                     optionValue="value"
                     display="chip"
-                    className="w-full"
+                    className={multiClass}
                     filter
                     appendTo={overlayAppendTo}
                     placeholder={t("workOrders.searchPanel.selectPlaceholder")}

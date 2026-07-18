@@ -21,6 +21,7 @@ export type TableLayoutPayloadV1 = {
 export type MonitoringColumnId =
   | "orderNumber"
   | "originalWoOrderNumber"
+  | "maintenancePlanKey"
   | "name"
   | "status"
   | "assetName"
@@ -37,6 +38,7 @@ export type MonitoringColumnId =
 export const MONITORING_WORK_ORDERS_COLUMN_IDS: MonitoringColumnId[] = [
   "orderNumber",
   "originalWoOrderNumber",
+  "maintenancePlanKey",
   "name",
   "status",
   "assetName",
@@ -73,6 +75,15 @@ export const MONITORING_WORK_ORDERS_COLUMNS: MonitoringColumnDef[] = [
     defaultWidth: 112,
     minWidth: 112,
     maxWidth: 112,
+    frozenAllowed: true,
+  },
+  {
+    id: "maintenancePlanKey",
+    field: "maintenancePlanKey",
+    headerKey: "workOrders.maintenancePlan",
+    sortable: true,
+    defaultWidth: 160,
+    minWidth: 120,
     frozenAllowed: true,
   },
   { id: "name", field: "name", headerKey: "workOrders.name", sortable: true, frozenAllowed: true },

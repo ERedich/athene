@@ -75,6 +75,20 @@ export function renderMonitoringWorkOrdersColumns(
         />
       );
     }
+    if (columnId === "maintenancePlanKey") {
+      return (
+        <Column
+          key={columnId}
+          {...common}
+          field={def.field}
+          body={(row: WorkOrder) =>
+            row.maintenancePlanKey
+              ? `${row.maintenancePlanKey}${row.maintenancePlanName ? ` — ${row.maintenancePlanName}` : ""}`
+              : "—"
+          }
+        />
+      );
+    }
     if (columnId === "name") {
       return <Column key={columnId} {...common} field={def.field} />;
     }

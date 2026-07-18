@@ -192,7 +192,7 @@ export async function buildWorkOrderListFilters(
   likeContains(`w."name"`, "name");
   likeContains(`COALESCE(w."description", '')`, "description");
 
-  // --- Datetime ranges (planning) ---
+  // --- Datetime ranges (planning + audit) ---
   const tsRange = (column: string, fromKey: string, toKey: string) => {
     const from = parseOptionalTrimmedString(q[fromKey]);
     const to = parseOptionalTrimmedString(q[toKey]);
@@ -205,8 +205,55 @@ export async function buildWorkOrderListFilters(
       pushCond(`${column} <= $${pi++}::timestamptz`);
     }
   };
-  tsRange(`w."plannedStart"`, "plannedStartFrom", "plannedStartTo");
-  tsRange(`w."plannedEnd"`, "plannedEndFrom", "plannedEndTo");
+
+  /** Relative window around now(): pastDays → lower bound, futureDays → upper bound. */
+  const relativeTsRange = (
+    column: string,
+    pastKey: string,
+    futureKey: string,
+  ): boolean => {
+    const past = parseOptionalInt(q[pastKey]);
+    const future = parseOptionalInt(q[futureKey]);
+    const pastRaw = parseOptionalTrimmedString(q[pastKey]);
+    const futureRaw = parseOptionalTrimmedString(q[futureKey]);
+    if (pastRaw != null && (past == null || past < 0)) {
+      return false;
+    }
+    if (futureRaw != null && (future == null || future < 0)) {
+      return false;
+    }
+    if (past == null && future == null) return true;
+    if (past != null) {
+      params.push(past);
+      pushCond(`${column} >= (now() - ($${pi++}::text || ' days')::interval)`);
+    }
+    if (future != null) {
+      params.push(future);
+      pushCond(`${column} <= (now() + ($${pi++}::text || ' days')::interval)`);
+    }
+    return true;
+  };
+
+  const startPastRaw = parseOptionalTrimmedString(q.plannedStartPastDays);
+  const startFutureRaw = parseOptionalTrimmedString(q.plannedStartFutureDays);
+  if (startPastRaw != null || startFutureRaw != null) {
+    if (!relativeTsRange(`w."plannedStart"`, "plannedStartPastDays", "plannedStartFutureDays")) {
+      return { ok: false, status: 400, error: "invalid_planned_start_relative_days" };
+    }
+  } else {
+    tsRange(`w."plannedStart"`, "plannedStartFrom", "plannedStartTo");
+  }
+
+  const endPastRaw = parseOptionalTrimmedString(q.plannedEndPastDays);
+  const endFutureRaw = parseOptionalTrimmedString(q.plannedEndFutureDays);
+  if (endPastRaw != null || endFutureRaw != null) {
+    if (!relativeTsRange(`w."plannedEnd"`, "plannedEndPastDays", "plannedEndFutureDays")) {
+      return { ok: false, status: 400, error: "invalid_planned_end_relative_days" };
+    }
+  } else {
+    tsRange(`w."plannedEnd"`, "plannedEndFrom", "plannedEndTo");
+  }
+
   tsRange(`w."createdAt"`, "createdAtFrom", "createdAtTo");
   tsRange(`w."updatedAt"`, "updatedAtFrom", "updatedAtTo");
 
@@ -249,6 +296,13 @@ export async function buildWorkOrderListFilters(
 
   const assetErr = uuidIn(collectQueryStrings(q, "assetId"), `w."assetId"`, "invalid_asset_id");
   if (assetErr) return { ok: false, status: 400, error: assetErr };
+
+  const mpErr = uuidIn(
+    collectQueryStrings(q, "maintenancePlanId"),
+    `w."maintenancePlanId"`,
+    "invalid_maintenance_plan_id",
+  );
+  if (mpErr) return { ok: false, status: 400, error: mpErr };
 
   const ccErr = uuidIn(collectQueryStrings(q, "costCenterId"), `w."costCenterId"`, "invalid_cost_center_id");
   if (ccErr) return { ok: false, status: 400, error: ccErr };

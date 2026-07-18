@@ -55,6 +55,11 @@ export type WorkOrderRealtimePayload = {
 
 const sockets = new Map<WebSocket, string>();
 
+/** Keepalive interval so proxies/idle timeouts do not drop silent connections. */
+const WS_PING_INTERVAL_MS = 25_000;
+/** Drop the socket if no pong arrives within this many ping cycles. */
+const WS_PING_MISSED_LIMIT = 2;
+
 export function registerWorkOrderRealtime(
   req: IncomingMessage,
   ws: WebSocket,
@@ -63,9 +68,38 @@ export function registerWorkOrderRealtime(
   const userId = readSessionUserIdFromCookieHeader(req.headers.cookie, sessionSecret);
   if (!userId) return false;
   sockets.set(ws, userId);
-  ws.on("close", () => {
+
+  let missedPongs = 0;
+  const pingTimer = setInterval(() => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      clearInterval(pingTimer);
+      return;
+    }
+    if (missedPongs >= WS_PING_MISSED_LIMIT) {
+      clearInterval(pingTimer);
+      ws.terminate();
+      return;
+    }
+    missedPongs += 1;
+    try {
+      ws.ping();
+    } catch {
+      clearInterval(pingTimer);
+      ws.terminate();
+    }
+  }, WS_PING_INTERVAL_MS);
+
+  const cleanup = () => {
+    clearInterval(pingTimer);
     sockets.delete(ws);
+  };
+
+  ws.on("pong", () => {
+    missedPongs = 0;
   });
+  ws.on("close", cleanup);
+  ws.on("error", cleanup);
+
   return true;
 }
 

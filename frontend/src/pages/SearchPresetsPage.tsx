@@ -16,7 +16,7 @@ import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPa
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
-import { emptyWorkOrderAdvancedSearch, type WorkOrderAdvancedSearchState } from "../lib/workOrderApiFilters";
+import { coerceWorkOrderAdvancedSearch, emptyWorkOrderAdvancedSearch, type WorkOrderAdvancedSearchState } from "../lib/workOrderApiFilters";
 import {
   buildWorkOrderSearchPresetPayload,
   deleteWorkOrderSearchPreset,
@@ -278,7 +278,7 @@ export function SearchPresetsPage() {
         const [d, def] = await Promise.all([fetchWorkOrderSearchPresetDetail(preset.id), fetchWorkOrderSearchPresetDefaults()]);
         setEditName(d.name);
         setEditQuick(d.payload.quickSearch ?? "");
-        setEditAdvanced({ ...d.payload.advanced });
+        setEditAdvanced(coerceWorkOrderAdvancedSearch(d.payload.advanced));
         setDefaults(def);
       } catch {
         toastRef.current?.show({ severity: "error", summary: t("suchkonfig.editLoadError"), life: 6000 });
@@ -447,6 +447,7 @@ export function SearchPresetsPage() {
         classificationOptions={refData.searchClassificationOptions}
         workgroupOptions={refData.searchWorkgroupOptions}
         employeeOptions={refData.searchEmployeeOptions}
+        maintenancePlanOptions={refData.searchMaintenancePlanOptions}
         userOptions={refData.searchUserOptions}
         typeOrder={refData.typeOrder}
         typeLabel={refData.typeLabel}

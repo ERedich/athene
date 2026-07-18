@@ -56,6 +56,9 @@ export type WorkOrder = {
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   originalWoName: string | null;
+  maintenancePlanId: string | null;
+  maintenancePlanKey: string | null;
+  maintenancePlanName: string | null;
 };
 
 export type WorkOrderAssignment = {
@@ -126,6 +129,13 @@ export type WorkOrderReferenceEmployee = {
   name: string;
   siteId: string;
   isActive: boolean;
+};
+
+export type WorkOrderReferenceMaintenancePlan = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
 };
 
 export type WorkOrderReferenceWorkgroup = {

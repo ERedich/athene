@@ -31,6 +31,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
 import { KpiBuilderPage } from "./pages/KpiBuilderPage";
+import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
 
 export default function App() {
   return (
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="classifications" element={<ClassificationsPage />} />
           <Route path="workgroups" element={<WorkgroupsPage />} />
           <Route path="shifts" element={<ShiftsPage />} />
+          <Route path="maintenance-plans" element={<MaintenancePlansPage />} />
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />

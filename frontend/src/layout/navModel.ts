@@ -28,6 +28,7 @@ import {
   type LucideIcon,
   Users,
   Warehouse,
+  Wrench,
 } from "lucide-react";
 
 export type NavRouteItem = {
@@ -148,6 +149,11 @@ export const navGroups: NavGroup[] = [
         to: "/shifts",
         Icon: Clock,
         labelKey: "shifts.navShifts",
+      },
+      {
+        to: "/maintenance-plans",
+        Icon: Wrench,
+        labelKey: "maintenancePlans.navMaintenancePlans",
       },
     ],
   },

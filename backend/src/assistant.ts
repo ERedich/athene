@@ -34,6 +34,8 @@ import {
   attachAssetConflictsToShiftAssignments,
   type ShiftedPlanningAssignment,
 } from "./workOrderScheduling.js";
+import { createWorkOrderRecord } from "./workOrderCreate.js";
+import { generateWorkOrderForPlan } from "./maintenancePlanGenerate.js";
 
 type AssistantRole = "user" | "assistant" | "system" | "tool";
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
@@ -136,6 +138,9 @@ type WorkOrderRow = QueryResultRow & {
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   originalWoName: string | null;
+  maintenancePlanId: string | null;
+  maintenancePlanKey: string | null;
+  maintenancePlanName: string | null;
 };
 
 type AssetRow = QueryResultRow & {
@@ -236,6 +241,7 @@ type ParsedCreateWorkOrder = {
   workgroupId: string;
   classificationId: string | null;
   originalWo: string | null;
+  maintenancePlanId: string | null;
 };
 
 type WorkOrderStatusCountResult = {
@@ -429,6 +435,9 @@ const selectWorkOrdersSql = `
     w."originalWo",
     orig."orderNumber" AS "originalWoOrderNumber",
     orig."name" AS "originalWoName",
+    w."maintenancePlanId",
+    mp."key" AS "maintenancePlanKey",
+    mp."name" AS "maintenancePlanName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -456,6 +465,7 @@ const selectWorkOrdersSql = `
   ) ended_history ON ended_history."workOrderId" = w."id"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
+  LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${workOrderDocumentCountSubquery}
@@ -646,6 +656,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     workgroupId,
     classificationId,
     originalWo,
+    maintenancePlanId: null,
   };
 }
 
@@ -939,8 +950,9 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "When presenting structured lists, comparisons, counts, status summaries, or tabular data, use GitHub-flavored Markdown tables. Keep tables compact and include only columns that help answer the question.",
     "You can never delete records. If a user asks you to delete, remove, or erase records, answer with the fixed refusal and do not call tools.",
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
-    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, or search configuration.",
-    "You may create work orders only through createWorkOrder or createWorkOrderFromOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
+    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, search configuration, or maintenance plans (Wartungspläne).",
+    "You may create work orders only through createWorkOrder, createWorkOrderFromOrder, or generateMaintenancePlanWorkOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
+    "For preventive maintenance due dates and plan details use listMaintenancePlans. To create the next maintenance work order from a plan use generateMaintenancePlanWorkOrder (not inventing UUIDs).",
     "createWorkOrder requires UUID values for assetId, costCenterId, workgroupId, and responsibleEmployeeIds (at least one leader UUID). Never pass business keys (assetKey, costCenterKey, employeeKey) or order numbers as IDs. getWorkOrderDetails returns both keys and UUIDs: use the *Id fields for createWorkOrder.",
     "After the user confirms they want the same data as a template order (possibly with a new name or dates), call the create tool immediately. Do not loop on re-confirming fields already taken from getWorkOrderDetails or createWorkOrderFromOrder.",
     "For questions about counts, totals, or how many work orders exist in a status, use countWorkOrdersByStatus.",
@@ -2978,79 +2990,14 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
       reason: "athene assistant create work order",
     },
     async (client) => {
-      const relationSiteId = await assertAssetAndCostCenterContext(
-        client,
-        userId,
-        parsed.assetId,
-        parsed.costCenterId,
-      );
-      const allowSiteChange = await getAllowSiteChange(client);
-      const effectiveSiteId = allowSiteChange ? relationSiteId : await getWorkingSiteId(client, userId);
-      if (effectiveSiteId !== relationSiteId) throw new Error("site_access_denied");
-      await assertSiteAccess(client, userId, effectiveSiteId);
-      await assertWorkgroupForOrderSite(client, userId, parsed.workgroupId, effectiveSiteId);
-      await assertResponsibleEmployeesContext(
-        client,
-        userId,
-        parsed.responsibleEmployeeIds,
-        effectiveSiteId,
-        parsed.workgroupId,
-      );
-      await assertClassificationForSiteAndScope(
-        client,
-        userId,
-        effectiveSiteId,
-        parsed.classificationId,
-        "work_order",
-      );
-
-      if (parsed.originalWo) {
-        const templateAccess = await client.query<{ id: string }>(
-          `
-          SELECT "id"
-          FROM "workOrder"
-          WHERE "id" = $1::uuid
-            AND ${siteAccessSql('"siteId"', "$2")}
-          LIMIT 1
-          `,
-          [parsed.originalWo, userId],
-        );
-        if (!templateAccess.rows[0]) throw new Error("invalid_original_wo");
-      }
-
-      const inserted = await client.query<{ id: string }>(
-        `
-        INSERT INTO "workOrder"
-          ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd", "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId", "originalWo")
-        VALUES
-          ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9, 'open', $10::uuid, $11::uuid, $12::uuid)
-        RETURNING "id"
-        `,
-        [
-          parsed.name,
-          parsed.description,
-          effectiveSiteId,
-          parsed.assetId,
-          parsed.costCenterId,
-          parsed.plannedStart,
-          parsed.plannedEnd,
-          parsed.plannedDurationMinutes,
-          parsed.orderType,
-          parsed.workgroupId,
-          parsed.classificationId,
-          parsed.originalWo,
-        ],
-      );
-      const workOrderId = inserted.rows[0]?.id;
-      if (!workOrderId) return null;
-      await setWorkOrderResponsibles(client, workOrderId, parsed.responsibleEmployeeIds);
+      const created = await createWorkOrderRecord(client, userId, parsed);
       const { rows } = await client.query<WorkOrderRow>(
         `
         ${selectWorkOrdersSql}
         WHERE w."id" = $1::uuid
         LIMIT 1
         `,
-        [workOrderId],
+        [created.id],
       );
       return rows[0] ?? null;
     },
@@ -3061,6 +3008,98 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
     });
   }
   return row ?? { error: "no_row" };
+}
+
+async function listMaintenancePlansTool(userId: string, args: Record<string, unknown>): Promise<unknown> {
+  const dueOnly = Boolean(args.dueOnly);
+  const status =
+    typeof args.status === "string" && ["active", "paused", "ended"].includes(args.status)
+      ? args.status
+      : null;
+  const assetId =
+    typeof args.assetId === "string" && isUuid(args.assetId.trim()) ? args.assetId.trim() : null;
+
+  const params: unknown[] = [userId];
+  const filters: string[] = [`${siteAccessSql('p."siteId"', "$1")}`];
+  if (status) {
+    params.push(status);
+    filters.push(`p."status" = $${params.length}`);
+  }
+  if (assetId) {
+    params.push(assetId);
+    filters.push(`p."assetId" = $${params.length}::uuid`);
+  }
+  if (dueOnly) {
+    filters.push(`p."status" = 'active'`);
+    filters.push(`p."nextDueAt" <= now() + make_interval(days => p."leadTimeDays")`);
+  }
+
+  const { rows } = await pool.query(
+    `
+    SELECT
+      p."id",
+      p."key",
+      p."name",
+      p."status",
+      p."intervalUnit",
+      p."intervalValue",
+      p."anchorDate"::text AS "anchorDate",
+      p."nextDueAt",
+      p."leadTimeDays",
+      p."executionCount",
+      p."assetId",
+      a."key" AS "assetKey",
+      a."name" AS "assetName",
+      p."siteId",
+      s."key" AS "siteKey",
+      EXISTS (
+        SELECT 1 FROM "workOrder" w
+        WHERE w."maintenancePlanId" = p."id"
+          AND w."status" IN ('open', 'assigned', 'started', 'paused', 'continued')
+      ) AS "hasOpenWorkOrder"
+    FROM "maintenancePlan" p
+    JOIN "asset" a ON a."id" = p."assetId"
+    JOIN "site" s ON s."id" = p."siteId"
+    WHERE ${filters.join(" AND ")}
+    ORDER BY p."nextDueAt" ASC
+    LIMIT 100
+    `,
+    params,
+  );
+  return { count: rows.length, plans: rows };
+}
+
+async function generateMaintenancePlanWorkOrderTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const planId =
+    typeof args.planId === "string" && isUuid(args.planId.trim()) ? args.planId.trim() : null;
+  const planKey = typeof args.planKey === "string" ? args.planKey.trim() : "";
+  let resolvedId = planId;
+  if (!resolvedId && planKey) {
+    const { rows } = await pool.query<{ id: string }>(
+      `
+      SELECT p."id"
+      FROM "maintenancePlan" p
+      WHERE p."key" = $1
+        AND ${siteAccessSql('p."siteId"', "$2")}
+      LIMIT 2
+      `,
+      [planKey, userId],
+    );
+    if (rows.length === 0) return { error: "not_found" };
+    if (rows.length > 1) return { error: "ambiguous", matches: rows };
+    resolvedId = rows[0]!.id;
+  }
+  if (!resolvedId) return { error: "invalid_body" };
+  const force = Boolean(args.force);
+  return generateWorkOrderForPlan({
+    planId: resolvedId,
+    actorUserId: userId,
+    force,
+    systemSweep: false,
+  });
 }
 
 const tools = [
@@ -3552,6 +3591,52 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "listMaintenancePlans",
+      description:
+        "List accessible preventive maintenance plans (Stammdaten). Use dueOnly=true for plans whose next due is within lead time. Athene must not create, edit, or delete plans.",
+      parameters: {
+        type: "object",
+        properties: {
+          dueOnly: {
+            type: "boolean",
+            description: "When true, only active plans due within leadTimeDays.",
+          },
+          status: {
+            type: ["string", "null"],
+            enum: ["active", "paused", "ended", null],
+          },
+          assetId: {
+            type: ["string", "null"],
+            description: "Optional asset UUID filter.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generateMaintenancePlanWorkOrder",
+      description:
+        "Generate an open maintenance work order from a maintenance plan (Auftragswesen). Provide planId (UUID) or planKey. Use force=true only when the user asks to generate early despite not being due. Skips if an open WO already exists for the plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          planId: { type: ["string", "null"], description: "Maintenance plan UUID." },
+          planKey: { type: ["string", "null"], description: "Business key of the plan." },
+          force: {
+            type: "boolean",
+            description: "Generate even if not yet due (still respects max one open WO).",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ] as const;
 
 async function resolveWorkOrderIdFromToolArgs(
@@ -3656,6 +3741,10 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
   }
   if (name === "createWorkOrderFromOrder") return createWorkOrderFromOrder(userId, args);
   if (name === "createWorkOrder") return createWorkOrder(userId, args);
+  if (name === "listMaintenancePlans") return listMaintenancePlansTool(userId, args);
+  if (name === "generateMaintenancePlanWorkOrder") {
+    return generateMaintenancePlanWorkOrderTool(userId, args);
+  }
   return { error: "unknown_tool" };
 }
 

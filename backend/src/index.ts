@@ -34,6 +34,8 @@ import { notificationCenterRouter } from "./notificationCenter.js";
 import { workOrderSubscriptionsRouter } from "./workOrderSubscriptions.js";
 import { tableLayoutsRouter } from "./tableLayouts.js";
 import { customKpisRouter } from "./customKpis.js";
+import { maintenancePlansRouter } from "./maintenancePlans.js";
+import { startMaintenancePlanSweep } from "./maintenancePlanGenerate.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -82,6 +84,7 @@ app.use("/api/classifications", requireAuth, classificationsRouter);
 app.use("/api/workgroups", requireAuth, workgroupsRouter);
 app.use("/api/employees", requireAuth, employeesRouter);
 app.use("/api/assets", requireAuth, assetsRouter);
+app.use("/api/maintenance-plans", requireAuth, maintenancePlansRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/dashboard", requireAuth, atheneBriefingRouter);
 app.use("/api/work-orders", requireAuth, workOrdersRouter);
@@ -121,4 +124,5 @@ server.listen(port, listenHost, () => {
   console.log(
     `backend listening on http://localhost:${port} (bound to ${listenHost}, use http://<this-machine-ip>:${port} on LAN)`,
   );
+  startMaintenancePlanSweep();
 });
