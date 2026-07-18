@@ -4,6 +4,7 @@ import {
   CALENDAR_DAY_HEADER_PX,
   CALENDAR_LANE_GAP_PX,
   CALENDAR_LANE_HEIGHT_PX,
+  CALENDAR_MIN_EVENT_DAY_FRACTION,
   CALENDAR_MONTH_OVERFLOW_LANE_INDEX,
 } from "./calendarTypes";
 
@@ -166,12 +167,19 @@ export function segmentBarStyle(segment: CalendarEventSegment): {
   left: string;
   width: string;
   top: number;
+  isShortDisplay: boolean;
 } {
   const { start, end } = segmentWeekRange(segment);
-  const leftPct = (start / 7) * 100;
+  let leftPct = (start / 7) * 100;
   let widthPct = ((end - start) / 7) * 100;
-  const minWidthPct = 100 / (7 * DAY_MINUTES);
-  if (widthPct < minWidthPct) widthPct = minWidthPct;
+  const minWidthPct = (CALENDAR_MIN_EVENT_DAY_FRACTION / 7) * 100;
+  const isShortDisplay = widthPct < minWidthPct;
+  if (isShortDisplay) {
+    widthPct = minWidthPct;
+    if (leftPct + widthPct > 100) {
+      leftPct = Math.max(0, 100 - widthPct);
+    }
+  }
 
   const padL = segment.continuesBefore ? 0 : EVENT_BAR_COLUMN_GAP_PX;
   const padR = segment.continuesAfter ? 0 : EVENT_BAR_COLUMN_GAP_PX;
@@ -179,6 +187,7 @@ export function segmentBarStyle(segment: CalendarEventSegment): {
     left: `calc(${leftPct}% + ${padL}px)`,
     width: `calc(${widthPct}% - ${padL + padR}px)`,
     top: laneTopPx(segment.laneIndex),
+    isShortDisplay,
   };
 }
 

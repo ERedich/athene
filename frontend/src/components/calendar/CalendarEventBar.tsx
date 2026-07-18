@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { UnfoldHorizontal } from "lucide-react";
 
 import { CALENDAR_DRAG_MIME } from "../../lib/calendar/calendarMove";
 import {
@@ -16,6 +18,7 @@ type Props = {
   disabledTooltip?: string;
   draggingEmployeeId?: string | null;
   employeeDropAllowed?: boolean;
+  readOnly?: boolean;
   onClick: () => void;
   onAskAthene?: () => void;
   onDragStart?: (workOrderId: string) => void;
@@ -26,6 +29,7 @@ type Props = {
 function orderTypeClass(orderType?: string): string {
   if (orderType === "repair") return "app-calendar-event-bar--repair";
   if (orderType === "breakdown") return "app-calendar-event-bar--breakdown";
+  if (orderType === "maintenancePlan") return "app-calendar-event-bar--maintenancePlan";
   return "app-calendar-event-bar--maintenance";
 }
 
@@ -37,12 +41,14 @@ export function CalendarEventBar({
   disabledTooltip,
   draggingEmployeeId,
   employeeDropAllowed = false,
+  readOnly = false,
   onClick,
   onAskAthene,
   onDragStart,
   onDragEnd,
   onAssignEmployee,
 }: Props) {
+  const { t } = useTranslation();
   const pos = segmentBarStyle(segment);
   const radiusBefore = segment.continuesBefore ? "0" : "0.25rem";
   const radiusAfter = segment.continuesAfter ? "0" : "0.25rem";
@@ -52,11 +58,15 @@ export function CalendarEventBar({
   const [isDropDenied, setIsDropDenied] = useState(false);
 
   const employeeDragActive = draggingEmployeeId != null;
-  const employeeDropDenied = employeeDragActive && !employeeDropAllowed;
-  const interactionLocked = disabled || employeeDragActive;
+  const employeeDropDenied = employeeDragActive && !employeeDropAllowed && !readOnly;
+  const interactionLocked = disabled || employeeDragActive || readOnly;
+  const shortHint = t("kalendar.shortEventExpanded");
+  const titleParts = [tooltip];
+  if (pos.isShortDisplay) titleParts.push(shortHint);
+  if (disabled && disabledTooltip) titleParts.push(disabledTooltip);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (disabled || !onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
+    if (readOnly || disabled || !onAssignEmployee || !isCalendarEmployeeDrag(e.dataTransfer, draggingEmployeeId)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
@@ -80,7 +90,7 @@ export function CalendarEventBar({
     e.stopPropagation();
     setIsDropTarget(false);
     setIsDropDenied(false);
-    if (!onAssignEmployee || !employeeDropAllowed || disabled) return;
+    if (!onAssignEmployee || !employeeDropAllowed || disabled || readOnly) return;
     const employeeId = readCalendarEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
     onAssignEmployee(segment.eventId, employeeId);
@@ -96,7 +106,7 @@ export function CalendarEventBar({
         employeeDropDenied ? " app-calendar-event-bar--employee-drop-denied" : ""
       }${isDropTarget ? " app-calendar-event-bar--drop-target" : ""}${
         isDropDenied ? " app-calendar-event-bar--drop-denied" : ""
-      }`}
+      }${pos.isShortDisplay ? " app-calendar-event-bar--short" : ""}`}
       style={{
         left: pos.left,
         width: pos.width,
@@ -107,7 +117,7 @@ export function CalendarEventBar({
         borderBottomRightRadius: radiusAfter,
         color: textColor,
       }}
-      title={disabled && disabledTooltip ? `${tooltip}\n${disabledTooltip}` : tooltip}
+      title={titleParts.join("\n")}
       aria-disabled={disabled || undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -138,6 +148,13 @@ export function CalendarEventBar({
         onAskAthene();
       }}
     >
+      {pos.isShortDisplay ? (
+        <UnfoldHorizontal
+          className="app-calendar-event-bar__short-icon"
+          strokeWidth={2.25}
+          aria-hidden
+        />
+      ) : null}
       <span className="app-calendar-event-bar__label">{segment.title}</span>
     </button>
   );

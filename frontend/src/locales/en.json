@@ -353,6 +353,7 @@
     "moveError": "Could not move the order.",
     "moveSuccess": "Order was moved.",
     "askAtheneHint": "Right-click: Ask Athene",
+    "shortEventExpanded": "Shorter than shown — bar enlarged for readability",
     "employeesSection": "Employees",
     "employeesFilterPlaceholder": "Search employees…",
     "employeesEmpty": "No active employees available.",

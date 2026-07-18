@@ -1,6 +1,10 @@
 import { endOfDay, startOfDay } from "./calendarDates";
 import type { CalendarEvent, CalendarEventKind } from "./calendarTypes";
-import { CALENDAR_LANE_GAP_PX, CALENDAR_LANE_HEIGHT_PX } from "./calendarTypes";
+import {
+  CALENDAR_LANE_GAP_PX,
+  CALENDAR_LANE_HEIGHT_PX,
+  CALENDAR_MIN_EVENT_TIMELINE_MINUTES,
+} from "./calendarTypes";
 
 export const DAY_TIMELINE_MINUTES = 24 * 60;
 export const DAY_TIMELINE_TRACK_MIN_WIDTH_PX = 48 * 60;
@@ -113,12 +117,22 @@ export function timelineSegmentStyle(segment: CalendarTimelineSegment): {
   left: string;
   width: string;
   top: number;
+  isShortDisplay: boolean;
 } {
-  const leftPct = (segment.startMinute / DAY_TIMELINE_MINUTES) * 100;
-  const widthPct = ((segment.endMinute - segment.startMinute) / DAY_TIMELINE_MINUTES) * 100;
+  let leftPct = (segment.startMinute / DAY_TIMELINE_MINUTES) * 100;
+  let widthPct = ((segment.endMinute - segment.startMinute) / DAY_TIMELINE_MINUTES) * 100;
+  const minWidthPct = (CALENDAR_MIN_EVENT_TIMELINE_MINUTES / DAY_TIMELINE_MINUTES) * 100;
+  const isShortDisplay = widthPct < minWidthPct;
+  if (isShortDisplay) {
+    widthPct = minWidthPct;
+    if (leftPct + widthPct > 100) {
+      leftPct = Math.max(0, 100 - widthPct);
+    }
+  }
   return {
     left: `${leftPct}%`,
-    width: `${Math.max(widthPct, 100 / DAY_TIMELINE_MINUTES)}%`,
+    width: `${widthPct}%`,
     top: segment.laneIndex * (CALENDAR_LANE_HEIGHT_PX + CALENDAR_LANE_GAP_PX),
+    isShortDisplay,
   };
 }

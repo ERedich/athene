@@ -353,6 +353,7 @@
     "moveError": "Auftrag konnte nicht verschoben werden.",
     "moveSuccess": "Auftrag wurde verschoben.",
     "askAtheneHint": "Rechtsklick: Athene fragen",
+    "shortEventExpanded": "Kürzer als dargestellt — Balken zur Lesbarkeit vergrößert",
     "employeesSection": "Mitarbeiter",
     "employeesFilterPlaceholder": "Mitarbeiter suchen…",
     "employeesEmpty": "Keine aktiven Mitarbeiter verfügbar.",
