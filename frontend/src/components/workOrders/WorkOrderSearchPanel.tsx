@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Check, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
@@ -8,8 +8,8 @@ import { Dialog } from "primereact/dialog";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
-import { SelectButton } from "primereact/selectbutton";
 import { Sidebar } from "primereact/sidebar";
+import { TabPanel, TabView } from "primereact/tabview";
 
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
 import {
@@ -19,6 +19,20 @@ import {
   type WorkOrderPlanningDateMode,
   emptyWorkOrderAdvancedSearch,
 } from "../../lib/workOrderApiFilters";
+
+/** Named tab indexes for Relativ / Absolut planning mode (Guidelines: Tab Handling). */
+const planningDateModeTabs = {
+  Relative: 0,
+  Absolute: 1,
+} as const;
+
+function planningModeToTabIndex(mode: WorkOrderPlanningDateMode): number {
+  return mode === "absolute" ? planningDateModeTabs.Absolute : planningDateModeTabs.Relative;
+}
+
+function planningTabIndexToMode(index: number): WorkOrderPlanningDateMode {
+  return index === planningDateModeTabs.Absolute ? "absolute" : "relative";
+}
 import {
   buildWorkOrderSearchPresetPayload,
   type WorkOrderSearchPresetPayloadV1,
@@ -166,46 +180,42 @@ function RelativePlanningRange({
   onPastDays,
   onFutureDays,
   nowLabel,
-  daysLabel,
+  pastTooltip,
+  futureTooltip,
 }: {
   pastDays: string;
   futureDays: string;
   onPastDays: (v: string) => void;
   onFutureDays: (v: string) => void;
   nowLabel: string;
-  daysLabel: string;
+  pastTooltip: string;
+  futureTooltip: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="shrink-0 text-sm text-on-surface-variant" aria-hidden>
-        −
-      </span>
+    <div className="flex items-center gap-2">
       <InputNumber
         value={daysToNumber(pastDays)}
         onValueChange={(e) => onPastDays(e.value == null ? "" : String(e.value))}
         min={0}
         useGrouping={false}
-        className="w-[5.5rem]"
+        className="min-w-0 flex-1"
         inputClassName="h-9 w-full"
         placeholder="…"
+        tooltip={pastTooltip}
+        tooltipOptions={{ position: "top" }}
       />
-      <span className="shrink-0 text-xs text-on-surface-variant">{daysLabel}</span>
-      <span className="shrink-0 rounded-sm bg-surface-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-on-surface dark:bg-surface-800">
-        {nowLabel}
-      </span>
-      <span className="shrink-0 text-sm text-on-surface-variant" aria-hidden>
-        +
-      </span>
+      <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-on-surface">{nowLabel}</span>
       <InputNumber
         value={daysToNumber(futureDays)}
         onValueChange={(e) => onFutureDays(e.value == null ? "" : String(e.value))}
         min={0}
         useGrouping={false}
-        className="w-[5.5rem]"
+        className="min-w-0 flex-1"
         inputClassName="h-9 w-full"
         placeholder="…"
+        tooltip={futureTooltip}
+        tooltipOptions={{ position: "top" }}
       />
-      <span className="shrink-0 text-xs text-on-surface-variant">{daysLabel}</span>
     </div>
   );
 }
@@ -223,9 +233,11 @@ function PlanningDateField({
   onPastDays,
   onFutureDays,
   dateFormat,
-  modeOptions,
+  relativeHeader,
+  absoluteHeader,
   nowLabel,
-  daysLabel,
+  pastTooltip,
+  futureTooltip,
 }: {
   label: string;
   mode: WorkOrderPlanningDateMode;
@@ -239,37 +251,63 @@ function PlanningDateField({
   onPastDays: (v: string) => void;
   onFutureDays: (v: string) => void;
   dateFormat: string;
-  modeOptions: { label: string; value: WorkOrderPlanningDateMode }[];
+  relativeHeader: string;
+  absoluteHeader: string;
   nowLabel: string;
-  daysLabel: string;
+  pastTooltip: string;
+  futureTooltip: string;
 }) {
+  const tabHostRef = useRef<HTMLDivElement | null>(null);
+  const activeIndex = planningModeToTabIndex(mode);
+
+  const updateTabInk = useCallback(() => {
+    const host = tabHostRef.current;
+    if (!host) return;
+    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
+    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
+    if (!nav || !active) return;
+    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
+    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
+  }, []);
+
+  useLayoutEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      updateTabInk();
+      requestAnimationFrame(updateTabInk);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeIndex, updateTabInk]);
+
+  useLayoutEffect(() => {
+    window.addEventListener("resize", updateTabInk);
+    return () => window.removeEventListener("resize", updateTabInk);
+  }, [updateTabInk]);
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium text-on-surface-variant">{label}</span>
-        <SelectButton
-          value={mode}
-          options={modeOptions}
-          optionLabel="label"
-          optionValue="value"
-          onChange={(e) => {
-            if (e.value === "absolute" || e.value === "relative") onMode(e.value);
-          }}
-          allowEmpty={false}
-        />
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-on-surface-variant">{label}</span>
+      <div ref={tabHostRef} className="app-tabview-with-ink">
+        <TabView
+          className="app-sticky-tabs app-wo-search-planning-tabs"
+          activeIndex={activeIndex}
+          onTabChange={(e) => onMode(planningTabIndexToMode(e.index))}
+        >
+          <TabPanel header={relativeHeader}>
+            <RelativePlanningRange
+              pastDays={pastDays}
+              futureDays={futureDays}
+              onPastDays={onPastDays}
+              onFutureDays={onFutureDays}
+              nowLabel={nowLabel}
+              pastTooltip={pastTooltip}
+              futureTooltip={futureTooltip}
+            />
+          </TabPanel>
+          <TabPanel header={absoluteHeader}>
+            <RangeCalendar fromIso={fromIso} toIso={toIso} onFrom={onFrom} onTo={onTo} dateFormat={dateFormat} />
+          </TabPanel>
+        </TabView>
       </div>
-      {mode === "relative" ? (
-        <RelativePlanningRange
-          pastDays={pastDays}
-          futureDays={futureDays}
-          onPastDays={onPastDays}
-          onFutureDays={onFutureDays}
-          nowLabel={nowLabel}
-          daysLabel={daysLabel}
-        />
-      ) : (
-        <RangeCalendar fromIso={fromIso} toIso={toIso} onFrom={onFrom} onTo={onTo} dateFormat={dateFormat} />
-      )}
     </div>
   );
 }
@@ -326,14 +364,6 @@ export function WorkOrderSearchPanel({
   const statusOptions = useMemo(
     () => WORK_ORDER_STATUS_ORDER.map((code) => ({ label: statusLabel(code), value: code })),
     [statusLabel],
-  );
-
-  const planningModeOptions = useMemo(
-    () => [
-      { label: t("workOrders.searchPanel.modeRelative"), value: "relative" as const },
-      { label: t("workOrders.searchPanel.modeAbsolute"), value: "absolute" as const },
-    ],
-    [t],
   );
 
   const appliedForSave = appliedSearchForSave ?? emptyWorkOrderAdvancedSearch();
@@ -654,9 +684,11 @@ export function WorkOrderSearchPanel({
                   onPastDays={(v) => patch({ plannedStartPastDays: v })}
                   onFutureDays={(v) => patch({ plannedStartFutureDays: v })}
                   dateFormat={calendarDateFormat}
-                  modeOptions={planningModeOptions}
+                  relativeHeader={t("workOrders.searchPanel.modeRelative")}
+                  absoluteHeader={t("workOrders.searchPanel.modeAbsolute")}
                   nowLabel={t("workOrders.searchPanel.relativeNow")}
-                  daysLabel={t("workOrders.searchPanel.relativeDays")}
+                  pastTooltip={t("workOrders.searchPanel.relativePastTooltip")}
+                  futureTooltip={t("workOrders.searchPanel.relativeFutureTooltip")}
                 />
                 <PlanningDateField
                   label={t("workOrders.plannedEnd")}
@@ -685,9 +717,11 @@ export function WorkOrderSearchPanel({
                   onPastDays={(v) => patch({ plannedEndPastDays: v })}
                   onFutureDays={(v) => patch({ plannedEndFutureDays: v })}
                   dateFormat={calendarDateFormat}
-                  modeOptions={planningModeOptions}
+                  relativeHeader={t("workOrders.searchPanel.modeRelative")}
+                  absoluteHeader={t("workOrders.searchPanel.modeAbsolute")}
                   nowLabel={t("workOrders.searchPanel.relativeNow")}
-                  daysLabel={t("workOrders.searchPanel.relativeDays")}
+                  pastTooltip={t("workOrders.searchPanel.relativePastTooltip")}
+                  futureTooltip={t("workOrders.searchPanel.relativeFutureTooltip")}
                 />
               </div>
             </div>

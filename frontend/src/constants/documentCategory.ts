@@ -9,4 +9,4 @@ export {
   isAssetDocumentCategory as isDocumentCategory,
 } from "./assetDocumentCategory";
 
-export type ReferenceApp = "assets" | "workOrders";
+export type ReferenceApp = "assets" | "workOrders" | "spareParts";

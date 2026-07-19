@@ -1242,6 +1242,92 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   }
 });
 
+router.post("/:id/done", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
+        `
+        SELECT "id", "siteId"::text AS "siteId", "status"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      const current = wo.rows[0];
+      if (!current) return null;
+      if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
+      if (current.status !== "ended") {
+        throw new Error("cannot_done_from_status");
+      }
+
+      const userEmp = await client.query<{ employeeId: string | null }>(
+        `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+        [meta.userId],
+      );
+      const sessionEmployeeId = userEmp.rows[0]?.employeeId ?? null;
+
+      await client.query(
+        `
+        UPDATE "workOrder"
+        SET
+          "status" = 'done',
+          "doneBy" = COALESCE($2::uuid, "doneBy")
+        WHERE "id" = $1::uuid
+        `,
+        [id, sessionEmployeeId],
+      );
+      const { rows } = await client.query<WorkOrderRow>(
+        `
+        ${selectWorkOrdersSql}
+        WHERE w."id" = $1::uuid
+        LIMIT 1
+        `,
+        [id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+    void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+      console.error("[work-order-realtime] broadcast updated failed", err);
+    });
+    const actorLogin = await resolveActorLogin(meta.userId);
+    emitWorkOrderStatusAudit({
+      siteId: row.siteId,
+      workOrderId: row.id,
+      orderNumber: row.orderNumber,
+      status: "done",
+      actorLogin,
+    });
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (message === "cannot_done_from_status") {
+      res.status(409).json({ error: "cannot_done_from_status" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
 router.post("/:id/feedback", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {

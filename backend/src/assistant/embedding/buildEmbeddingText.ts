@@ -182,6 +182,15 @@ export type SparePartEmbeddingRow = {
     storageLocation: string;
     quantity: string;
   }>;
+  stockPolicies: Array<{
+    scopeType: string;
+    warehouseKey: string | null;
+    warehouseName: string | null;
+    storageLocation: string | null;
+    reorderLevel: string;
+    minStock: string;
+    orderQuantity: string;
+  }>;
   totalQuantity: string;
 };
 
@@ -193,6 +202,22 @@ export function buildSparePartText(row: SparePartEmbeddingRow): string {
             (line) =>
               `warehouse=${line.warehouseKey}/${line.warehouseName}; location=${line.storageLocation}; quantity=${line.quantity}`,
           )
+          .join("\n")
+      : null;
+  const stockPolicies =
+    row.stockPolicies.length > 0
+      ? row.stockPolicies
+          .map((policy) => {
+            const wh =
+              policy.warehouseKey || policy.warehouseName
+                ? `; warehouse=${policy.warehouseKey ?? ""}/${policy.warehouseName ?? ""}`
+                : "";
+            const loc =
+              policy.storageLocation !== null && policy.storageLocation !== undefined
+                ? `; location=${policy.storageLocation}`
+                : "";
+            return `scope=${policy.scopeType}${wh}${loc}; reorderLevel=${policy.reorderLevel}; minStock=${policy.minStock}; orderQuantity=${policy.orderQuantity}`;
+          })
           .join("\n")
       : null;
   return joinLines([
@@ -211,6 +236,7 @@ export function buildSparePartText(row: SparePartEmbeddingRow): string {
     line("alternativeDesignation", row.alternativeDesignation),
     line("totalQuantity", row.totalQuantity),
     stockLines ? `stockControlLines:\n${stockLines}` : "stockControlLines: none",
+    stockPolicies ? `stockPolicies:\n${stockPolicies}` : "stockPolicies: none",
   ]);
 }
 

@@ -115,44 +115,160 @@ async function countUsersVisibleToActor(
   return rows[0]?.c ?? 0;
 }
 
+export type WorkOrderSearchPresetAdvancedV1 = {
+  orderNumberFrom: string;
+  orderNumberTo: string;
+  plannedDurationFrom: string;
+  plannedDurationTo: string;
+  documentCountFrom: string;
+  documentCountTo: string;
+  assetDocumentCountFrom: string;
+  assetDocumentCountTo: string;
+  assignedEmployeeCountFrom: string;
+  assignedEmployeeCountTo: string;
+  name: string;
+  description: string;
+  createdBy: string[];
+  updatedBy: string[];
+  plannedStartFrom: string;
+  plannedStartTo: string;
+  plannedEndFrom: string;
+  plannedEndTo: string;
+  createdAtFrom: string;
+  createdAtTo: string;
+  updatedAtFrom: string;
+  updatedAtTo: string;
+  orderType: string[];
+  status: string[];
+  siteId: string[];
+  assetId: string[];
+  costCenterId: string[];
+  classificationId: string[];
+  classificationUnassigned: boolean;
+  workgroupId: string[];
+  responsibleEmployeeId: string[];
+  employeeId: string[];
+};
+
 export type WorkOrderSearchPresetPayloadV1 = {
   version: 1;
   quickSearch: string;
-  advanced: {
-    orderNumberFrom: string;
-    orderNumberTo: string;
-    plannedDurationFrom: string;
-    plannedDurationTo: string;
-    documentCountFrom: string;
-    documentCountTo: string;
-    assetDocumentCountFrom: string;
-    assetDocumentCountTo: string;
-    assignedEmployeeCountFrom: string;
-    assignedEmployeeCountTo: string;
-    name: string;
-    description: string;
-    createdBy: string[];
-    updatedBy: string[];
-    plannedStartFrom: string;
-    plannedStartTo: string;
-    plannedEndFrom: string;
-    plannedEndTo: string;
-    createdAtFrom: string;
-    createdAtTo: string;
-    updatedAtFrom: string;
-    updatedAtTo: string;
-    orderType: string[];
-    status: string[];
-    siteId: string[];
-    assetId: string[];
-    costCenterId: string[];
-    classificationId: string[];
-    classificationUnassigned: boolean;
-    workgroupId: string[];
-    responsibleEmployeeId: string[];
-    employeeId: string[];
-  };
+  advanced: WorkOrderSearchPresetAdvancedV1;
 };
+
+export function emptyWorkOrderSearchPresetPayload(): WorkOrderSearchPresetPayloadV1 {
+  return {
+    version: 1,
+    quickSearch: "",
+    advanced: {
+      orderNumberFrom: "",
+      orderNumberTo: "",
+      plannedDurationFrom: "",
+      plannedDurationTo: "",
+      documentCountFrom: "",
+      documentCountTo: "",
+      assetDocumentCountFrom: "",
+      assetDocumentCountTo: "",
+      assignedEmployeeCountFrom: "",
+      assignedEmployeeCountTo: "",
+      name: "",
+      description: "",
+      createdBy: [],
+      updatedBy: [],
+      plannedStartFrom: "",
+      plannedStartTo: "",
+      plannedEndFrom: "",
+      plannedEndTo: "",
+      createdAtFrom: "",
+      createdAtTo: "",
+      updatedAtFrom: "",
+      updatedAtTo: "",
+      orderType: [],
+      status: [],
+      siteId: [],
+      assetId: [],
+      costCenterId: [],
+      classificationId: [],
+      classificationUnassigned: false,
+      workgroupId: [],
+      responsibleEmployeeId: [],
+      employeeId: [],
+    },
+  };
+}
+
+/** Merge sparse advanced filters onto empty defaults, then validate. */
+export function buildPresetPayloadFromPartial(input: {
+  quickSearch?: unknown;
+  advanced?: unknown;
+}): WorkOrderSearchPresetPayloadV1 | null {
+  const base = emptyWorkOrderSearchPresetPayload();
+  const quickSearch =
+    typeof input.quickSearch === "string" ? input.quickSearch : base.quickSearch;
+  let advanced: Record<string, unknown> = { ...base.advanced };
+  if (input.advanced !== undefined && input.advanced !== null) {
+    if (typeof input.advanced !== "object" || Array.isArray(input.advanced)) return null;
+    const partial = input.advanced as Record<string, unknown>;
+    for (const k of Object.keys(partial)) {
+      if (!ADVANCED_KEYS.has(k)) return null;
+      advanced[k] = partial[k];
+    }
+  }
+  return parsePresetPayload({ version: 1, quickSearch, advanced });
+}
+
+export type CreatePresetResult =
+  | { ok: true; id: string; name: string; payload: WorkOrderSearchPresetPayloadV1 }
+  | { ok: false; error: "invalid_name" | "invalid_payload" | "duplicate_name" | "internal_error"; message?: string };
+
+export async function createPresetForUser(
+  userId: string,
+  nameRaw: string,
+  payload: WorkOrderSearchPresetPayloadV1,
+): Promise<CreatePresetResult> {
+  const name = nameRaw.trim();
+  if (!name || name.length > 200) {
+    return { ok: false, error: "invalid_name" };
+  }
+  try {
+    const { rows } = await pool.query<{ id: string; name: string }>(
+      `
+      INSERT INTO "workOrderSearchPreset" ("name", "createdBy", "payload")
+      VALUES ($1, $2::uuid, $3::jsonb)
+      RETURNING "id", "name"
+      `,
+      [name, userId, JSON.stringify(payload)],
+    );
+    const row = rows[0];
+    if (!row) {
+      return { ok: false, error: "internal_error" };
+    }
+    return { ok: true, id: row.id, name: row.name, payload };
+  } catch (err) {
+    const e = err as { code?: string; detail?: string; message?: string };
+    if (e.code === "23505") {
+      return { ok: false, error: "duplicate_name", message: e.detail ?? e.message };
+    }
+    console.error(err);
+    return { ok: false, error: "internal_error", message: e.message };
+  }
+}
+
+export async function listPresetsForUser(
+  userId: string,
+): Promise<{ id: string; name: string; isOwner: boolean }[]> {
+  const { rows } = await pool.query<{ id: string; name: string; isOwner: boolean }>(
+    `
+    SELECT p."id", p."name", (p."createdBy" = $1::uuid) AS "isOwner"
+    FROM "workOrderSearchPreset" p
+    LEFT JOIN "workOrderSearchPresetShare" s ON s."presetId" = p."id" AND s."userId" = $1::uuid
+    WHERE p."createdBy" = $1::uuid OR s."userId" IS NOT NULL
+    ORDER BY p."name" ASC
+    `,
+    [userId],
+  );
+  return rows;
+}
 
 const ADVANCED_KEYS = new Set([
   "orderNumberFrom",
@@ -189,7 +305,7 @@ const ADVANCED_KEYS = new Set([
   "employeeId",
 ]);
 
-function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV1 | null {
+export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV1 | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
   if (o.version !== 1) return null;
@@ -284,7 +400,6 @@ function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV1 | nul
   };
 }
 
-type PresetListRow = { id: string; name: string; isOwner: boolean };
 type PresetDetailRow = { id: string; name: string; isOwner: boolean; payload: WorkOrderSearchPresetPayloadV1 };
 
 const PRESET_CONTEXT_WORK_ORDERS = "work_orders";
@@ -330,16 +445,7 @@ router.get("/", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { rows } = await pool.query<PresetListRow>(
-      `
-      SELECT p."id", p."name", (p."createdBy" = $1::uuid) AS "isOwner"
-      FROM "workOrderSearchPreset" p
-      LEFT JOIN "workOrderSearchPresetShare" s ON s."presetId" = p."id" AND s."userId" = $1::uuid
-      WHERE p."createdBy" = $1::uuid OR s."userId" IS NOT NULL
-      ORDER BY p."name" ASC
-      `,
-      [userId],
-    );
+    const rows = await listPresetsForUser(userId);
     res.json(rows);
   } catch (err) {
     sendPgError(res, err);
@@ -558,33 +664,25 @@ router.post("/", async (req: Request, res: Response) => {
   }
   const body = req.body as Record<string, unknown> | null | undefined;
   const nameRaw = typeof body?.name === "string" ? body.name.trim() : "";
-  if (!nameRaw || nameRaw.length > 200) {
-    res.status(400).json({ error: "invalid_name" });
-    return;
-  }
   const payload = parsePresetPayload(body?.payload);
   if (!payload) {
     res.status(400).json({ error: "invalid_payload" });
     return;
   }
-  try {
-    const { rows } = await pool.query<{ id: string; name: string }>(
-      `
-      INSERT INTO "workOrderSearchPreset" ("name", "createdBy", "payload")
-      VALUES ($1, $2::uuid, $3::jsonb)
-      RETURNING "id", "name"
-      `,
-      [nameRaw, userId, JSON.stringify(payload)],
-    );
-    const row = rows[0];
-    if (!row) {
-      res.status(500).json({ error: "internal_error" });
+  const result = await createPresetForUser(userId, nameRaw, payload);
+  if (!result.ok) {
+    if (result.error === "invalid_name") {
+      res.status(400).json({ error: "invalid_name" });
       return;
     }
-    res.status(201).json({ id: row.id, name: row.name, isOwner: true, payload });
-  } catch (err) {
-    sendPgError(res, err);
+    if (result.error === "duplicate_name") {
+      res.status(409).json({ error: "duplicate_key", message: result.message });
+      return;
+    }
+    res.status(500).json({ error: "internal_error" });
+    return;
   }
+  res.status(201).json({ id: result.id, name: result.name, isOwner: true, payload: result.payload });
 });
 
 router.patch("/:id", async (req: Request, res: Response) => {

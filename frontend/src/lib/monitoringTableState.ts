@@ -1,6 +1,23 @@
-import { MONITORING_WORK_ORDERS_COLUMN_IDS } from "./tableLayouts/tableLayoutPayload";
+/** Column ids used by the Monitoring work-orders DataTable (for corrupt-state checks). */
+const MONITORING_WORK_ORDERS_COLUMN_IDS = [
+  "orderNumber",
+  "originalWoOrderNumber",
+  "maintenancePlanKey",
+  "name",
+  "status",
+  "assetName",
+  "costCenterName",
+  "classificationName",
+  "workgroupKey",
+  "documentCount",
+  "orderType",
+  "plannedStart",
+  "plannedEnd",
+  "plannedDuration",
+  "startStop",
+] as const;
 
-/** PrimeReact DataTable stateStorage key for Monitoring (stateful default / personal). */
+/** PrimeReact DataTable stateStorage key for Monitoring (personal browser state). */
 export const MONITORING_TABLE_STATE_STORAGE_KEY = "athene-monitoring-table-v3";
 
 const LEGACY_MONITORING_TABLE_STATE_KEYS = [

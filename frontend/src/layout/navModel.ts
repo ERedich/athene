@@ -14,7 +14,6 @@ import {
   LayoutGrid,
   MapPin,
   MessageSquare,
-  Columns3,
   FolderTree,
   Gauge,
   Monitor,
@@ -27,10 +26,10 @@ import {
   Table,
   Tags,
   Truck,
-  type LucideIcon,
-  Users,
   Warehouse,
   Wrench,
+  type LucideIcon,
+  Users,
 } from "lucide-react";
 
 export type NavRouteItem = {
@@ -89,11 +88,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: "/users", Icon: Users, labelKey: "users.navUsers" },
       { to: "/sites", Icon: MapPin, labelKey: "sites.navSites" },
-      {
-        to: "/tabellen-layouts",
-        Icon: Columns3,
-        labelKey: "tableLayouts.navTableLayouts",
-      },
       {
         to: "/kpi-builder",
         Icon: Gauge,
@@ -222,6 +216,11 @@ export const navGroups: NavGroup[] = [
         to: "/warehouses",
         Icon: Warehouse,
         labelKey: "warehouses.navWarehouses",
+      },
+      {
+        to: "/storage-locations",
+        Icon: Package,
+        labelKey: "storageLocations.navStorageLocations",
       },
       {
         to: "/spare-parts",

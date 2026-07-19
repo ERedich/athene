@@ -1,3 +1,13 @@
+/** Document counts for spare-part list queries (join on sparePart id). */
+export const sparePartDocumentCountSubquery = `
+  LEFT JOIN (
+    SELECT dl."entityId" AS "sparePartId", COUNT(*)::int AS "documentCount"
+    FROM "documentLink" dl
+    WHERE dl."entityType" = 'sparePart'
+    GROUP BY dl."entityId"
+  ) doc_counts ON doc_counts."sparePartId" = sp."id"
+`;
+
 /** Document counts for asset list queries (join on asset id). */
 export const assetDocumentCountSubquery = `
   LEFT JOIN (

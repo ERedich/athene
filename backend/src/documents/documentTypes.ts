@@ -6,12 +6,12 @@ export type DocumentCategory =
   | "nameplates"
   | "certificates";
 
-export type ReferenceApp = "assets" | "workOrders";
+export type ReferenceApp = "assets" | "workOrders" | "spareParts";
 
-export type DocumentEntityType = "asset" | "workOrder";
+export type DocumentEntityType = "asset" | "workOrder" | "sparePart";
 
 /** API field: maps entityType to legacy source label. */
-export type DocumentSource = "asset" | "workOrder";
+export type DocumentSource = "asset" | "workOrder" | "sparePart";
 
 export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "general",
@@ -22,9 +22,9 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "certificates",
 ];
 
-export const REFERENCE_APPS: ReferenceApp[] = ["assets", "workOrders"];
+export const REFERENCE_APPS: ReferenceApp[] = ["assets", "workOrders", "spareParts"];
 
-export const DOCUMENT_ENTITY_TYPES: DocumentEntityType[] = ["asset", "workOrder"];
+export const DOCUMENT_ENTITY_TYPES: DocumentEntityType[] = ["asset", "workOrder", "sparePart"];
 
 export function isDocumentCategory(value: unknown): value is DocumentCategory {
   return typeof value === "string" && (DOCUMENT_CATEGORIES as string[]).includes(value);

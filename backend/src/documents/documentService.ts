@@ -38,6 +38,21 @@ export type AssetDocumentListRow = {
   updatedBy: string;
 };
 
+export type SparePartDocumentListRow = {
+  id: string;
+  sparePartId: string;
+  fileName: string;
+  displayName: string;
+  category: DocumentCategory;
+  mimeType: string;
+  fileSize: number;
+  referenceApp: ReferenceApp;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
 export type WorkOrderDocumentListRow = {
   id: string;
   source: DocumentSource;
@@ -97,6 +112,30 @@ export async function listAssetDocuments(
     ORDER BY d."createdAt" DESC
     `,
     [assetId],
+  );
+  return rows;
+}
+
+export async function listSparePartDocuments(
+  userId: string,
+  sparePartId: string,
+): Promise<SparePartDocumentListRow[] | null> {
+  const accessible = await assertEntityAccessible(userId, "sparePart", sparePartId);
+  if (!accessible) return null;
+  const { rows } = await pool.query<SparePartDocumentListRow>(
+    `
+    SELECT
+      ${documentMetadataSelect},
+      dl."entityId" AS "sparePartId"
+    FROM "document" d
+    JOIN "documentLink" dl ON dl."documentId" = d."id"
+      AND dl."entityType" = 'sparePart'
+      AND dl."entityId" = $1::uuid
+    LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
+    LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
+    ORDER BY d."createdAt" DESC
+    `,
+    [sparePartId],
   );
   return rows;
 }
@@ -177,7 +216,7 @@ function scheduleDocumentEmbeddingIngest(
 export async function createDocument(
   meta: AuditSessionMeta,
   input: CreateDocumentInput,
-): Promise<AssetDocumentListRow | WorkOrderDocumentListRow | null> {
+): Promise<AssetDocumentListRow | SparePartDocumentListRow | WorkOrderDocumentListRow | null> {
   const result = await withAuditContext(meta, async (client) => {
     const accessible = await assertEntityAccessible(
       meta.userId,
@@ -222,6 +261,23 @@ export async function createDocument(
         SELECT
           ${documentMetadataSelect},
           dl."entityId" AS "assetId"
+        FROM "document" d
+        JOIN "documentLink" dl ON dl."documentId" = d."id"
+        LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
+        WHERE d."id" = $1::uuid
+        `,
+        [documentId],
+      );
+      return rows[0] ?? null;
+    }
+
+    if (input.entityType === "sparePart") {
+      const { rows } = await client.query<SparePartDocumentListRow>(
+        `
+        SELECT
+          ${documentMetadataSelect},
+          dl."entityId" AS "sparePartId"
         FROM "document" d
         JOIN "documentLink" dl ON dl."documentId" = d."id"
         LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
@@ -288,6 +344,27 @@ export async function getDocumentContentForAsset(
   return rows[0] ?? null;
 }
 
+export async function getDocumentContentForSparePart(
+  userId: string,
+  sparePartId: string,
+  documentId: string,
+): Promise<DocumentContentRow | null> {
+  const accessible = await assertEntityAccessible(userId, "sparePart", sparePartId);
+  if (!accessible) return null;
+  const { rows } = await pool.query<DocumentContentRow>(
+    `
+    SELECT d."fileName", d."displayName", d."mimeType", d."fileSize", d."content"
+    FROM "document" d
+    JOIN "documentLink" dl ON dl."documentId" = d."id"
+      AND dl."entityType" = 'sparePart'
+      AND dl."entityId" = $2::uuid
+    WHERE d."id" = $1::uuid
+    `,
+    [documentId, sparePartId],
+  );
+  return rows[0] ?? null;
+}
+
 export async function getDocumentContentForWorkOrder(
   userId: string,
   workOrderId: string,
@@ -350,7 +427,7 @@ export async function patchDocumentForEntity(
   entityId: string,
   documentId: string,
   patch: { displayName?: string; category?: DocumentCategory },
-): Promise<AssetDocumentListRow | WorkOrderDocumentListRow | null> {
+): Promise<AssetDocumentListRow | SparePartDocumentListRow | WorkOrderDocumentListRow | null> {
   const sets: string[] = [];
   const params: unknown[] = [];
   let i = 1;
@@ -371,7 +448,12 @@ export async function patchDocumentForEntity(
   params.push(documentId, entityType, entityId, meta.userId);
 
   const result = await withAuditContext(meta, async (client) => {
-    const entTable = entityType === "asset" ? `"asset"` : `"workOrder"`;
+    const entTable =
+      entityType === "asset"
+        ? `"asset"`
+        : entityType === "sparePart"
+          ? `"sparePart"`
+          : `"workOrder"`;
     const upd = await client.query<{ id: string }>(
       `
       UPDATE "document" d
@@ -395,6 +477,23 @@ export async function patchDocumentForEntity(
         SELECT
           ${documentMetadataSelect},
           dl."entityId" AS "assetId"
+        FROM "document" d
+        JOIN "documentLink" dl ON dl."documentId" = d."id"
+        LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
+        LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
+        WHERE d."id" = $1::uuid
+        `,
+        [documentId],
+      );
+      return rows[0] ?? null;
+    }
+
+    if (entityType === "sparePart") {
+      const { rows } = await client.query<SparePartDocumentListRow>(
+        `
+        SELECT
+          ${documentMetadataSelect},
+          dl."entityId" AS "sparePartId"
         FROM "document" d
         JOIN "documentLink" dl ON dl."documentId" = d."id"
         LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"

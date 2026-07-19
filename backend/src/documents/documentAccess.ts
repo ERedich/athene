@@ -29,6 +29,18 @@ export async function assertEntityAccessible(
     );
     return (result.rowCount ?? 0) > 0;
   }
+  if (entityType === "sparePart") {
+    const result = await client.query<{ id: string }>(
+      `
+      SELECT "id"
+      FROM "sparePart"
+      WHERE "id" = $1::uuid
+        AND ${siteAccessSql('"siteId"', "$2")}
+      `,
+      [entityId, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
   const result = await client.query<{ id: string }>(
     `
     SELECT "id"

@@ -36,6 +36,12 @@ import {
 } from "./workOrderScheduling.js";
 import { createWorkOrderRecord } from "./workOrderCreate.js";
 import { generateWorkOrderForPlan } from "./maintenancePlanGenerate.js";
+import {
+  buildPresetPayloadFromPartial,
+  createPresetForUser,
+  listPresetsForUser,
+} from "./workOrderSearchPresets.js";
+import { EMPLOYEE_PSEUDO_ME, WORKGROUP_PSEUDO_MY } from "./workOrderListQuery.js";
 
 type AssistantRole = "user" | "assistant" | "system" | "tool";
 type WorkOrderType = "maintenance" | "repair" | "breakdown";
@@ -175,6 +181,18 @@ type StockControlLineRow = {
   warehouseName: string;
   storageLocation: string;
   quantity: string;
+};
+
+type StockPolicyRow = {
+  id: string;
+  scopeType: "SITE" | "WAREHOUSE" | "STORAGE_LOCATION";
+  warehouseId: string | null;
+  warehouseKey: string | null;
+  warehouseName: string | null;
+  storageLocation: string | null;
+  reorderLevel: string;
+  minStock: string;
+  orderQuantity: string;
 };
 
 type SparePartRow = QueryResultRow & {
@@ -952,8 +970,14 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "When presenting structured lists, comparisons, counts, status summaries, or tabular data, use GitHub-flavored Markdown tables. Keep tables compact and include only columns that help answer the question.",
     "You can never delete records. If a user asks you to delete, remove, or erase records, answer with the fixed refusal and do not call tools.",
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
-    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, spare parts, classifications, app parameters, translations, table viewer, search configuration, or maintenance plans (Wartungspläne).",
+    "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, storage locations (Lagerplatz), spare parts, classifications, app parameters, translations, table viewer, or maintenance plans (Wartungspläne).",
+    "Exception: You may create work-order search configurations (Suchkonfiguration / Auftragskonfig) for the current user via createWorkOrderSearchPreset. You must not update, delete, or share search presets.",
     "You may create work orders only through createWorkOrder, createWorkOrderFromOrder, or generateMaintenancePlanWorkOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
+    "Program logic: Search presets — only set filter fields the user explicitly requests; leave every other advanced field empty/default. Never run a field-by-field questionnaire (no Negativkatalog).",
+    "Program logic: Search presets — if the user did not give a preset name, ask once how the Suchkonfiguration should be named, then call createWorkOrderSearchPreset. Do not invent a name unless the user asked you to choose one.",
+    "Program logic: Search presets — when the user says ich/mich/meine (or EN I/me/my) for an employee filter, ask whether they mean the pseudo-class __ME__ (UI label Ich/Me, resolves to whoever is logged in) or their concrete linked employee UUID from Known user context (employeeId). Only skip this question if they already clarified. Put __ME__ or the UUID in advanced.employeeId (not responsibleEmployeeId).",
+    "Program logic: Search presets — when the user says meine Fachgruppen / my workgroups, ask whether they mean __MY_WORKGROUPS__ or a named workgroup (resolve named ones with searchWorkgroupsForFilter). Put __MY_WORKGROUPS__ or UUIDs in advanced.workgroupId.",
+    "Program logic: Search presets — resolve named employees/assets/workgroups with searchEmployeesForFilter, searchAssetsForFilter, searchWorkgroupsForFilter before create. Use listWorkOrderSearchPresets to avoid duplicate names. After create, confirm the name and that the user can pick it in the Monitoring / Work orders preset dropdown; do not set defaults or claim the open view was filtered.",
     "For preventive maintenance due dates and plan details use listMaintenancePlans. To create the next maintenance work order from a plan use generateMaintenancePlanWorkOrder (not inventing UUIDs).",
     "createWorkOrder requires UUID values for assetId, costCenterId, workgroupId, and responsibleEmployeeIds (at least one leader UUID). Never pass business keys (assetKey, costCenterKey, employeeKey) or order numbers as IDs. getWorkOrderDetails returns both keys and UUIDs: use the *Id fields for createWorkOrder.",
     "After the user confirms they want the same data as a template order (possibly with a new name or dates), call the create tool immediately. Do not loop on re-confirming fields already taken from getWorkOrderDetails or createWorkOrderFromOrder.",
@@ -978,10 +1002,10 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "Program logic: To list document files for one order, use listDocuments with sourceKind workOrder and orderNumber (e.g. 100007 or 007) OR id (UUID). Never pass an order number as id.",
     "Program logic: getWorkOrderDetails, getWorkOrderStatusEvents, getWorkOrderTransactions, listDocuments, and readDocumentText accept orderNumber instead of id when the user cites an Auftragsnummer.",
     "Program logic: Vector snippet lines use the format [sourceKind:sourceId]. Do not invent or alter sourceKind or sourceId values.",
-    "Program logic: Spare parts (Ersatzteil / Material) are master-data records with optional stock lines in `stockControl` (Lagerdaten): each line has warehouseKey/warehouseName, storageLocation, and quantity. Use getSparePartDetails, searchSpareParts, listWarehouseStock, and searchStock for authoritative stock answers.",
-    "Program logic: Warehouses (Lager) belong to a site. listWarehouseStock lists all materials and quantities stored in one warehouse. searchStock finds stock rows across warehouses and materials.",
-    "Program logic: App parameter MT-ACSD (allowChangeStockdata) controls whether existing stock rows are editable in the spare-parts UI. When false (N), existing warehouse/storageLocation/quantity rows are read-only; new stock rows may still be added. Balance changes to existing rows happen only via transactions (RM/RT not fully implemented yet).",
-    "Program logic: You have read-only access to spare parts and warehouses. Never create, update, or delete materials, warehouses, or stock lines.",
+    "Program logic: Spare parts (Ersatzteil / Material) are master-data records with optional stock lines in `stockControl` (Lagerdaten: warehouse, storageLocation master key via storageLocationId, quantity) and optional stock planning rules in `sparePartStockPolicy` (Meldebestand/Mindestbestand/Bestellmenge) scoped as SITE (Buchungskreis), WAREHOUSE (Lager), or STORAGE_LOCATION (Lagerplatz master under a warehouse). Lagerplatz is master data (`storageLocation` under warehouse), not free text. When scopes overlap, the most specific rule wins: STORAGE_LOCATION > WAREHOUSE > SITE. Use getSparePartDetails, searchSpareParts, listWarehouseStock, and searchStock for authoritative stock answers.",
+    "Program logic: Warehouses (Lager) belong to a site. Storage locations (Lagerplatz) belong to a warehouse. listWarehouseStock lists all materials and quantities stored in one warehouse. searchStock finds stock rows across warehouses and materials.",
+    "Program logic: App parameter MT-ACSD (allowChangeStockdata) controls whether existing stock rows are editable in the spare-parts UI. When false (N), existing warehouse/storageLocation/quantity rows are read-only; stock planning policies remain editable. New stock rows may still be added. Balance changes to existing rows happen only via transactions (RM/RT not fully implemented yet).",
+    "Program logic: You have read-only access to spare parts, warehouses, and storage locations. Never create, update, or delete materials, warehouses, storage locations, or stock lines.",
     "Program logic: Calendar / planning — NEVER invent dates. Whole calendar week / range moves (e.g. KW 20 → KW 30): shiftWorkOrdersInPlanningWindow, show ALL assignment rows (never a partial subset), then rescheduleWorkOrdersBatch with shiftPlan. planSequentialWorkOrderSlots is only for packing a short explicit list on ONE asset into free slots — NOT for KW moves.",
     "Program logic: Same-asset overlap is never a hard failure. If shiftWorkOrdersInPlanningWindow reports ordersWithAssetConflicts > 0, explain overlaps and ask the user; on yes call rescheduleWorkOrdersBatch with the same shiftPlan AND allowAssetOverlap: true. Never claim orders were skipped because of overlaps or lack of slots.",
     "Program logic: Never claim all orders were moved unless rescheduleWorkOrdersBatch returned ok:true with updatedCount equal to orderCount. shiftWorkOrdersInPlanningWindow is preview only — it does not save. The UI shows an apply button for whole-week shifts when the batch tool was not called.",
@@ -2206,10 +2230,13 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
       sparePart,
       allowChangeStockdata,
       semanticNotes: [
-        "The sparePart object is the current selected row's authoritative structured data including stockControlLines (Lagerdaten).",
+        "The sparePart object is the current selected row's authoritative structured data including stockControlLines (Lagerdaten) and stockPolicies (Bestandsplanung).",
         "totalQuantity is the sum of quantity across all stockControlLines.",
-        "allowChangeStockdata reflects app parameter MT-ACSD: when false, existing stock rows are read-only in the UI.",
+        "stockPolicies hold reorderLevel (Meldebestand), minStock (Mindestbestand), and orderQuantity (Bestellmenge) at SITE, WAREHOUSE, or STORAGE_LOCATION scope; most specific wins.",
+        "allowChangeStockdata reflects app parameter MT-ACSD: when false, existing warehouse/storageLocation/quantity are read-only; stock policies remain editable.",
+        "storageLocation on stock lines and STORAGE_LOCATION policies is the Lagerplatz master-data key (storageLocation.key), not free text.",
         "Use stockControlLines to answer where this material is stored and how much is on hand per warehouse and storage location.",
+        "Use stockPolicies to answer Meldebestand, Mindestbestand, and Bestellmenge questions.",
       ],
     };
   }
@@ -2229,7 +2256,7 @@ async function loadUiContextFacts(userId: string, context: UiContext | null): Pr
       distinctSparePartCount,
       semanticNotes: [
         "The warehouse object is the current selected row's authoritative structured data.",
-        "stockLines lists all materials stored in this warehouse with storageLocation and quantity.",
+        "stockLines lists all materials stored in this warehouse with storageLocation (Lagerplatz master key) and quantity.",
         "Use distinctSparePartCount and totalQuantity for summary questions about this warehouse.",
       ],
     };
@@ -2455,14 +2482,51 @@ async function fetchStockControlLinesForSparePart(
       sc."warehouseId",
       wh."key" AS "warehouseKey",
       wh."name" AS "warehouseName",
-      sc."storageLocation",
+      sl."key" AS "storageLocation",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
     WHERE sc."sparePartId" = $1::uuid
       AND ${siteAccessSql('sp."siteId"', "$2")}
-    ORDER BY wh."key" ASC, sc."storageLocation" ASC
+    ORDER BY wh."key" ASC, sl."key" ASC
+    `,
+    [sparePartId, userId],
+  );
+  return rows;
+}
+
+async function fetchStockPoliciesForSparePart(
+  userId: string,
+  sparePartId: string,
+): Promise<StockPolicyRow[]> {
+  const { rows } = await pool.query<StockPolicyRow>(
+    `
+    SELECT
+      p."id",
+      p."scopeType",
+      p."warehouseId",
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      sl."key" AS "storageLocation",
+      p."reorderLevel"::text AS "reorderLevel",
+      p."minStock"::text AS "minStock",
+      p."orderQuantity"::text AS "orderQuantity"
+    FROM "sparePartStockPolicy" p
+    JOIN "sparePart" sp ON sp."id" = p."sparePartId"
+    LEFT JOIN "warehouse" wh ON wh."id" = p."warehouseId"
+    LEFT JOIN "storageLocation" sl ON sl."id" = p."storageLocationId"
+    WHERE p."sparePartId" = $1::uuid
+      AND ${siteAccessSql('sp."siteId"', "$2")}
+    ORDER BY
+      CASE p."scopeType"
+        WHEN 'SITE' THEN 1
+        WHEN 'WAREHOUSE' THEN 2
+        ELSE 3
+      END,
+      wh."key" ASC NULLS LAST,
+      sl."key" ASC NULLS LAST
     `,
     [sparePartId, userId],
   );
@@ -2483,8 +2547,9 @@ async function getSparePartDetails(userId: string, id: string): Promise<unknown>
   const sparePart = rows[0];
   if (!sparePart) return { error: "not_found" };
   const stockControlLines = await fetchStockControlLinesForSparePart(userId, id);
+  const stockPolicies = await fetchStockPoliciesForSparePart(userId, id);
   const totalQuantity = stockControlLines.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-  return { ...sparePart, stockControlLines, totalQuantity };
+  return { ...sparePart, stockControlLines, stockPolicies, totalQuantity };
 }
 
 async function getWarehouseDetails(userId: string, id: string): Promise<unknown> {
@@ -2519,7 +2584,7 @@ async function listWarehouseStock(
         lower(sp."key") LIKE '%' || lower($3::text) || '%'
         OR lower(sp."name") LIKE '%' || lower($3::text) || '%'
         OR lower(COALESCE(sp."articleNumber", '')) LIKE '%' || lower($3::text) || '%'
-        OR lower(sc."storageLocation") LIKE '%' || lower($3::text) || '%'
+        OR lower(sl."key") LIKE '%' || lower($3::text) || '%'
       )
     `;
   }
@@ -2530,14 +2595,15 @@ async function listWarehouseStock(
       sp."key" AS "sparePartKey",
       sp."name" AS "sparePartName",
       sp."articleNumber",
-      sc."storageLocation",
+      sl."key" AS "storageLocation",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     WHERE sc."warehouseId" = $1::uuid
       AND ${siteAccessSql('sp."siteId"', "$2")}
       ${filterSql}
-    ORDER BY sp."key" ASC, sc."storageLocation" ASC
+    ORDER BY sp."key" ASC, sl."key" ASC
     LIMIT 100
     `,
     params,
@@ -2625,11 +2691,12 @@ async function searchStock(userId: string, query: string): Promise<unknown> {
       wh."name" AS "warehouseName",
       s."key" AS "siteKey",
       s."name" AS "siteName",
-      sc."storageLocation",
+      sl."key" AS "storageLocation",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     JOIN "site" s ON s."id" = sp."siteId"
     WHERE ${siteAccessSql('sp."siteId"', "$1")}
       AND (
@@ -2638,9 +2705,9 @@ async function searchStock(userId: string, query: string): Promise<unknown> {
         OR lower(COALESCE(sp."articleNumber", '')) LIKE '%' || lower($2::text) || '%'
         OR lower(wh."key") LIKE '%' || lower($2::text) || '%'
         OR lower(wh."name") LIKE '%' || lower($2::text) || '%'
-        OR lower(sc."storageLocation") LIKE '%' || lower($2::text) || '%'
+        OR lower(sl."key") LIKE '%' || lower($2::text) || '%'
       )
-    ORDER BY wh."key" ASC, sp."key" ASC, sc."storageLocation" ASC
+    ORDER BY wh."key" ASC, sp."key" ASC, sl."key" ASC
     LIMIT 50
     `,
     [userId, term],
@@ -3012,6 +3079,161 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
   return row ?? { error: "no_row" };
 }
 
+async function listWorkOrderSearchPresetsTool(userId: string): Promise<unknown> {
+  const presets = await listPresetsForUser(userId);
+  return { presets, count: presets.length };
+}
+
+async function searchEmployeesForFilter(userId: string, query: string): Promise<unknown> {
+  const term = readString(query, 200);
+  if (!term) throw new Error("invalid_query");
+  const { rows } = await pool.query<{
+    id: string;
+    key: string;
+    name: string;
+    siteKey: string;
+    siteName: string;
+    isActive: boolean;
+  }>(
+    `
+    SELECT
+      e."id",
+      e."key",
+      e."name",
+      s."key" AS "siteKey",
+      s."name" AS "siteName",
+      e."isActive"
+    FROM "employee" e
+    JOIN "site" s ON s."id" = e."siteId"
+    WHERE ${siteAccessSql('e."siteId"', "$1")}
+      AND (
+        lower(e."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(e."name") LIKE '%' || lower($2::text) || '%'
+      )
+    ORDER BY e."key" ASC
+    LIMIT 20
+    `,
+    [userId, term],
+  );
+  return {
+    employees: rows,
+    pseudoMe: EMPLOYEE_PSEUDO_ME,
+    hint: `For the relative “Ich/Me” filter use employeeId value ${EMPLOYEE_PSEUDO_ME}, not a UUID.`,
+  };
+}
+
+async function searchWorkgroupsForFilter(userId: string, query: string): Promise<unknown> {
+  const term = readString(query, 200);
+  if (!term) throw new Error("invalid_query");
+  const { rows } = await pool.query<{
+    id: string;
+    key: string;
+    name: string;
+    siteKey: string;
+    siteName: string;
+    isActive: boolean;
+  }>(
+    `
+    SELECT
+      w."id",
+      w."key",
+      w."name",
+      s."key" AS "siteKey",
+      s."name" AS "siteName",
+      w."isActive"
+    FROM "workgroup" w
+    JOIN "site" s ON s."id" = w."siteId"
+    WHERE ${siteAccessSql('w."siteId"', "$1")}
+      AND (
+        lower(w."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(w."name") LIKE '%' || lower($2::text) || '%'
+      )
+    ORDER BY w."key" ASC
+    LIMIT 20
+    `,
+    [userId, term],
+  );
+  return {
+    workgroups: rows,
+    pseudoMyWorkgroups: WORKGROUP_PSEUDO_MY,
+    hint: `For the relative “Meine Fachgruppen/My workgroups” filter use workgroupId value ${WORKGROUP_PSEUDO_MY}.`,
+  };
+}
+
+async function searchAssetsForFilter(userId: string, query: string): Promise<unknown> {
+  const term = readString(query, 200);
+  if (!term) throw new Error("invalid_query");
+  const { rows } = await pool.query<{
+    id: string;
+    key: string;
+    name: string;
+    siteKey: string;
+    siteName: string;
+    type: string;
+  }>(
+    `
+    SELECT
+      a."id",
+      a."key",
+      a."name",
+      s."key" AS "siteKey",
+      s."name" AS "siteName",
+      a."type"
+    FROM "asset" a
+    JOIN "site" s ON s."id" = a."siteId"
+    WHERE ${siteAccessSql('a."siteId"', "$1")}
+      AND (
+        lower(a."key") LIKE '%' || lower($2::text) || '%'
+        OR lower(a."name") LIKE '%' || lower($2::text) || '%'
+      )
+    ORDER BY a."key" ASC
+    LIMIT 20
+    `,
+    [userId, term],
+  );
+  return { assets: rows };
+}
+
+async function createWorkOrderSearchPresetTool(
+  userId: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  if (!name) {
+    return {
+      error: "missing_name",
+      hint: "Ask the user for the Suchkonfiguration name, then retry.",
+    };
+  }
+  const payload = buildPresetPayloadFromPartial({
+    quickSearch: args.quickSearch,
+    advanced: args.advanced,
+  });
+  if (!payload) {
+    return {
+      error: "invalid_payload",
+      hint: "Pass only known advanced keys with valid UUIDs/enums; employeeId may include __ME__; workgroupId may include __MY_WORKGROUPS__.",
+    };
+  }
+  const result = await createPresetForUser(userId, name, payload);
+  if (!result.ok) {
+    if (result.error === "duplicate_name") {
+      return {
+        error: "duplicate_name",
+        hint: "A preset with this name already exists for the user. Ask for a different name; do not overwrite.",
+      };
+    }
+    return { error: result.error, message: result.message };
+  }
+  return {
+    ok: true,
+    id: result.id,
+    name: result.name,
+    payload: result.payload,
+    hint: "Preset saved. Tell the user they can select it in the Monitoring / Work orders search-preset dropdown. Do not claim the open view was filtered.",
+  };
+}
+
 async function listMaintenancePlansTool(userId: string, args: Record<string, unknown>): Promise<unknown> {
   const dueOnly = Boolean(args.dueOnly);
   const status =
@@ -3246,7 +3468,7 @@ const tools = [
     function: {
       name: "getSparePartDetails",
       description:
-        "Get one accessible spare part / material with all visible fields and stockControlLines (Lagerdaten). Provide id (UUID) OR key (Schlüssel), not both.",
+        "Get one accessible spare part / material with all visible fields, stockControlLines (Lagerdaten), and stockPolicies (Bestandsplanung). Provide id (UUID) OR key (Schlüssel), not both.",
       parameters: {
         type: "object",
         properties: {
@@ -3639,6 +3861,147 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "listWorkOrderSearchPresets",
+      description:
+        "List work-order search configurations (Suchkonfigurationen) accessible to the current user (owned or shared). Use before creating to check existing names.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "searchEmployeesForFilter",
+      description:
+        "Search accessible employees by key or name for search-preset filters. Returns UUIDs for advanced.employeeId or responsibleEmployeeId. For the relative Ich/Me filter use the sentinel __ME__ in employeeId instead of a UUID.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "searchWorkgroupsForFilter",
+      description:
+        "Search accessible workgroups (Fachgruppen) by key or name for search-preset filters. Returns UUIDs for advanced.workgroupId. For Meine Fachgruppen use sentinel __MY_WORKGROUPS__.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "searchAssetsForFilter",
+      description:
+        "Search accessible assets (Anlagen) by key or name for search-preset filters. Returns UUIDs for advanced.assetId.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "createWorkOrderSearchPreset",
+      description:
+        "Create a saved work-order search configuration for the current user. Only include advanced fields the user explicitly requested; omit all others (server fills empty defaults). Require a name from the user. employeeId may include __ME__; workgroupId may include __MY_WORKGROUPS__; status uses API values open/assigned/started/paused/continued/ended/done/cancelled; orderType uses maintenance/repair/breakdown. Does not apply the filter to the open UI.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Display name of the Suchkonfiguration (required)." },
+          quickSearch: {
+            type: ["string", "null"],
+            description: "Optional quick-search text; omit or empty if unused.",
+          },
+          advanced: {
+            type: ["object", "null"],
+            description:
+              "Sparse advanced filters. Only set keys the user asked for (e.g. status, employeeId, assetId, workgroupId, orderType, siteId, costCenterId, responsibleEmployeeId, date ranges as ISO strings).",
+            properties: {
+              orderNumberFrom: { type: "string" },
+              orderNumberTo: { type: "string" },
+              plannedDurationFrom: { type: "string" },
+              plannedDurationTo: { type: "string" },
+              documentCountFrom: { type: "string" },
+              documentCountTo: { type: "string" },
+              assetDocumentCountFrom: { type: "string" },
+              assetDocumentCountTo: { type: "string" },
+              assignedEmployeeCountFrom: { type: "string" },
+              assignedEmployeeCountTo: { type: "string" },
+              name: { type: "string" },
+              description: { type: "string" },
+              createdBy: { type: "array", items: { type: "string" } },
+              updatedBy: { type: "array", items: { type: "string" } },
+              plannedStartFrom: { type: "string" },
+              plannedStartTo: { type: "string" },
+              plannedEndFrom: { type: "string" },
+              plannedEndTo: { type: "string" },
+              createdAtFrom: { type: "string" },
+              createdAtTo: { type: "string" },
+              updatedAtFrom: { type: "string" },
+              updatedAtTo: { type: "string" },
+              orderType: {
+                type: "array",
+                items: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
+              },
+              status: {
+                type: "array",
+                items: {
+                  type: "string",
+                  enum: [
+                    "open",
+                    "assigned",
+                    "started",
+                    "paused",
+                    "continued",
+                    "ended",
+                    "done",
+                    "cancelled",
+                  ],
+                },
+              },
+              siteId: { type: "array", items: { type: "string" } },
+              assetId: { type: "array", items: { type: "string" } },
+              costCenterId: { type: "array", items: { type: "string" } },
+              classificationId: { type: "array", items: { type: "string" } },
+              classificationUnassigned: { type: "boolean" },
+              workgroupId: {
+                type: "array",
+                items: { type: "string" },
+                description: "Workgroup UUIDs and/or __MY_WORKGROUPS__.",
+              },
+              responsibleEmployeeId: {
+                type: "array",
+                items: { type: "string" },
+                description: "Responsible employee UUIDs only (no __ME__).",
+              },
+              employeeId: {
+                type: "array",
+                items: { type: "string" },
+                description: "Employee UUIDs and/or __ME__ (assignment OR responsible).",
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ["name"],
+      },
+    },
+  },
 ] as const;
 
 async function resolveWorkOrderIdFromToolArgs(
@@ -3746,6 +4109,19 @@ async function runTool(userId: string, name: string, rawArgs: string): Promise<u
   if (name === "listMaintenancePlans") return listMaintenancePlansTool(userId, args);
   if (name === "generateMaintenancePlanWorkOrder") {
     return generateMaintenancePlanWorkOrderTool(userId, args);
+  }
+  if (name === "listWorkOrderSearchPresets") return listWorkOrderSearchPresetsTool(userId);
+  if (name === "searchEmployeesForFilter") {
+    return searchEmployeesForFilter(userId, String(args.query ?? ""));
+  }
+  if (name === "searchWorkgroupsForFilter") {
+    return searchWorkgroupsForFilter(userId, String(args.query ?? ""));
+  }
+  if (name === "searchAssetsForFilter") {
+    return searchAssetsForFilter(userId, String(args.query ?? ""));
+  }
+  if (name === "createWorkOrderSearchPreset") {
+    return createWorkOrderSearchPresetTool(userId, args);
   }
   return { error: "unknown_tool" };
 }

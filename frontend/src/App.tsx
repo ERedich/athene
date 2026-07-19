@@ -11,6 +11,7 @@ import { CostCentersPage } from "./pages/CostCentersPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { SparePartsPage } from "./pages/SparePartsPage";
 import { WarehousesPage } from "./pages/WarehousesPage";
+import { StorageLocationsPage } from "./pages/StorageLocationsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -26,7 +27,6 @@ import { SitesPage } from "./pages/SitesPage";
 import { TableViewerPage } from "./pages/TableViewerPage";
 import { TranslationsPage } from "./pages/TranslationsPage";
 import { SearchPresetsPage } from "./pages/SearchPresetsPage";
-import { TableLayoutsPage } from "./pages/TableLayoutsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
@@ -51,7 +51,6 @@ export default function App() {
           <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
-          <Route path="tabellen-layouts" element={<TableLayoutsPage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
@@ -60,6 +59,7 @@ export default function App() {
           <Route path="cost-centers" element={<CostCentersPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
+          <Route path="storage-locations" element={<StorageLocationsPage />} />
           <Route path="spare-parts" element={<SparePartsPage />} />
           <Route path="classifications" element={<ClassificationsPage />} />
           <Route path="workgroups" element={<WorkgroupsPage />} />

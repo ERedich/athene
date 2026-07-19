@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, MessageCircle, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Check, ExternalLink, File, Image as ImageIcon, MessageCircle, Pencil, Plus, Trash2, TriangleAlert, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Badge } from "primereact/badge";
@@ -27,6 +27,12 @@ import {
   APP_PARAM_KEY_ALLOW_SITE_CHANGE,
 } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
+import {
+  ASSET_DOCUMENT_CATEGORY_ORDER,
+  documentCategoryBadgeClass,
+  type AssetDocumentCategory,
+} from "../constants/assetDocumentCategory";
+import { documentTypeMimeIcon } from "../hooks/useWorkOrderEditDialogState";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { sparePartDialogTabs, type SparePartDialogTab } from "../lib/sparePartDialog";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
@@ -56,13 +62,36 @@ type WarehouseListRow = {
   siteId: string;
 };
 
+type StorageLocationListRow = {
+  id: string;
+  key: string;
+  warehouseId: string;
+  isActive: boolean;
+};
+
 type StockControlLineRow = {
   id: string;
   warehouseId: string;
   warehouseKey: string;
   warehouseName: string;
-  storageLocation: string;
+  storageLocationId: string;
+  storageLocationKey: string;
   quantity: string;
+};
+
+type StockPolicyScopeType = "SITE" | "WAREHOUSE" | "STORAGE_LOCATION";
+
+type StockPolicyRow = {
+  id: string;
+  scopeType: StockPolicyScopeType;
+  warehouseId: string | null;
+  warehouseKey: string | null;
+  warehouseName: string | null;
+  storageLocationId: string | null;
+  storageLocationKey: string | null;
+  reorderLevel: string;
+  minStock: string;
+  orderQuantity: string;
 };
 
 type SparePart = {
@@ -81,20 +110,57 @@ type SparePart = {
   manufacturer: string | null;
   articleNumber: string | null;
   alternativeDesignation: string | null;
+  hasPhoto: boolean;
+  documentCount: number;
+  totalQuantity?: string | number;
+  siteQuantity?: string | number;
   stockControlLines?: StockControlLineRow[];
+  stockPolicies?: StockPolicyRow[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
 };
 
+type SparePartDocument = {
+  id: string;
+  sparePartId: string;
+  fileName: string;
+  displayName: string;
+  category: AssetDocumentCategory;
+  mimeType: string;
+  fileSize: number;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+type DocumentUploadDraft = {
+  file: File;
+  displayName: string;
+  category: AssetDocumentCategory;
+};
+
+type PendingDocumentUpload = DocumentUploadDraft & { localId: string };
+
 type StockLineForm = {
   localId: string;
   /** Set when loaded from API — existing stock rows are read-only when MT-ACSD is N. */
   persistedId?: string;
   warehouseId: string;
-  storageLocation: string;
+  storageLocationId: string;
   quantity: number;
+};
+
+type StockPolicyForm = {
+  localId: string;
+  scopeType: StockPolicyScopeType;
+  warehouseId: string;
+  storageLocationId: string;
+  reorderLevel: number;
+  minStock: number;
+  orderQuantity: number;
 };
 
 type FormState = {
@@ -124,8 +190,18 @@ const emptyForm = (): FormState => ({
 const newStockLine = (): StockLineForm => ({
   localId: crypto.randomUUID(),
   warehouseId: "",
-  storageLocation: "",
+  storageLocationId: "",
   quantity: 0,
+});
+
+const newStockPolicy = (): StockPolicyForm => ({
+  localId: crypto.randomUUID(),
+  scopeType: "SITE",
+  warehouseId: "",
+  storageLocationId: "",
+  reorderLevel: 0,
+  minStock: 0,
+  orderQuantity: 0,
 });
 
 const actionNavItem =
@@ -143,13 +219,29 @@ function mapStockLinesFromApi(lines: StockControlLineRow[]): StockLineForm[] {
     localId: line.id || crypto.randomUUID(),
     persistedId: line.id,
     warehouseId: line.warehouseId,
-    storageLocation: line.storageLocation ?? "",
+    storageLocationId: line.storageLocationId,
     quantity: Number(line.quantity) || 0,
+  }));
+}
+
+function mapStockPoliciesFromApi(policies: StockPolicyRow[]): StockPolicyForm[] {
+  return policies.map((policy) => ({
+    localId: policy.id || crypto.randomUUID(),
+    scopeType: policy.scopeType,
+    warehouseId: policy.warehouseId ?? "",
+    storageLocationId: policy.storageLocationId ?? "",
+    reorderLevel: Number(policy.reorderLevel) || 0,
+    minStock: Number(policy.minStock) || 0,
+    orderQuantity: Number(policy.orderQuantity) || 0,
   }));
 }
 
 function isPersistedStockLine(line: StockLineForm): boolean {
   return Boolean(line.persistedId);
+}
+
+function newPendingLocalId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `p-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function SparePartsPage() {
@@ -161,22 +253,42 @@ export function SparePartsPage() {
     appParameterBooleans[APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA] !== false;
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const photoPreviewUrlRef = useRef<string | null>(null);
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
+  const documentsFileInputRef = useRef<HTMLInputElement>(null);
   const [spareParts, setSpareParts] = useState<SparePart[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [classifications, setClassifications] = useState<ClassificationListRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseListRow[]>([]);
+  const [storageLocations, setStorageLocations] = useState<StorageLocationListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSparePart, setSelectedSparePart] = useState<SparePart | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [stockLines, setStockLines] = useState<StockLineForm[]>([]);
+  const [stockPolicies, setStockPolicies] = useState<StockPolicyForm[]>([]);
   const [stockDetailLoading, setStockDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTabIndex, setActiveTabIndex] = useState<SparePartDialogTab>(
     sparePartDialogTabs.General,
   );
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [hasStoredPhoto, setHasStoredPhoto] = useState(false);
+  const [documents, setDocuments] = useState<SparePartDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsUploading, setDocumentsUploading] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<PendingDocumentUpload[]>([]);
+  const [uploadDrafts, setUploadDrafts] = useState<DocumentUploadDraft[]>([]);
+  const [uploadMetaVisible, setUploadMetaVisible] = useState(false);
+  const [documentsSearchTerm, setDocumentsSearchTerm] = useState("");
+  const [documentEdit, setDocumentEdit] = useState<SparePartDocument | null>(null);
+  const [documentEditDisplayName, setDocumentEditDisplayName] = useState("");
+  const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
+  const [documentEditSaving, setDocumentEditSaving] = useState(false);
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
@@ -205,13 +317,46 @@ export function SparePartsPage() {
     [form.siteId, warehouses],
   );
 
-  const stockTabCount = stockLines.length;
-  const hasPersistedStockLines = stockLines.some(isPersistedStockLine);
-  const showExistingStockLockedHint = Boolean(editingId) && !allowChangeStockdata && hasPersistedStockLines;
+  const totalQuantityAll = useMemo(
+    () => stockLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0),
+    [stockLines],
+  );
 
+  const siteQuantity = useMemo(() => {
+    if (!form.siteId) return 0;
+    const warehouseIdsForSite = new Set(
+      warehouses.filter((wh) => wh.siteId === form.siteId).map((wh) => wh.id),
+    );
+    return stockLines
+      .filter((line) => line.warehouseId && warehouseIdsForSite.has(line.warehouseId))
+      .reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+  }, [form.siteId, stockLines, warehouses]);
+
+  const stockTabCount = stockLines.length;
+  const policyTabCount = stockPolicies.length;
+  const documentsTabCount = documents.length + pendingFiles.length;
+  const documentCategoryOptions = useMemo(
+    () => ASSET_DOCUMENT_CATEGORY_ORDER.map((value) => ({
+      value,
+      label: t(`assets.documentCategories.${value}`),
+    })),
+    [t],
+  );
   const isStockLineLocked = useCallback(
     (line: StockLineForm) => !allowChangeStockdata && isPersistedStockLine(line),
     [allowChangeStockdata],
+  );
+
+  const scopeDropdownOptions = useMemo(
+    () => [
+      { label: t("spareParts.scopeSite"), value: "SITE" satisfies StockPolicyScopeType },
+      { label: t("spareParts.scopeWarehouse"), value: "WAREHOUSE" satisfies StockPolicyScopeType },
+      {
+        label: t("spareParts.scopeStorageLocation"),
+        value: "STORAGE_LOCATION" satisfies StockPolicyScopeType,
+      },
+    ],
+    [t],
   );
 
   const renderSiteDropdownOption = useCallback(
@@ -301,25 +446,42 @@ export function SparePartsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sparePartsRes, sitesRes, classificationsRes, warehousesRes] = await Promise.all([
-        apiFetch("/api/spare-parts"),
-        apiFetch("/api/sites"),
-        apiFetch("/api/classifications"),
-        apiFetch("/api/warehouses"),
-      ]);
-      if (!sparePartsRes.ok || !sitesRes.ok || !classificationsRes.ok || !warehousesRes.ok) {
+      const [sparePartsRes, sitesRes, classificationsRes, warehousesRes, storageLocRes] =
+        await Promise.all([
+          apiFetch("/api/spare-parts"),
+          apiFetch("/api/sites"),
+          apiFetch("/api/classifications"),
+          apiFetch("/api/warehouses"),
+          apiFetch("/api/storage-locations"),
+        ]);
+      if (
+        !sparePartsRes.ok ||
+        !sitesRes.ok ||
+        !classificationsRes.ok ||
+        !warehousesRes.ok ||
+        !storageLocRes.ok
+      ) {
         throw new Error("load");
       }
-      const [sparePartsData, sitesData, classificationsData, warehousesData] = (await Promise.all([
-        sparePartsRes.json(),
-        sitesRes.json(),
-        classificationsRes.json(),
-        warehousesRes.json(),
-      ])) as [SparePart[], SiteOption[], ClassificationListRow[], WarehouseListRow[]];
+      const [sparePartsData, sitesData, classificationsData, warehousesData, storageLocData] =
+        (await Promise.all([
+          sparePartsRes.json(),
+          sitesRes.json(),
+          classificationsRes.json(),
+          warehousesRes.json(),
+          storageLocRes.json(),
+        ])) as [
+          SparePart[],
+          SiteOption[],
+          ClassificationListRow[],
+          WarehouseListRow[],
+          StorageLocationListRow[],
+        ];
       setSpareParts(sparePartsData);
       setSites(sitesData);
       setClassifications(classificationsData);
       setWarehouses(warehousesData);
+      setStorageLocations(storageLocData);
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -343,6 +505,7 @@ export function SparePartsPage() {
         if (!res.ok) throw new Error("detail");
         const detail = (await res.json()) as SparePart;
         setStockLines(mapStockLinesFromApi(detail.stockControlLines ?? []));
+        setStockPolicies(mapStockPoliciesFromApi(detail.stockPolicies ?? []));
       } catch {
         toastRef.current?.show({
           severity: "error",
@@ -350,6 +513,7 @@ export function SparePartsPage() {
           life: 6000,
         });
         setStockLines([]);
+        setStockPolicies([]);
       } finally {
         setStockDetailLoading(false);
       }
@@ -357,19 +521,102 @@ export function SparePartsPage() {
     [t],
   );
 
+  const clearPhotoPreview = useCallback(() => {
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current);
+      photoPreviewUrlRef.current = null;
+    }
+    setPhotoPreviewUrl(null);
+  }, []);
+
+  const resetPhotoState = useCallback(() => {
+    clearPhotoPreview();
+    setPendingPhotoFile(null);
+    setPhotoUploading(false);
+    setHasStoredPhoto(false);
+    if (photoFileInputRef.current) photoFileInputRef.current.value = "";
+  }, [clearPhotoPreview]);
+
+  const resetDocumentsState = useCallback(() => {
+    setDocuments([]);
+    setPendingFiles([]);
+    setUploadDrafts([]);
+    setUploadMetaVisible(false);
+    setDocumentsSearchTerm("");
+    setDocumentEdit(null);
+    if (documentsFileInputRef.current) documentsFileInputRef.current.value = "";
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    resetPhotoState();
+    resetDocumentsState();
+    setDialogVisible(false);
+  }, [resetDocumentsState, resetPhotoState]);
+
+  const loadSparePartPhoto = useCallback(async (id: string) => {
+    clearPhotoPreview();
+    try {
+      const res = await apiFetch(`/api/spare-parts/${id}/photo`);
+      if (!res.ok) return;
+      const url = URL.createObjectURL(await res.blob());
+      photoPreviewUrlRef.current = url;
+      setPhotoPreviewUrl(url);
+      setHasStoredPhoto(true);
+    } catch {
+      /* preview is optional */
+    }
+  }, [clearPhotoPreview]);
+
+  const uploadSparePartPhoto = useCallback(async (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    return (await apiFetch(`/api/spare-parts/${id}/photo`, { method: "POST", body: fd })).ok;
+  }, []);
+
+  const removeSparePartPhoto = useCallback(async (id: string) => {
+    const res = await apiFetch(`/api/spare-parts/${id}/photo`, { method: "DELETE" });
+    return res.ok || res.status === 204;
+  }, []);
+
+  const loadDocuments = useCallback(async (id: string) => {
+    setDocumentsLoading(true);
+    try {
+      const res = await apiFetch(`/api/spare-parts/${id}/documents`);
+      if (!res.ok) throw new Error("load");
+      setDocuments((await res.json()) as SparePartDocument[]);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.documentsLoadError"), life: 6000 });
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [t]);
+
+  const uploadDocument = useCallback(async (id: string, document: PendingDocumentUpload) => {
+    const fd = new FormData();
+    fd.append("file", document.file, document.file.name);
+    fd.append("displayName", document.displayName);
+    fd.append("category", document.category);
+    return (await apiFetch(`/api/spare-parts/${id}/documents`, { method: "POST", body: fd })).ok;
+  }, []);
+
   const openCreate = useCallback(() => {
+    resetPhotoState();
+    resetDocumentsState();
     setEditingId(null);
     setForm({
       ...emptyForm(),
       ...(siteFieldLocked ? { siteId: user.workingSiteId } : {}),
     });
     setStockLines([]);
+    setStockPolicies([]);
     setActiveTabIndex(sparePartDialogTabs.General);
     setDialogVisible(true);
-  }, [siteFieldLocked, user.workingSiteId]);
+  }, [resetDocumentsState, resetPhotoState, siteFieldLocked, user.workingSiteId]);
 
   const openEdit = useCallback(
     (row: SparePart) => {
+      resetPhotoState();
+      resetDocumentsState();
       setEditingId(row.id);
       setForm({
         key: row.key,
@@ -383,17 +630,21 @@ export function SparePartsPage() {
         alternativeDesignation: row.alternativeDesignation ?? "",
       });
       setStockLines([]);
+      setStockPolicies([]);
       setActiveTabIndex(sparePartDialogTabs.General);
       setDialogVisible(true);
       void loadStockDetail(row.id);
+      if (row.hasPhoto) void loadSparePartPhoto(row.id);
     },
-    [loadStockDetail],
+    [loadSparePartPhoto, loadStockDetail, resetDocumentsState, resetPhotoState],
   );
 
   const handleSparePartTabChange = useCallback((event: { index: number }) => {
     if (
       event.index === sparePartDialogTabs.General ||
-      event.index === sparePartDialogTabs.StockData
+      event.index === sparePartDialogTabs.StockData ||
+      event.index === sparePartDialogTabs.StockPlanning ||
+      event.index === sparePartDialogTabs.Documents
     ) {
       setActiveTabIndex(event.index);
     }
@@ -415,7 +666,11 @@ export function SparePartsPage() {
     if (!dialogVisible) return;
     const raf = requestAnimationFrame(updateTabInk);
     return () => cancelAnimationFrame(raf);
-  }, [activeTabIndex, dialogVisible, stockTabCount, updateTabInk]);
+  }, [activeTabIndex, dialogVisible, stockTabCount, policyTabCount, documentsTabCount, updateTabInk]);
+
+  useEffect(() => {
+    if (dialogVisible && editingId) void loadDocuments(editingId);
+  }, [dialogVisible, editingId, loadDocuments]);
 
   useEffect(() => {
     if (!dialogVisible) return;
@@ -460,8 +715,134 @@ export function SparePartsPage() {
     if (code === "foreign_key_violation") detail = t("spareParts.foreignKey");
     if (code === "invalid_classification") detail = t("spareParts.invalidClassification");
     if (code === "warehouse_site_mismatch") detail = t("spareParts.warehouseSiteMismatch");
+    if (code === "storage_location_warehouse_mismatch") {
+      detail = t("spareParts.storageLocationWarehouseMismatch");
+    }
     if (code === "stock_data_locked") detail = t("spareParts.stockDataLocked");
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
+  };
+
+  const handlePickPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !file.type.startsWith("image/")) {
+      if (file) toastRef.current?.show({ severity: "error", summary: t("spareParts.photoUploadError"), life: 6000 });
+      return;
+    }
+    clearPhotoPreview();
+    const preview = URL.createObjectURL(file);
+    photoPreviewUrlRef.current = preview;
+    setPhotoPreviewUrl(preview);
+    if (!editingId) {
+      setPendingPhotoFile(file);
+      return;
+    }
+    setPhotoUploading(true);
+    try {
+      if (!(await uploadSparePartPhoto(editingId, file))) throw new Error("upload");
+      setPendingPhotoFile(null);
+      setHasStoredPhoto(true);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.photoUploadError"), life: 6000 });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!editingId) {
+      clearPhotoPreview();
+      setPendingPhotoFile(null);
+      return;
+    }
+    setPhotoUploading(true);
+    try {
+      if (!(await removeSparePartPhoto(editingId))) throw new Error("delete");
+      clearPhotoPreview();
+      setHasStoredPhoto(false);
+      await loadData();
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.photoRemoveError"), life: 6000 });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  const handlePickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    setUploadDrafts(files.map((file) => ({ file, displayName: file.name, category: "general" })));
+    setUploadMetaVisible(true);
+  };
+
+  const confirmUploadDrafts = async () => {
+    if (uploadDrafts.some((draft) => !draft.displayName.trim())) {
+      toastRef.current?.show({ severity: "warn", summary: t("spareParts.documentsDisplayNameRequired"), life: 4000 });
+      return;
+    }
+    const next = uploadDrafts.map((draft) => ({ ...draft, displayName: draft.displayName.trim(), localId: newPendingLocalId() }));
+    setUploadMetaVisible(false);
+    setUploadDrafts([]);
+    if (!editingId) {
+      setPendingFiles((current) => [...current, ...next]);
+      return;
+    }
+    setDocumentsUploading(true);
+    try {
+      const results = await Promise.all(next.map((document) => uploadDocument(editingId, document)));
+      if (results.some((ok) => !ok)) {
+        toastRef.current?.show({ severity: "warn", summary: t("spareParts.documentsUploadPartialError"), life: 6000 });
+      } else {
+        toastRef.current?.show({ severity: "success", summary: t("spareParts.documentsUploaded"), life: 3000 });
+      }
+      await Promise.all([loadDocuments(editingId), loadData()]);
+    } finally {
+      setDocumentsUploading(false);
+    }
+  };
+
+  const openDocumentContent = async (document: SparePartDocument) => {
+    try {
+      const res = await apiFetch(`/api/spare-parts/${document.sparePartId}/documents/${document.id}/content`);
+      if (!res.ok) throw new Error("open");
+      const url = URL.createObjectURL(await res.blob());
+      if (!window.open(url, "_blank", "noopener,noreferrer")) {
+        URL.revokeObjectURL(url);
+        toastRef.current?.show({ severity: "warn", summary: t("spareParts.documentsPopupBlocked"), life: 5000 });
+      } else window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.documentsOpenError"), life: 6000 });
+    }
+  };
+
+  const deleteDocument = async (document: SparePartDocument) => {
+    const res = await apiFetch(`/api/spare-parts/${document.sparePartId}/documents/${document.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.documentsDeleteError"), life: 6000 });
+      return;
+    }
+    await Promise.all([loadDocuments(document.sparePartId), loadData()]);
+    toastRef.current?.show({ severity: "success", summary: t("spareParts.documentsDeleted"), life: 3000 });
+  };
+
+  const saveDocumentEdit = async () => {
+    if (!editingId || !documentEdit || !documentEditDisplayName.trim()) return;
+    setDocumentEditSaving(true);
+    try {
+      const res = await apiFetch(`/api/spare-parts/${editingId}/documents/${documentEdit.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: documentEditDisplayName.trim(), category: documentEditCategory }),
+      });
+      if (!res.ok) throw new Error("update");
+      setDocumentEdit(null);
+      await Promise.all([loadDocuments(editingId), loadData()]);
+      toastRef.current?.show({ severity: "success", summary: t("spareParts.documentsUpdated"), life: 3000 });
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("spareParts.documentsUpdateError"), life: 6000 });
+    } finally {
+      setDocumentEditSaving(false);
+    }
   };
 
   const save = async () => {
@@ -475,6 +856,25 @@ export function SparePartsPage() {
         life: 4000,
       });
       return;
+    }
+    if (editingId) {
+      const policyIncomplete = stockPolicies.some((policy) => {
+        if (policy.scopeType === "SITE") return false;
+        if (!policy.warehouseId) return true;
+        if (policy.scopeType === "STORAGE_LOCATION" && !policy.storageLocationId) return true;
+        return false;
+      });
+      const stockIncomplete = stockLines.some(
+        (line) => line.warehouseId && !line.storageLocationId,
+      );
+      if (policyIncomplete || stockIncomplete) {
+        toastRef.current?.show({
+          severity: "warn",
+          summary: t("spareParts.stockPolicyInvalid"),
+          life: 4000,
+        });
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -490,12 +890,44 @@ export function SparePartsPage() {
         alternativeDesignation: form.alternativeDesignation.trim() || null,
         stockControlLines: editingId
           ? stockLines
-              .filter((line) => line.warehouseId)
+              .filter((line) => line.warehouseId && line.storageLocationId)
               .map((line) => ({
                 warehouseId: line.warehouseId,
-                storageLocation: line.storageLocation.trim(),
+                storageLocationId: line.storageLocationId,
                 quantity: line.quantity,
               }))
+          : [],
+        stockPolicies: editingId
+          ? stockPolicies.map((policy) => {
+              if (policy.scopeType === "SITE") {
+                return {
+                  scopeType: "SITE" as const,
+                  warehouseId: null,
+                  storageLocationId: null,
+                  reorderLevel: policy.reorderLevel,
+                  minStock: policy.minStock,
+                  orderQuantity: policy.orderQuantity,
+                };
+              }
+              if (policy.scopeType === "WAREHOUSE") {
+                return {
+                  scopeType: "WAREHOUSE" as const,
+                  warehouseId: policy.warehouseId,
+                  storageLocationId: null,
+                  reorderLevel: policy.reorderLevel,
+                  minStock: policy.minStock,
+                  orderQuantity: policy.orderQuantity,
+                };
+              }
+              return {
+                scopeType: "STORAGE_LOCATION" as const,
+                warehouseId: policy.warehouseId,
+                storageLocationId: policy.storageLocationId,
+                reorderLevel: policy.reorderLevel,
+                minStock: policy.minStock,
+                orderQuantity: policy.orderQuantity,
+              };
+            })
           : [],
       };
       const url = editingId ? `/api/spare-parts/${editingId}` : "/api/spare-parts";
@@ -508,7 +940,22 @@ export function SparePartsPage() {
         await showSaveError(res);
         return;
       }
-      setDialogVisible(false);
+      const saved = (await res.json()) as SparePart;
+      if (pendingPhotoFile && !(await uploadSparePartPhoto(saved.id, pendingPhotoFile))) {
+        toastRef.current?.show({ severity: "error", summary: t("spareParts.photoUploadError"), life: 6000 });
+      }
+      if (pendingFiles.length) {
+        setDocumentsUploading(true);
+        try {
+          const uploaded = await Promise.all(pendingFiles.map((document) => uploadDocument(saved.id, document)));
+          if (uploaded.some((ok) => !ok)) {
+            toastRef.current?.show({ severity: "warn", summary: t("spareParts.documentsUploadPartialError"), life: 6000 });
+          }
+        } finally {
+          setDocumentsUploading(false);
+        }
+      }
+      closeDialog();
       await loadData();
       toastRef.current?.show({
         severity: "success",
@@ -703,6 +1150,15 @@ export function SparePartsPage() {
   const optionalText = (value: string | null) =>
     value ? <span className="truncate">{value}</span> : <span className="text-on-surface-variant">—</span>;
 
+  const formatQuantity = (value: string | number | null | undefined) => {
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n)) return "0";
+    return new Intl.NumberFormat(i18n.language, {
+      maximumFractionDigits: 4,
+      minimumFractionDigits: 0,
+    }).format(n);
+  };
+
   const addStockLine = () => {
     setStockLines((lines) => [...lines, newStockLine()]);
   };
@@ -717,6 +1173,65 @@ export function SparePartsPage() {
     );
   };
 
+  const addStockPolicy = () => {
+    setStockPolicies((policies) => [...policies, newStockPolicy()]);
+  };
+
+  const removeStockPolicy = (localId: string) => {
+    setStockPolicies((policies) => policies.filter((policy) => policy.localId !== localId));
+  };
+
+  const updateStockPolicy = (localId: string, patch: Partial<StockPolicyForm>) => {
+    setStockPolicies((policies) =>
+      policies.map((policy) => {
+        if (policy.localId !== localId) return policy;
+        const next = { ...policy, ...patch };
+        if (patch.scopeType === "SITE") {
+          next.warehouseId = "";
+          next.storageLocationId = "";
+        } else if (patch.scopeType === "WAREHOUSE") {
+          next.storageLocationId = "";
+        } else if (patch.warehouseId !== undefined && patch.warehouseId !== policy.warehouseId) {
+          next.storageLocationId = "";
+        }
+        return next;
+      }),
+    );
+  };
+
+  const storageLocationOptionsForWarehouse = useCallback(
+    (warehouseId: string, selectedId?: string) =>
+      storageLocations
+        .filter(
+          (sl) =>
+            sl.warehouseId === warehouseId && (sl.isActive || sl.id === selectedId),
+        )
+        .map((sl) => ({ label: sl.key, value: sl.id })),
+    [storageLocations],
+  );
+
+  const openDocuments = useCallback((row: SparePart) => {
+    openEdit(row);
+    setActiveTabIndex(sparePartDialogTabs.Documents);
+  }, [openEdit]);
+
+  const referencesBody = (row: SparePart) => {
+    const hasDocuments = row.documentCount > 0;
+    return (
+      <Button
+        type="button"
+        icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+        badge={hasDocuments ? String(row.documentCount) : " "}
+        badgeClassName={`!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0 ${hasDocuments ? "" : "app-ref-badge--placeholder"}`}
+        className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${hasDocuments ? "app-ref-button--documents" : "app-ref-button--documents-inactive"}`}
+        disabled={!hasDocuments}
+        onClick={() => openDocuments(row)}
+        aria-label={t("spareParts.references")}
+        title={t("spareParts.references")}
+      />
+    );
+  };
+
   const dialogFooter = (
     <div className="flex justify-end gap-2">
       <Button
@@ -724,14 +1239,15 @@ export function SparePartsPage() {
         label={t("spareParts.cancel")}
         severity="secondary"
         outlined
-        disabled={saving}
-        onClick={() => setDialogVisible(false)}
+        disabled={saving || documentsUploading}
+        onClick={closeDialog}
       />
       <Button
         type="button"
         label={t("spareParts.save")}
         icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        loading={saving}
+        loading={saving || documentsUploading}
+        disabled={documentsUploading}
         onClick={() => void save()}
       />
     </div>
@@ -767,9 +1283,32 @@ export function SparePartsPage() {
           stateKey="athene-spare-parts-table"
           emptyMessage={t("spareParts.empty")}
         >
+          <Column
+            columnKey="photo"
+            header=""
+            body={(row: SparePart) =>
+              row.hasPhoto ? <ImageIcon className="h-4 w-4 text-sky-500" strokeWidth={1.75} /> : <span className="text-on-surface-variant">—</span>
+            }
+            className="w-12 text-center"
+          />
           <Column field="key" header={t("spareParts.key")} sortable />
           <Column field="name" header={t("spareParts.name")} sortable />
+          <Column columnKey="references" header={t("spareParts.references")} body={referencesBody} className="w-20 text-center" />
           <Column field="siteName" header={t("spareParts.site")} sortable body={siteColumnBody} />
+          <Column
+            field="totalQuantity"
+            header={t("spareParts.totalQuantity")}
+            body={(row: SparePart) => formatQuantity(row.totalQuantity)}
+            sortable
+            className="text-right tabular-nums"
+          />
+          <Column
+            field="siteQuantity"
+            header={t("spareParts.siteQuantity")}
+            body={(row: SparePart) => formatQuantity(row.siteQuantity)}
+            sortable
+            className="text-right tabular-nums"
+          />
           <Column
             columnKey="active"
             header={t("spareParts.active")}
@@ -839,7 +1378,7 @@ export function SparePartsPage() {
         header={editingId ? t("spareParts.editTitle") : t("spareParts.createTitle")}
         visible={dialogVisible}
         className="app-big-modal-window app-tabbed-modal-window"
-        onHide={() => setDialogVisible(false)}
+        onHide={closeDialog}
         onShow={updateTabInk}
         footer={dialogFooter}
         modal
@@ -854,7 +1393,16 @@ export function SparePartsPage() {
             onTabChange={handleSparePartTabChange}
           >
             <TabPanel header={t("spareParts.tabGeneral")}>
-              <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2">
+              <div className="flex flex-col gap-4 pt-1 md:flex-row">
+                <div className="w-44 shrink-0 space-y-2">
+                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-outline-variant bg-surface-container-low">
+                    {photoPreviewUrl ? <img src={photoPreviewUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-10 w-10 text-on-surface-variant" strokeWidth={1.5} />}
+                  </div>
+                  <input ref={photoFileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePickPhoto} />
+                  <Button type="button" label={t("spareParts.photoUpload")} icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />} className="w-full" loading={photoUploading} onClick={() => photoFileInputRef.current?.click()} />
+                  {(photoPreviewUrl || hasStoredPhoto) ? <Button type="button" label={t("spareParts.photoRemove")} icon={<X className={lucidePrimeBtnIcon} strokeWidth={1.75} />} severity="secondary" outlined className="w-full" disabled={photoUploading} onClick={() => void handleRemovePhoto()} /> : null}
+                </div>
+              <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label
                     htmlFor="spare-part-key"
@@ -927,6 +1475,40 @@ export function SparePartsPage() {
                       {t("spareParts.active")}
                     </span>
                   </label>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="spare-part-total-quantity"
+                    className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                  >
+                    {t("spareParts.totalQuantity")}
+                  </label>
+                  <InputNumber
+                    inputId="spare-part-total-quantity"
+                    value={totalQuantityAll}
+                    min={0}
+                    className="w-full"
+                    inputClassName="w-full"
+                    disabled
+                    readOnly
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="spare-part-site-quantity"
+                    className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                  >
+                    {t("spareParts.siteQuantity")}
+                  </label>
+                  <InputNumber
+                    inputId="spare-part-site-quantity"
+                    value={siteQuantity}
+                    min={0}
+                    className="w-full"
+                    inputClassName="w-full"
+                    disabled
+                    readOnly
+                  />
                 </div>
                 <div className="space-y-2">
                   <label
@@ -1013,6 +1595,7 @@ export function SparePartsPage() {
                   />
                 </div>
               </div>
+              </div>
             </TabPanel>
             <TabPanel
               header={
@@ -1030,21 +1613,6 @@ export function SparePartsPage() {
                 <p className="m-0 pt-1 text-sm text-on-surface-variant">{t("spareParts.loadError")}</p>
               ) : (
                 <div className="flex flex-col gap-3 pt-1">
-                  {showExistingStockLockedHint ? (
-                    <p className="m-0 text-sm text-on-surface-variant">
-                      {t("spareParts.stockDataLockedHint")}
-                    </p>
-                  ) : null}
-                  <div>
-                    <Button
-                      type="button"
-                      label={t("spareParts.addStockLine")}
-                      icon={<Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-                      severity="secondary"
-                      outlined
-                      onClick={addStockLine}
-                    />
-                  </div>
                   {stockLines.length === 0 ? (
                     <p className="m-0 text-sm text-on-surface-variant">{t("spareParts.empty")}</p>
                   ) : (
@@ -1079,6 +1647,7 @@ export function SparePartsPage() {
                                     onChange={(e) =>
                                       updateStockLine(line.localId, {
                                         warehouseId: String(e.value ?? ""),
+                                        storageLocationId: "",
                                       })
                                     }
                                     placeholder={t("spareParts.warehousePlaceholder")}
@@ -1089,16 +1658,22 @@ export function SparePartsPage() {
                                   />
                                 </td>
                                 <td className="px-3 py-2 align-top">
-                                  <InputText
-                                    value={line.storageLocation}
+                                  <Dropdown
+                                    value={line.storageLocationId || null}
+                                    options={storageLocationOptionsForWarehouse(
+                                      line.warehouseId,
+                                      line.storageLocationId,
+                                    )}
                                     onChange={(e) =>
                                       updateStockLine(line.localId, {
-                                        storageLocation: e.target.value,
+                                        storageLocationId: String(e.value ?? ""),
                                       })
                                     }
-                                    className="w-full min-w-[10rem]"
-                                    autoComplete="off"
-                                    disabled={lineLocked}
+                                    placeholder={t("spareParts.storageLocationPlaceholder")}
+                                    className="w-full min-w-[10rem] app-inline-icon-dropdown"
+                                    filter
+                                    disabled={lineLocked || !line.warehouseId}
+                                    appendTo={overlayAppendTo}
                                   />
                                 </td>
                                 <td className="px-3 py-2 align-top">
@@ -1135,11 +1710,227 @@ export function SparePartsPage() {
                       </table>
                     </div>
                   )}
+                  <div>
+                    <Button
+                      type="button"
+                      label={t("spareParts.addStockLine")}
+                      icon={<Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                      severity="secondary"
+                      outlined
+                      onClick={addStockLine}
+                    />
+                  </div>
                 </div>
               )}
             </TabPanel>
+            <TabPanel
+              header={
+                <span className="inline-flex items-center gap-2">
+                  <span>{t("spareParts.tabStockPlanning")}</span>
+                  {editingId && policyTabCount > 0 ? <Badge value={policyTabCount} /> : null}
+                </span>
+              }
+            >
+              {!editingId ? (
+                <p className="m-0 pt-1 text-sm text-on-surface-variant">
+                  {t("spareParts.stockPlanningCreateHint")}
+                </p>
+              ) : stockDetailLoading ? (
+                <p className="m-0 pt-1 text-sm text-on-surface-variant">{t("spareParts.loadError")}</p>
+              ) : (
+                <div className="flex flex-col gap-3 pt-1">
+                  <p className="m-0 text-sm text-on-surface-variant">
+                    {t("spareParts.stockPlanningHint")}
+                  </p>
+                  {stockPolicies.length === 0 ? (
+                    <p className="m-0 text-sm text-on-surface-variant">
+                      {t("spareParts.stockPlanningEmpty")}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-sm border border-outline-variant/40">
+                      <table className="w-full min-w-[56rem] border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-outline-variant/40 bg-surface-container-low">
+                            <th className="px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.scopeType")}
+                            </th>
+                            <th className="px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.warehouse")}
+                            </th>
+                            <th className="px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.storageLocation")}
+                            </th>
+                            <th className="w-28 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.reorderLevel")}
+                            </th>
+                            <th className="w-28 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.minStock")}
+                            </th>
+                            <th className="w-28 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                              {t("spareParts.orderQuantity")}
+                            </th>
+                            <th className="w-14 px-3 py-2" aria-hidden />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stockPolicies.map((policy) => {
+                            const needsWarehouse = policy.scopeType !== "SITE";
+                            const needsLocation = policy.scopeType === "STORAGE_LOCATION";
+                            return (
+                              <tr
+                                key={policy.localId}
+                                className="border-b border-outline-variant/30 last:border-b-0"
+                              >
+                                <td className="px-3 py-2 align-top">
+                                  <Dropdown
+                                    value={policy.scopeType}
+                                    options={scopeDropdownOptions}
+                                    onChange={(e) =>
+                                      updateStockPolicy(policy.localId, {
+                                        scopeType: e.value as StockPolicyScopeType,
+                                      })
+                                    }
+                                    className="w-full min-w-[10rem] app-inline-icon-dropdown"
+                                    appendTo={overlayAppendTo}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  {needsWarehouse ? (
+                                    <Dropdown
+                                      value={policy.warehouseId || null}
+                                      options={warehouseDropdownOptions}
+                                      onChange={(e) =>
+                                        updateStockPolicy(policy.localId, {
+                                          warehouseId: String(e.value ?? ""),
+                                        })
+                                      }
+                                      placeholder={t("spareParts.warehousePlaceholder")}
+                                      className="w-full min-w-[12rem] app-inline-icon-dropdown"
+                                      filter
+                                      disabled={!form.siteId}
+                                      appendTo={overlayAppendTo}
+                                    />
+                                  ) : (
+                                    <span className="text-on-surface-variant">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  {needsLocation ? (
+                                    <Dropdown
+                                      value={policy.storageLocationId || null}
+                                      options={storageLocationOptionsForWarehouse(
+                                        policy.warehouseId,
+                                        policy.storageLocationId,
+                                      )}
+                                      onChange={(e) =>
+                                        updateStockPolicy(policy.localId, {
+                                          storageLocationId: String(e.value ?? ""),
+                                        })
+                                      }
+                                      placeholder={t("spareParts.storageLocationPlaceholder")}
+                                      className="w-full min-w-[10rem] app-inline-icon-dropdown"
+                                      filter
+                                      disabled={!policy.warehouseId}
+                                      appendTo={overlayAppendTo}
+                                    />
+                                  ) : (
+                                    <span className="text-on-surface-variant">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <InputNumber
+                                    value={policy.reorderLevel}
+                                    onValueChange={(e) =>
+                                      updateStockPolicy(policy.localId, {
+                                        reorderLevel: e.value ?? 0,
+                                      })
+                                    }
+                                    min={0}
+                                    className="w-full"
+                                    inputClassName="w-full"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <InputNumber
+                                    value={policy.minStock}
+                                    onValueChange={(e) =>
+                                      updateStockPolicy(policy.localId, {
+                                        minStock: e.value ?? 0,
+                                      })
+                                    }
+                                    min={0}
+                                    className="w-full"
+                                    inputClassName="w-full"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <InputNumber
+                                    value={policy.orderQuantity}
+                                    onValueChange={(e) =>
+                                      updateStockPolicy(policy.localId, {
+                                        orderQuantity: e.value ?? 0,
+                                      })
+                                    }
+                                    min={0}
+                                    className="w-full"
+                                    inputClassName="w-full"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <Button
+                                    type="button"
+                                    severity="danger"
+                                    text
+                                    rounded
+                                    aria-label={t("spareParts.removeStockPolicy")}
+                                    icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                                    onClick={() => removeStockPolicy(policy.localId)}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <div>
+                    <Button
+                      type="button"
+                      label={t("spareParts.addStockPolicy")}
+                      icon={<Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                      severity="secondary"
+                      outlined
+                      onClick={addStockPolicy}
+                    />
+                  </div>
+                </div>
+              )}
+            </TabPanel>
+            <TabPanel header={<span className="inline-flex items-center gap-2"><span>{t("spareParts.tabDocuments")}</span>{documentsTabCount > 0 ? <Badge value={documentsTabCount} /> : null}</span>}>
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-[8fr_2fr] gap-2">
+                  <Button type="button" icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />} label={t("spareParts.documentsUpload")} onClick={() => documentsFileInputRef.current?.click()} />
+                  <IconField iconPosition="left"><LucideInputSearchIcon /><InputText value={documentsSearchTerm} onChange={(e) => setDocumentsSearchTerm(e.target.value)} placeholder={t("spareParts.documentsSearchPlaceholder")} className="app-header-search-input w-full !rounded-sm text-sm" /></IconField>
+                </div>
+                <input ref={documentsFileInputRef} type="file" multiple className="hidden" onChange={handlePickFiles} />
+                {documentsUploading ? <div className="flex items-center gap-2 text-sm text-on-surface-variant"><LucideSpinner className="h-4 w-4" strokeWidth={1.75} />{t("spareParts.documentsUploading")}</div> : null}
+                {pendingFiles.length > 0 ? <div className="space-y-2"><div className="text-sm text-on-surface-variant">{t("spareParts.documentsPending")}</div>{pendingFiles.map((doc) => <div key={doc.localId} className="flex items-center gap-3 rounded-sm border border-outline-variant px-3 py-2"><File className="h-5 w-5 shrink-0 text-on-surface-variant" /><span className="min-w-0 flex-1 truncate text-sm">{doc.displayName}</span><Button type="button" text severity="danger" icon={<X className={lucidePrimeBtnIcon} strokeWidth={1.75} />} aria-label={t("spareParts.documentsRemovePending")} onClick={() => setPendingFiles((files) => files.filter((file) => file.localId !== doc.localId))} /></div>)}</div> : null}
+                {!editingId ? <div className="rounded-sm border border-outline-variant px-3 py-2 text-sm text-on-surface-variant">{t("spareParts.documentsCreateHint")}</div> : <div className="space-y-2"><div className="text-sm text-on-surface-variant">{t("spareParts.documentsExisting")}</div>{documentsLoading ? <div className="text-sm text-on-surface-variant">{t("spareParts.documentsLoading")}</div> : documents.filter((doc) => `${doc.displayName} ${doc.fileName}`.toLowerCase().includes(documentsSearchTerm.toLowerCase())).map((doc) => { const spec = documentTypeMimeIcon(doc.mimeType, doc.fileName); const Icon = spec.Icon; return <div key={doc.id} className="flex items-center gap-3 rounded-sm border border-outline-variant px-3 py-2"><Icon className={`${spec.className} h-5 w-5 shrink-0`} strokeWidth={1.75} /><button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setDocumentEdit(doc); setDocumentEditDisplayName(doc.displayName || doc.fileName); setDocumentEditCategory(doc.category); }}><div className="truncate text-sm">{doc.displayName || doc.fileName}</div><span className={`rounded-sm px-1.5 py-0.5 text-[11px] ${documentCategoryBadgeClass(doc.category)}`}>{t(`assets.documentCategories.${doc.category}`)}</span></button><Button type="button" text icon={<ExternalLink className={lucidePrimeBtnIcon} strokeWidth={1.75} />} aria-label={t("spareParts.documentsOpen")} onClick={() => void openDocumentContent(doc)} /><Button type="button" text severity="danger" icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />} aria-label={t("spareParts.delete")} onClick={() => confirmDialog({ message: t("spareParts.documentsConfirmDelete", { name: doc.displayName || doc.fileName }), header: t("spareParts.documentsDeleteTitle"), acceptClassName: "p-button-danger", accept: () => void deleteDocument(doc) })} /></div>; })}</div>}
+              </div>
+            </TabPanel>
           </TabView>
         </div>
+      </Dialog>
+      <Dialog header={t("spareParts.documentsMetaDialogTitle")} visible={uploadMetaVisible} className="app-modal-window" onHide={() => { setUploadMetaVisible(false); setUploadDrafts([]); }} modal dismissableMask draggable={false} resizable={false}>
+        <div className="space-y-3">
+          <div className="text-sm text-on-surface-variant">{t("spareParts.documentsMetaDialogHint")}</div>
+          {uploadDrafts.map((draft, index) => <div key={`${draft.file.name}-${index}`} className="grid grid-cols-1 gap-3 rounded-sm border border-outline-variant p-3 md:grid-cols-2"><InputText value={draft.displayName} onChange={(e) => setUploadDrafts((drafts) => drafts.map((item, i) => i === index ? { ...item, displayName: e.target.value } : item))} /><Dropdown value={draft.category} options={documentCategoryOptions} optionLabel="label" optionValue="value" onChange={(e) => setUploadDrafts((drafts) => drafts.map((item, i) => i === index ? { ...item, category: e.value as AssetDocumentCategory } : item))} appendTo={overlayAppendTo} /></div>)}
+          <div className="flex justify-end gap-2"><Button type="button" label={t("spareParts.cancel")} severity="secondary" outlined onClick={() => setUploadMetaVisible(false)} /><Button type="button" label={t("spareParts.documentsMetaApply")} icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />} onClick={() => void confirmUploadDrafts()} /></div>
+        </div>
+      </Dialog>
+      <Dialog header={t("spareParts.documentsEditTitle")} visible={documentEdit !== null} className="app-modal-window" onHide={() => !documentEditSaving && setDocumentEdit(null)} modal dismissableMask={!documentEditSaving} draggable={false} resizable={false}>
+        <div className="space-y-3"><InputText value={documentEditDisplayName} onChange={(e) => setDocumentEditDisplayName(e.target.value)} className="w-full" /><Dropdown value={documentEditCategory} options={documentCategoryOptions} optionLabel="label" optionValue="value" onChange={(e) => setDocumentEditCategory(e.value as AssetDocumentCategory)} className="w-full" appendTo={overlayAppendTo} /><div className="flex justify-end gap-2"><Button type="button" label={t("spareParts.cancel")} severity="secondary" outlined disabled={documentEditSaving} onClick={() => setDocumentEdit(null)} /><Button type="button" label={t("spareParts.save")} loading={documentEditSaving} onClick={() => void saveDocumentEdit()} /></div></div>
       </Dialog>
     </div>
   );

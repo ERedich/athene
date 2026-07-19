@@ -7,14 +7,10 @@ import {
   type PointerEvent,
 } from "react";
 import {
-  CircleX,
-  Copy,
   File,
-  Filter,
-  MessageCircle,
   Pencil,
   Plus,
-  Send,
+  Search,
   Trash2,
   TriangleAlert,
   UserPlus,
@@ -37,7 +33,8 @@ import { APP_PARAM_KEY_ENABLE_CLEVER_SEARCH } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
-import { useTableContextMenu } from "../lib/useTableContextMenu";
+import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
+import { buildWorkOrderBigMenuModel } from "../lib/workOrderBigContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
@@ -66,7 +63,6 @@ import {
   AppPauseIcon,
   AppPlayStartIcon,
   AppSquareStopIcon,
-  LucideSpinner,
   lucidePrimeBtnIcon,
 } from "../icons/lucide";
 
@@ -617,7 +613,11 @@ export function WorkOrdersPage() {
             <span>{t("workOrders.delete")}</span>
           </button>
         </li>
-        <li className="ml-auto flex items-center gap-2">
+        <li
+          aria-hidden
+          className="mx-1 h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)]"
+        />
+        <li>
           <button
             type="button"
             className={primaryActionNavItem}
@@ -626,9 +626,11 @@ export function WorkOrdersPage() {
               setSearchPanelVisible(true);
             }}
           >
-            <Filter className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <Search className={`${primaryActionIcon} !h-4 !w-4 shrink-0`} size={16} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.searchPanel.open")}</span>
           </button>
+        </li>
+        <li className="ml-auto flex items-center gap-2">
           {searchPresets.length > 0 ? (
             <Dropdown
               aria-label={t("workOrders.searchPresets.headerLabel")}
@@ -821,56 +823,54 @@ export function WorkOrdersPage() {
     [cancelWorkOrder, t],
   );
 
-  const workOrderContextMenuExtraItems = useCallback(
-    (row: WorkOrder | null) => {
-      if (!row) return [];
-      const canOpenFeedbackTab = workOrderStatusAllowsFeedbackTab(row.status);
-      const canCancel = row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
-      return [
-        {
-          label: t("workOrders.contextMenuCopyOrder"),
-          icon: <Copy className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !row.workgroupId,
-          command: () => {
-            if (row.workgroupId) woDialog.openCopy(row, { onSaved: onDialogSaved });
-          },
-        },
-        {
-          label: t("workOrders.contextMenuAssignEmployees"),
-          icon: <UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: row.status === "ended" || row.status === "done" || row.status === "cancelled",
-          command: () => openPlanningTab(row),
-        },
-        {
-          label: t("workOrders.contextMenuCreateFeedback"),
-          icon: <Send className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !canOpenFeedbackTab,
-          command: () => openFeedbackTab(row, "create"),
-        },
-        {
-          label: t("workOrders.contextMenuCancelOrder"),
-          icon: <CircleX className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !canCancel,
-          command: () => confirmCancelWorkOrder(row),
-        },
-      ];
+  const closeWorkOrder = useCallback(
+    async (row: WorkOrder) => {
+      try {
+        const res = await apiFetch(`/api/work-orders/${row.id}/done`, { method: "POST" });
+        if (!res.ok) {
+          let code: string | undefined;
+          try {
+            code = ((await res.json()) as { error?: string }).error;
+          } catch {
+            /* ignore */
+          }
+          const msg =
+            code === "cannot_done_from_status"
+              ? t("workOrders.cannotCloseFromStatus")
+              : t("workOrders.closeError");
+          toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
+          return;
+        }
+        const updated = (await res.json()) as WorkOrder;
+        setSelectedOrder((cur) => (cur?.id === updated.id ? updated : cur));
+        await loadData();
+        toastRef.current?.show({ severity: "success", summary: t("workOrders.closed"), life: 3000 });
+      } catch {
+        toastRef.current?.show({ severity: "error", summary: t("workOrders.closeError"), life: 6000 });
+      }
     },
-    [confirmCancelWorkOrder, onDialogSaved, openFeedbackTab, openPlanningTab, t, woDialog],
+    [loadData, t],
   );
 
-  const atheneContextMenuItems = useCallback(
-    (row: WorkOrder | null) => [
-      {
-        label: t("assistant.askAthene"),
-        className: "app-context-menu-athene",
-        icon: athene.busy ? (
-          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-        ) : (
-          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-        ),
-        disabled: !row || athene.busy,
-        command: () => {
-          if (!row) return;
+  const confirmCloseWorkOrder = useCallback(
+    (row: WorkOrder) => {
+      confirmDialog({
+        message: t("workOrders.confirmClose", { name: row.name }),
+        header: t("workOrders.confirmCloseTitle"),
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
+        acceptLabel: t("workOrders.yes"),
+        rejectLabel: t("workOrders.no"),
+        accept: () => void closeWorkOrder(row),
+      });
+    },
+    [closeWorkOrder, t],
+  );
+
+  const bigMenuModel = useMemo(
+    () =>
+      buildWorkOrderBigMenuModel(selectedOrder, t, {
+        atheneBusy: athene.busy,
+        onAskAthene: (row) => {
           athene.openWithContext({
             type: "workOrder",
             id: row.id,
@@ -894,18 +894,38 @@ export function WorkOrdersPage() {
             },
           });
         },
-      },
+        onCreate: openCreate,
+        onEdit: openEdit,
+        onDelete: confirmDelete,
+        onStart: (row) => void startOrder(row),
+        onStop: (row) => openFeedbackTab(row, "stop"),
+        onPause: (row) => openFeedbackTab(row, "pause"),
+        onAssignEmployees: openPlanningTab,
+        onCreateFeedback: (row) => openFeedbackTab(row, "create"),
+        onCloseOrder: confirmCloseWorkOrder,
+        onCancelOrder: confirmCancelWorkOrder,
+      }),
+    [
+      athene,
+      confirmCancelWorkOrder,
+      confirmCloseWorkOrder,
+      confirmDelete,
+      openCreate,
+      openEdit,
+      openFeedbackTab,
+      openPlanningTab,
+      selectedOrder,
+      startOrder,
+      t,
     ],
-    [athene, t],
   );
 
-  const tableCtx = useTableContextMenu<WorkOrder>({
-    labels: { new: t("workOrders.new"), edit: t("workOrders.edit"), delete: t("workOrders.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+  const tableCtx = useTableBigContextMenu<WorkOrder>({
     selection: selectedOrder,
     setSelection: setSelectedOrder,
-    leadingItems: atheneContextMenuItems,
-    extraItems: workOrderContextMenuExtraItems,
+    sections: bigMenuModel.sections,
+    header: bigMenuModel.header,
+    cornerAction: bigMenuModel.cornerAction,
   });
 
   const startStopBody = useCallback(
@@ -999,7 +1019,7 @@ export function WorkOrdersPage() {
       />
       <ConfirmDialog />
       <WorkOrderOverviewOverlay order={overviewOrder} onHide={overview.onHide} />
-      {!isPreloadMode ? tableCtx.ContextMenuEl : null}
+      {!isPreloadMode ? tableCtx.BigContextMenuEl : null}
 
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"

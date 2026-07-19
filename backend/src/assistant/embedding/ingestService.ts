@@ -265,12 +265,52 @@ async function loadSparePartStockLines(sparePartId: string): Promise<SparePartEm
     SELECT
       wh."key" AS "warehouseKey",
       wh."name" AS "warehouseName",
-      sc."storageLocation",
+      sl."key" AS "storageLocation",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     WHERE sc."sparePartId" = $1::uuid
-    ORDER BY wh."key" ASC, sc."storageLocation" ASC
+    ORDER BY wh."key" ASC, sl."key" ASC
+    `,
+    [sparePartId],
+  );
+  return rows;
+}
+
+async function loadSparePartStockPolicies(
+  sparePartId: string,
+): Promise<SparePartEmbeddingRow["stockPolicies"]> {
+  const { rows } = await pool.query<{
+    scopeType: string;
+    warehouseKey: string | null;
+    warehouseName: string | null;
+    storageLocation: string | null;
+    reorderLevel: string;
+    minStock: string;
+    orderQuantity: string;
+  }>(
+    `
+    SELECT
+      p."scopeType",
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      sl."key" AS "storageLocation",
+      p."reorderLevel"::text AS "reorderLevel",
+      p."minStock"::text AS "minStock",
+      p."orderQuantity"::text AS "orderQuantity"
+    FROM "sparePartStockPolicy" p
+    LEFT JOIN "warehouse" wh ON wh."id" = p."warehouseId"
+    LEFT JOIN "storageLocation" sl ON sl."id" = p."storageLocationId"
+    WHERE p."sparePartId" = $1::uuid
+    ORDER BY
+      CASE p."scopeType"
+        WHEN 'SITE' THEN 1
+        WHEN 'WAREHOUSE' THEN 2
+        ELSE 3
+      END,
+      wh."key" ASC NULLS LAST,
+      sl."key" ASC NULLS LAST
     `,
     [sparePartId],
   );
@@ -278,7 +318,9 @@ async function loadSparePartStockLines(sparePartId: string): Promise<SparePartEm
 }
 
 async function loadSparePartRow(sparePartId: string): Promise<SparePartEmbeddingRow | null> {
-  const { rows } = await pool.query<Omit<SparePartEmbeddingRow, "stockLines" | "totalQuantity">>(
+  const { rows } = await pool.query<
+    Omit<SparePartEmbeddingRow, "stockLines" | "stockPolicies" | "totalQuantity">
+  >(
     `
     ${selectSparePartsForEmbeddingSql}
     WHERE sp."id" = $1::uuid
@@ -289,10 +331,11 @@ async function loadSparePartRow(sparePartId: string): Promise<SparePartEmbedding
   const base = rows[0];
   if (!base) return null;
   const stockLines = await loadSparePartStockLines(sparePartId);
+  const stockPolicies = await loadSparePartStockPolicies(sparePartId);
   const totalQuantity = stockLines
     .reduce((sum, line) => sum + Number(line.quantity || 0), 0)
     .toFixed(4);
-  return { ...base, stockLines, totalQuantity };
+  return { ...base, stockLines, stockPolicies, totalQuantity };
 }
 
 async function loadWarehouseStockLines(
@@ -310,12 +353,13 @@ async function loadWarehouseStockLines(
       sp."key" AS "sparePartKey",
       sp."name" AS "sparePartName",
       sp."articleNumber",
-      sc."storageLocation",
+      sl."key" AS "storageLocation",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     WHERE sc."warehouseId" = $1::uuid
-    ORDER BY sp."key" ASC, sc."storageLocation" ASC
+    ORDER BY sp."key" ASC, sl."key" ASC
     `,
     [warehouseId],
   );
@@ -425,9 +469,10 @@ export async function reindexWorkOrderDocumentsForAsset(assetId: string): Promis
 }
 
 export async function shouldIngestDocumentForEntity(
-  entityType: "asset" | "workOrder",
+  entityType: "asset" | "workOrder" | "sparePart",
   entityId: string,
 ): Promise<boolean> {
+  if (entityType === "sparePart") return false;
   if (entityType === "workOrder") return true;
   return assetHasWorkOrder(entityId);
 }

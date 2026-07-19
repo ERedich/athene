@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
 
 import {
@@ -12,6 +13,22 @@ import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql, type SiteAccessClient } from "./siteAccess.js";
+import {
+  quantityForPolicyScope,
+  resolveEffectiveStockPolicy,
+  type StockPolicyScopeType,
+} from "./stockPolicy.js";
+import {
+  DOCUMENT_MAX_BYTES,
+  createDocument,
+  deleteDocumentForEntity,
+  getDocumentContentForSparePart,
+  isDocumentCategory,
+  listSparePartDocuments,
+  patchDocumentForEntity,
+  sparePartDocumentCountSubquery,
+  type DocumentCategory,
+} from "./documents/index.js";
 import {
   deleteSparePartEmbeddings,
   reindexSparePart,
@@ -25,8 +42,33 @@ export type StockControlLineRow = {
   warehouseId: string;
   warehouseKey: string;
   warehouseName: string;
-  storageLocation: string;
+  storageLocationId: string;
+  storageLocationKey: string;
   quantity: string;
+};
+
+export type StockPolicyRow = {
+  id: string;
+  scopeType: StockPolicyScopeType;
+  warehouseId: string | null;
+  warehouseKey: string | null;
+  warehouseName: string | null;
+  storageLocationId: string | null;
+  storageLocationKey: string | null;
+  reorderLevel: string;
+  minStock: string;
+  orderQuantity: string;
+};
+
+export type EffectiveStockPolicyRow = {
+  scopeType: StockPolicyScopeType;
+  warehouseId: string | null;
+  storageLocationId: string | null;
+  storageLocationKey: string | null;
+  reorderLevel: number;
+  minStock: number;
+  orderQuantity: number;
+  onHandQuantity: number;
 };
 
 export type SparePartRow = {
@@ -45,7 +87,13 @@ export type SparePartRow = {
   manufacturer: string | null;
   articleNumber: string | null;
   alternativeDesignation: string | null;
+  totalQuantity: string;
+  siteQuantity: string;
+  hasPhoto: boolean;
+  documentCount: number;
   stockControlLines: StockControlLineRow[];
+  stockPolicies: StockPolicyRow[];
+  effectivePolicies: EffectiveStockPolicyRow[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -54,8 +102,17 @@ export type SparePartRow = {
 
 type StockControlLineInput = {
   warehouseId: string;
-  storageLocation: string;
+  storageLocationId: string;
   quantity: number;
+};
+
+type StockPolicyInput = {
+  scopeType: StockPolicyScopeType;
+  warehouseId: string | null;
+  storageLocationId: string | null;
+  reorderLevel: number;
+  minStock: number;
+  orderQuantity: number;
 };
 
 type SparePartBody = {
@@ -69,9 +126,24 @@ type SparePartBody = {
   articleNumber: string | null;
   alternativeDesignation: string | null;
   stockControlLines: StockControlLineInput[];
+  stockPolicies: StockPolicyInput[];
 };
 
 const router = Router();
+
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PHOTO_MAX_BYTES },
+});
+
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: DOCUMENT_MAX_BYTES },
+});
+
+const SCOPE_TYPES = new Set<StockPolicyScopeType>(["SITE", "WAREHOUSE", "STORAGE_LOCATION"]);
 
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -80,11 +152,24 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
 }
 
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("image/");
+}
+
 function readTrimmedOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+/** Parse a non-negative number; missing → 0; invalid → null. */
+function parseNonNegativeNumber(value: unknown, defaultWhenMissing = 0): number | null {
+  if (value === undefined || value === null || value === "") return defaultWhenMissing;
+  const n =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
 }
 
 function normalizeStockControlLines(value: unknown): StockControlLineInput[] | null {
@@ -96,20 +181,75 @@ function normalizeStockControlLines(value: unknown): StockControlLineInput[] | n
     if (entry === null || typeof entry !== "object") return null;
     const o = entry as Record<string, unknown>;
     const warehouseId = typeof o.warehouseId === "string" ? o.warehouseId.trim() : "";
-    const storageLocation = typeof o.storageLocation === "string" ? o.storageLocation.trim() : "";
-    const quantityRaw = o.quantity;
-    if (!isUuid(warehouseId)) return null;
-    const quantity =
-      typeof quantityRaw === "number"
-        ? quantityRaw
-        : typeof quantityRaw === "string"
-          ? Number(quantityRaw)
-          : NaN;
-    if (!Number.isFinite(quantity) || quantity < 0) return null;
-    const dedupeKey = `${warehouseId}\0${storageLocation}`;
+    const storageLocationId =
+      typeof o.storageLocationId === "string" ? o.storageLocationId.trim() : "";
+    if (!isUuid(warehouseId) || !isUuid(storageLocationId)) return null;
+    const quantity = parseNonNegativeNumber(o.quantity);
+    if (quantity === null) return null;
+    const dedupeKey = storageLocationId;
     if (seen.has(dedupeKey)) return null;
     seen.add(dedupeKey);
-    result.push({ warehouseId, storageLocation, quantity });
+    result.push({ warehouseId, storageLocationId, quantity });
+  }
+  return result;
+}
+
+function policyDedupeKey(policy: StockPolicyInput): string {
+  if (policy.scopeType === "SITE") return "SITE";
+  if (policy.scopeType === "WAREHOUSE") return `WAREHOUSE\0${policy.warehouseId}`;
+  return `STORAGE_LOCATION\0${policy.storageLocationId}`;
+}
+
+function normalizeStockPolicies(value: unknown): StockPolicyInput[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  const result: StockPolicyInput[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (entry === null || typeof entry !== "object") return null;
+    const o = entry as Record<string, unknown>;
+    const scopeRaw = typeof o.scopeType === "string" ? o.scopeType.trim() : "";
+    if (!SCOPE_TYPES.has(scopeRaw as StockPolicyScopeType)) return null;
+    const scopeType = scopeRaw as StockPolicyScopeType;
+    const warehouseIdRaw =
+      typeof o.warehouseId === "string" && o.warehouseId.trim() ? o.warehouseId.trim() : null;
+    const storageLocationIdRaw =
+      typeof o.storageLocationId === "string" && o.storageLocationId.trim()
+        ? o.storageLocationId.trim()
+        : null;
+
+    let warehouseId: string | null = null;
+    let storageLocationId: string | null = null;
+    if (scopeType === "SITE") {
+      if (warehouseIdRaw !== null || storageLocationIdRaw !== null) return null;
+    } else if (scopeType === "WAREHOUSE") {
+      if (!warehouseIdRaw || !isUuid(warehouseIdRaw)) return null;
+      if (storageLocationIdRaw !== null) return null;
+      warehouseId = warehouseIdRaw;
+    } else {
+      if (!warehouseIdRaw || !isUuid(warehouseIdRaw)) return null;
+      if (!storageLocationIdRaw || !isUuid(storageLocationIdRaw)) return null;
+      warehouseId = warehouseIdRaw;
+      storageLocationId = storageLocationIdRaw;
+    }
+
+    const reorderLevel = parseNonNegativeNumber(o.reorderLevel);
+    const minStock = parseNonNegativeNumber(o.minStock);
+    const orderQuantity = parseNonNegativeNumber(o.orderQuantity);
+    if (reorderLevel === null || minStock === null || orderQuantity === null) return null;
+
+    const policy: StockPolicyInput = {
+      scopeType,
+      warehouseId,
+      storageLocationId,
+      reorderLevel,
+      minStock,
+      orderQuantity,
+    };
+    const key = policyDedupeKey(policy);
+    if (seen.has(key)) return null;
+    seen.add(key);
+    result.push(policy);
   }
   return result;
 }
@@ -127,7 +267,16 @@ function parseBody(body: unknown): SparePartBody | null {
   const alternativeDesignation = readTrimmedOptionalString(o.alternativeDesignation);
   const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
   const stockControlLines = normalizeStockControlLines(o.stockControlLines);
-  if (!key || !name || !isUuid(siteId) || stockControlLines === null) return null;
+  const stockPolicies = normalizeStockPolicies(o.stockPolicies);
+  if (
+    !key ||
+    !name ||
+    !isUuid(siteId) ||
+    stockControlLines === null ||
+    stockPolicies === null
+  ) {
+    return null;
+  }
   if (classificationIdRaw !== null && !isUuid(classificationIdRaw)) return null;
   return {
     key,
@@ -140,6 +289,7 @@ function parseBody(body: unknown): SparePartBody | null {
     articleNumber,
     alternativeDesignation,
     stockControlLines,
+    stockPolicies,
   };
 }
 
@@ -176,9 +326,9 @@ async function assertWarehousesForSite(
   client: SiteAccessClient,
   userId: string,
   siteId: string,
-  lines: StockControlLineInput[],
+  warehouseIds: string[],
 ): Promise<void> {
-  for (const line of lines) {
+  for (const warehouseId of warehouseIds) {
     const { rowCount } = await client.query(
       `
       SELECT 1
@@ -187,12 +337,24 @@ async function assertWarehousesForSite(
         AND wh."siteId" = $2::uuid
         AND ${siteAccessSql('wh."siteId"', "$3")}
       `,
-      [line.warehouseId, siteId, userId],
+      [warehouseId, siteId, userId],
     );
     if ((rowCount ?? 0) === 0) {
       throw new Error("warehouse_site_mismatch");
     }
   }
+}
+
+function collectWarehouseIds(
+  lines: StockControlLineInput[],
+  policies: StockPolicyInput[],
+): string[] {
+  const ids = new Set<string>();
+  for (const line of lines) ids.add(line.warehouseId);
+  for (const policy of policies) {
+    if (policy.warehouseId) ids.add(policy.warehouseId);
+  }
+  return [...ids];
 }
 
 function normalizeQuantityForCompare(quantity: number | string): string {
@@ -201,11 +363,11 @@ function normalizeQuantityForCompare(quantity: number | string): string {
   return n.toFixed(4);
 }
 
-function stockLineLocationKey(line: Pick<StockControlLineInput, "warehouseId" | "storageLocation">): string {
-  return `${line.warehouseId}\0${line.storageLocation}`;
+function stockLineLocationKey(line: Pick<StockControlLineInput, "storageLocationId">): string {
+  return line.storageLocationId;
 }
 
-/** When MT-ACSD is N: existing rows (by warehouse+location) must be unchanged; new rows may be added. */
+/** When MT-ACSD is N: existing rows (by storage location) must be unchanged; new rows may be added. */
 function assertExistingStockLinesUnchanged(
   existing: StockControlLineInput[],
   incoming: StockControlLineInput[],
@@ -217,6 +379,9 @@ function assertExistingStockLinesUnchanged(
     const key = stockLineLocationKey(ex);
     const inc = incomingByKey.get(key);
     if (!inc) {
+      throw new Error("stock_data_locked");
+    }
+    if (ex.warehouseId !== inc.warehouseId) {
       throw new Error("stock_data_locked");
     }
     if (normalizeQuantityForCompare(ex.quantity) !== normalizeQuantityForCompare(inc.quantity)) {
@@ -231,13 +396,13 @@ async function fetchStockControlLineInputs(
 ): Promise<StockControlLineInput[]> {
   const { rows } = await client.query<{
     warehouseId: string;
-    storageLocation: string;
+    storageLocationId: string;
     quantity: string;
   }>(
     `
     SELECT
       sc."warehouseId"::text AS "warehouseId",
-      sc."storageLocation",
+      sc."storageLocationId"::text AS "storageLocationId",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     WHERE sc."sparePartId" = $1::uuid
@@ -246,7 +411,7 @@ async function fetchStockControlLineInputs(
   );
   return rows.map((row) => ({
     warehouseId: row.warehouseId,
-    storageLocation: row.storageLocation,
+    storageLocationId: row.storageLocationId,
     quantity: Number(row.quantity),
   }));
 }
@@ -260,11 +425,71 @@ async function setStockControlLines(
   for (const line of lines) {
     await client.query(
       `
-      INSERT INTO "stockControl" ("sparePartId", "warehouseId", "storageLocation", "quantity")
-      VALUES ($1::uuid, $2::uuid, $3, $4)
+      INSERT INTO "stockControl" ("sparePartId", "warehouseId", "storageLocationId", "quantity")
+      VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
       `,
-      [sparePartId, line.warehouseId, line.storageLocation, line.quantity],
+      [sparePartId, line.warehouseId, line.storageLocationId, line.quantity],
     );
+  }
+}
+
+async function setStockPolicies(
+  client: SiteAccessClient,
+  sparePartId: string,
+  policies: StockPolicyInput[],
+): Promise<void> {
+  await client.query(`DELETE FROM "sparePartStockPolicy" WHERE "sparePartId" = $1::uuid`, [
+    sparePartId,
+  ]);
+  for (const policy of policies) {
+    await client.query(
+      `
+      INSERT INTO "sparePartStockPolicy" (
+        "sparePartId", "scopeType", "warehouseId", "storageLocationId",
+        "reorderLevel", "minStock", "orderQuantity"
+      )
+      VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6, $7)
+      `,
+      [
+        sparePartId,
+        policy.scopeType,
+        policy.warehouseId,
+        policy.storageLocationId,
+        policy.reorderLevel,
+        policy.minStock,
+        policy.orderQuantity,
+      ],
+    );
+  }
+}
+
+async function assertStorageLocationsMatchWarehouse(
+  client: SiteAccessClient,
+  lines: StockControlLineInput[],
+  policies: StockPolicyInput[],
+): Promise<void> {
+  const pairs = new Map<string, string>();
+  for (const line of lines) {
+    pairs.set(line.storageLocationId, line.warehouseId);
+  }
+  for (const policy of policies) {
+    if (policy.storageLocationId && policy.warehouseId) {
+      pairs.set(policy.storageLocationId, policy.warehouseId);
+    }
+  }
+  for (const [storageLocationId, warehouseId] of pairs) {
+    const { rowCount } = await client.query(
+      `
+      SELECT 1
+      FROM "storageLocation" sl
+      WHERE sl."id" = $1::uuid
+        AND sl."warehouseId" = $2::uuid
+      `,
+      [storageLocationId, warehouseId],
+    );
+    if ((rowCount ?? 0) === 0) {
+      throw new Error("storage_location_warehouse_mismatch");
+    }
   }
 }
 
@@ -285,6 +510,10 @@ const selectSparePartsSql = `
     sp."manufacturer",
     sp."articleNumber",
     sp."alternativeDesignation",
+    COALESCE(stock_qty."totalQuantity", 0)::text AS "totalQuantity",
+    COALESCE(stock_qty."siteQuantity", 0)::text AS "siteQuantity",
+    (sp."photoContent" IS NOT NULL) AS "hasPhoto",
+    COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
     sp."createdAt",
     sp."updatedAt",
     COALESCE(created_by."loginName", sp."createdBy"::text) AS "createdBy",
@@ -294,9 +523,24 @@ const selectSparePartsSql = `
   LEFT JOIN "classification" clf ON clf."id" = sp."classificationId"
   LEFT JOIN "users" created_by ON created_by."id" = sp."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = sp."updatedBy"
+  ${sparePartDocumentCountSubquery}
+  LEFT JOIN LATERAL (
+    SELECT
+      COALESCE(SUM(sc."quantity"), 0) AS "totalQuantity",
+      COALESCE(
+        SUM(sc."quantity") FILTER (WHERE wh."siteId" = sp."siteId"),
+        0
+      ) AS "siteQuantity"
+    FROM "stockControl" sc
+    JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    WHERE sc."sparePartId" = sp."id"
+  ) stock_qty ON TRUE
 `;
 
-type SparePartListRow = Omit<SparePartRow, "stockControlLines">;
+type SparePartListRow = Omit<
+  SparePartRow,
+  "stockControlLines" | "stockPolicies" | "effectivePolicies"
+>;
 
 async function fetchStockControlLines(
   client: SiteAccessClient,
@@ -309,16 +553,120 @@ async function fetchStockControlLines(
       sc."warehouseId",
       wh."key" AS "warehouseKey",
       wh."name" AS "warehouseName",
-      sc."storageLocation",
+      sc."storageLocationId",
+      sl."key" AS "storageLocationKey",
       sc."quantity"::text AS "quantity"
     FROM "stockControl" sc
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
+    JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
     WHERE sc."sparePartId" = $1::uuid
-    ORDER BY wh."key" ASC, sc."storageLocation" ASC
+    ORDER BY wh."key" ASC, sl."key" ASC
     `,
     [sparePartId],
   );
   return rows;
+}
+
+async function fetchStockPolicies(
+  client: SiteAccessClient,
+  sparePartId: string,
+): Promise<StockPolicyRow[]> {
+  const { rows } = await client.query<StockPolicyRow>(
+    `
+    SELECT
+      p."id",
+      p."scopeType",
+      p."warehouseId",
+      wh."key" AS "warehouseKey",
+      wh."name" AS "warehouseName",
+      p."storageLocationId",
+      sl."key" AS "storageLocationKey",
+      p."reorderLevel"::text AS "reorderLevel",
+      p."minStock"::text AS "minStock",
+      p."orderQuantity"::text AS "orderQuantity"
+    FROM "sparePartStockPolicy" p
+    LEFT JOIN "warehouse" wh ON wh."id" = p."warehouseId"
+    LEFT JOIN "storageLocation" sl ON sl."id" = p."storageLocationId"
+    WHERE p."sparePartId" = $1::uuid
+    ORDER BY
+      CASE p."scopeType"
+        WHEN 'SITE' THEN 1
+        WHEN 'WAREHOUSE' THEN 2
+        ELSE 3
+      END,
+      wh."key" ASC NULLS LAST,
+      sl."key" ASC NULLS LAST
+    `,
+    [sparePartId],
+  );
+  return rows;
+}
+
+function buildEffectivePolicies(
+  policies: StockPolicyRow[],
+  lines: StockControlLineRow[],
+): EffectiveStockPolicyRow[] {
+  const quantityLines = lines.map((line) => ({
+    warehouseId: line.warehouseId,
+    storageLocationId: line.storageLocationId,
+    quantity: Number(line.quantity) || 0,
+  }));
+  const policyRecords = policies.map((p) => ({
+    id: p.id,
+    scopeType: p.scopeType,
+    warehouseId: p.warehouseId,
+    storageLocationId: p.storageLocationId,
+    reorderLevel: Number(p.reorderLevel) || 0,
+    minStock: Number(p.minStock) || 0,
+    orderQuantity: Number(p.orderQuantity) || 0,
+  }));
+  const keyById = new Map(lines.map((l) => [l.storageLocationId, l.storageLocationKey]));
+  for (const p of policies) {
+    if (p.storageLocationId && p.storageLocationKey) {
+      keyById.set(p.storageLocationId, p.storageLocationKey);
+    }
+  }
+
+  const results: EffectiveStockPolicyRow[] = [];
+  const seen = new Set<string>();
+
+  const pushResolved = (
+    resolved: NonNullable<ReturnType<typeof resolveEffectiveStockPolicy>>,
+  ) => {
+    const key = `${resolved.scopeType}\0${resolved.warehouseId ?? ""}\0${resolved.storageLocationId ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({
+      ...resolved,
+      storageLocationKey: resolved.storageLocationId
+        ? (keyById.get(resolved.storageLocationId) ?? null)
+        : null,
+      onHandQuantity: quantityForPolicyScope(quantityLines, resolved),
+    });
+  };
+
+  const siteResolved = resolveEffectiveStockPolicy(policyRecords);
+  if (siteResolved?.scopeType === "SITE") pushResolved(siteResolved);
+
+  const warehouseIds = new Set<string>();
+  for (const line of quantityLines) warehouseIds.add(line.warehouseId);
+  for (const policy of policyRecords) {
+    if (policy.warehouseId) warehouseIds.add(policy.warehouseId);
+  }
+  for (const warehouseId of warehouseIds) {
+    const resolved = resolveEffectiveStockPolicy(policyRecords, { warehouseId });
+    if (resolved) pushResolved(resolved);
+  }
+
+  for (const line of quantityLines) {
+    const resolved = resolveEffectiveStockPolicy(policyRecords, {
+      warehouseId: line.warehouseId,
+      storageLocationId: line.storageLocationId,
+    });
+    if (resolved) pushResolved(resolved);
+  }
+
+  return results;
 }
 
 async function fetchSparePartById(
@@ -335,7 +683,9 @@ async function fetchSparePartById(
   const base = rows[0];
   if (!base) return null;
   const stockControlLines = await fetchStockControlLines(client, id);
-  return { ...base, stockControlLines };
+  const stockPolicies = await fetchStockPolicies(client, id);
+  const effectivePolicies = buildEffectivePolicies(stockPolicies, stockControlLines);
+  return { ...base, stockControlLines, stockPolicies, effectivePolicies };
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -353,7 +703,14 @@ router.get("/", async (req: Request, res: Response) => {
       `,
       [userId],
     );
-    res.json(rows.map((row) => ({ ...row, stockControlLines: [] as StockControlLineRow[] })));
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        stockControlLines: [] as StockControlLineRow[],
+        stockPolicies: [] as StockPolicyRow[],
+        effectivePolicies: [] as EffectiveStockPolicyRow[],
+      })),
+    );
   } catch (err) {
     sendPgError(res, err);
   }
@@ -385,7 +742,9 @@ router.get("/:id", async (req: Request, res: Response) => {
       return;
     }
     const stockControlLines = await fetchStockControlLines(pool, id);
-    res.json({ ...base, stockControlLines });
+    const stockPolicies = await fetchStockPolicies(pool, id);
+    const effectivePolicies = buildEffectivePolicies(stockPolicies, stockControlLines);
+    res.json({ ...base, stockControlLines, stockPolicies, effectivePolicies });
   } catch (err) {
     sendPgError(res, err);
   }
@@ -408,6 +767,7 @@ router.post("/", async (req: Request, res: Response) => {
     articleNumber,
     alternativeDesignation,
     stockControlLines,
+    stockPolicies,
   } = parsed;
   try {
     const meta = auditMeta(req);
@@ -422,7 +782,13 @@ router.post("/", async (req: Request, res: Response) => {
         classificationId,
         "material",
       );
-      await assertWarehousesForSite(client, meta.userId, effectiveSiteId, stockControlLines);
+      await assertWarehousesForSite(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        collectWarehouseIds(stockControlLines, stockPolicies),
+      );
+      await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO "sparePart" (
@@ -447,6 +813,7 @@ router.post("/", async (req: Request, res: Response) => {
       const sparePartId = inserted.rows[0]?.id;
       if (!sparePartId) return null;
       await setStockControlLines(client, sparePartId, stockControlLines);
+      await setStockPolicies(client, sparePartId, stockPolicies);
       return await fetchSparePartById(client, sparePartId);
     });
     if (!row) {
@@ -476,6 +843,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(409).json({ error: "warehouse_site_mismatch" });
       return;
     }
+    if (message === "storage_location_warehouse_mismatch") {
+      res.status(409).json({ error: "storage_location_warehouse_mismatch" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -502,6 +873,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     articleNumber,
     alternativeDesignation,
     stockControlLines,
+    stockPolicies,
   } = parsed;
   try {
     const meta = auditMeta(req);
@@ -534,7 +906,13 @@ router.put("/:id", async (req: Request, res: Response) => {
       if (!allowChangeStockdata && existingStockLines.length > 0) {
         assertExistingStockLinesUnchanged(existingStockLines, stockControlLines);
       }
-      await assertWarehousesForSite(client, meta.userId, effectiveSiteId, stockControlLines);
+      await assertWarehousesForSite(
+        client,
+        meta.userId,
+        effectiveSiteId,
+        collectWarehouseIds(stockControlLines, stockPolicies),
+      );
+      await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
       await client.query(
         `
         UPDATE "sparePart"
@@ -564,6 +942,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         ],
       );
       await setStockControlLines(client, id, stockControlLines);
+      await setStockPolicies(client, id, stockPolicies);
       return await fetchSparePartById(client, id);
     });
     if (!row) {
@@ -591,6 +970,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "warehouse_site_mismatch") {
       res.status(409).json({ error: "warehouse_site_mismatch" });
+      return;
+    }
+    if (message === "storage_location_warehouse_mismatch") {
+      res.status(409).json({ error: "storage_location_warehouse_mismatch" });
       return;
     }
     if (message === "stock_data_locked") {
@@ -639,6 +1022,316 @@ router.delete("/:id", async (req: Request, res: Response) => {
       }
     });
     res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/photo", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{
+      photoMimeType: string | null;
+      photoContent: Buffer | null;
+    }>(
+      `
+      SELECT sp."photoMimeType", sp."photoContent"
+      FROM "sparePart" sp
+      WHERE sp."id" = $1::uuid
+        AND sp."photoContent" IS NOT NULL
+        AND ${siteAccessSql('sp."siteId"', "$2")}
+      `,
+      [id, userId],
+    );
+    const row = rows[0];
+    if (!row?.photoContent) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const mimeType = row.photoMimeType?.trim() || "application/octet-stream";
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", String(row.photoContent.length));
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(row.photoContent);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/photo", photoUpload.single("file"), async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "missing_file" });
+    return;
+  }
+  const mimeType = req.file.mimetype?.trim() || "application/octet-stream";
+  if (!isImageMimeType(mimeType)) {
+    res.status(400).json({ error: "invalid_mime_type" });
+    return;
+  }
+  const content = req.file.buffer;
+  try {
+    const meta = auditMeta(req);
+    const updated = await withAuditContext(meta, async (client) => {
+      const result = await client.query(
+        `
+        UPDATE "sparePart"
+        SET "photoMimeType" = $1, "photoContent" = $2
+        WHERE "id" = $3::uuid
+          AND ${siteAccessSql('"siteId"', "$4")}
+        `,
+        [mimeType, content, id, meta.userId],
+      );
+      return result.rowCount ?? 0;
+    });
+    if (updated === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    scheduleReindex(`sparePart photo ${id}`, () => reindexSparePart(id));
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.delete("/:id/photo", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const updated = await withAuditContext(meta, async (client) => {
+      const result = await client.query(
+        `
+        UPDATE "sparePart"
+        SET "photoMimeType" = NULL, "photoContent" = NULL
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      return result.rowCount ?? 0;
+    });
+    if (updated === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    scheduleReindex(`sparePart photo delete ${id}`, () => reindexSparePart(id));
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/documents", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const rows = await listSparePartDocuments(userId, id);
+    if (rows === null) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/documents", documentUpload.single("file"), async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "missing_file" });
+    return;
+  }
+
+  const fileName = req.file.originalname?.trim() || "document";
+  const displayNameRaw = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+  const displayName = displayNameRaw || fileName;
+  const categoryRaw = typeof req.body?.category === "string" ? req.body.category : "general";
+  if (!isDocumentCategory(categoryRaw)) {
+    res.status(400).json({ error: "invalid_document_category" });
+    return;
+  }
+  const mimeType = req.file.mimetype?.trim() || "application/octet-stream";
+  const content = req.file.buffer;
+  const fileSize = req.file.size;
+
+  try {
+    const meta = auditMeta(req);
+    const row = await createDocument(meta, {
+      fileName,
+      displayName,
+      category: categoryRaw as DocumentCategory,
+      mimeType,
+      fileSize,
+      content,
+      referenceApp: "spareParts",
+      entityType: "sparePart",
+      entityId: id,
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(201).json(row);
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/documents/:documentId/content", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id, documentId } = req.params;
+  if (!isUuid(id) || !isUuid(documentId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const doc = await getDocumentContentForSparePart(userId, id, documentId);
+    if (!doc) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const encodedName = encodeURIComponent(doc.displayName || doc.fileName);
+    res.setHeader("Content-Type", doc.mimeType || "application/octet-stream");
+    res.setHeader("Content-Length", String(doc.fileSize));
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodedName}`);
+    res.send(doc.content);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.delete("/:id/documents/:documentId", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id, documentId } = req.params;
+  if (!isUuid(id) || !isUuid(documentId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const deleted = await deleteDocumentForEntity(meta, "sparePart", id, documentId);
+    if (deleted === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.patch("/:id/documents/:documentId", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id, documentId } = req.params;
+  if (!isUuid(id) || !isUuid(documentId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const body = req.body;
+  const displayNameRaw =
+    typeof body?.displayName === "string" ? (body.displayName as string).trim() : undefined;
+  const categoryRaw = typeof body?.category === "string" ? (body.category as string).trim() : undefined;
+  if (displayNameRaw === undefined && categoryRaw === undefined) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  if (displayNameRaw !== undefined && !displayNameRaw) {
+    res.status(400).json({ error: "invalid_display_name" });
+    return;
+  }
+  if (categoryRaw !== undefined && !isDocumentCategory(categoryRaw)) {
+    res.status(400).json({ error: "invalid_document_category" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await patchDocumentForEntity(meta, "sparePart", id, documentId, {
+      displayName: displayNameRaw,
+      category: categoryRaw as DocumentCategory | undefined,
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {
       res.status(401).json({ error: "unauthorized" });

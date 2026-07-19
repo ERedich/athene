@@ -8,17 +8,11 @@ import {
   type PointerEvent,
 } from "react";
 import {
-  Bell,
-  BellOff,
-  CircleX,
-  Columns3,
-  Copy,
   File,
-  Filter,
-  MessageCircle,
   Pencil,
   Plus,
-  Send,
+  Search,
+  Timer,
   Trash2,
   TriangleAlert,
   UserPlus,
@@ -40,7 +34,8 @@ import { APP_PARAM_KEY_ENABLE_CLEVER_SEARCH } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
-import { useTableContextMenu } from "../lib/useTableContextMenu";
+import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
+import { buildWorkOrderBigMenuModel } from "../lib/workOrderBigContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
@@ -63,24 +58,11 @@ import {
   fetchWorkOrderSearchPresets,
   isSamePresetId,
 } from "../lib/workOrderSearchPresetApi";
-import { useTableLayoutController } from "../hooks/useTableLayoutController";
-import { isSameLayoutId } from "../lib/tableLayoutApi";
-import { buildMultiSortMeta } from "../components/tableLayouts/MonitoringWorkOrdersColumns";
-import { TableLayoutEditorDialog } from "../components/tableLayouts/TableLayoutEditorDialog";
 import {
   isValidMonitoringTablePersistedState,
   MONITORING_TABLE_STATE_STORAGE_KEY,
   repairMonitoringTableStateStorage,
 } from "../lib/monitoringTableState";
-import {
-  MONITORING_WORK_ORDERS_COLUMN_IDS,
-  originalMonitoringTableLayoutPayload,
-  visibleColumnIdsFromPayload,
-  sanitizeMonitoringTableLayoutPayload,
-  STANDARD_MONITORING_LAYOUT_NAME,
-  TABLE_KEY_MONITORING_WORK_ORDERS,
-  type MonitoringColumnId,
-} from "../lib/tableLayouts/tableLayoutPayload";
 import { workOrderStatusAllowsFeedbackTab } from "../lib/workOrderStatus";
 import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
@@ -90,13 +72,29 @@ import {
   AppPauseIcon,
   AppPlayStartIcon,
   AppSquareStopIcon,
-  LucideSpinner,
   lucidePrimeBtnIcon,
 } from "../icons/lucide";
 
 const ORDERS_TABLE_VIRTUAL_ROW_PX = 38;
 const MONITOR_HIGHLIGHT_MS = 10_000;
 const MONITOR_HIGHLIGHT_FADE_MS = 1_000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Whole days past planned end; negative / zero means not yet overdue by a full day. */
+function daysPastPlannedEnd(plannedEnd: string, nowMs = Date.now()): number {
+  const endMs = new Date(plannedEnd).getTime();
+  if (!Number.isFinite(endMs)) return 0;
+  return Math.floor((nowMs - endMs) / MS_PER_DAY);
+}
+
+/** Orange stopwatch: 1–7 days past end; red: more than 7. Closed/cancelled orders are ignored. */
+function monitoringOverdueSeverity(row: WorkOrder): "warning" | "critical" | null {
+  if (row.status === "done" || row.status === "cancelled") return null;
+  const days = daysPastPlannedEnd(row.plannedEnd);
+  if (days > 7) return "critical";
+  if (days >= 1) return "warning";
+  return null;
+}
 
 const actionNavItem =
   "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -146,20 +144,6 @@ export function MonitoringPage() {
   const [searchPresets, setSearchPresets] = useState<{ id: string; name: string; isOwner: boolean }[]>([]);
   const [headerPresetSelectionId, setHeaderPresetSelectionId] = useState<string | null>(null);
   const [searchBootstrapDone, setSearchBootstrapDone] = useState(false);
-  const [layoutEditorVisible, setLayoutEditorVisible] = useState(false);
-
-  const {
-    layouts: tableLayoutsList,
-    bootstrapDone: tableLayoutBootstrapDone,
-    activeLayoutId,
-    activePayload,
-    activeLayoutName,
-    monitoringDefaultLayoutId,
-    headerSelectionId: tableLayoutHeaderSelectionId,
-    reloadLayouts: reloadTableLayouts,
-    applyLayoutById,
-    setActiveFromDetail,
-  } = useTableLayoutController(TABLE_KEY_MONITORING_WORK_ORDERS);
 
   const cleverSearchEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_ENABLE_CLEVER_SEARCH]);
   const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
@@ -180,16 +164,6 @@ export function MonitoringPage() {
     () => searchPresets.map((p) => ({ label: p.name, value: p.id })),
     [searchPresets],
   );
-
-  const headerLayoutDropdownOptions = useMemo(
-    () => [
-      { label: t("tableLayouts.personal"), value: "__PERSONAL__" as const },
-      ...tableLayoutsList.map((l) => ({ label: l.name, value: l.id })),
-    ],
-    [tableLayoutsList, t],
-  );
-
-  const headerLayoutSelectionValue = tableLayoutHeaderSelectionId ?? "__PERSONAL__";
 
   const preloadRows = useMemo<WorkOrder[]>(
     () =>
@@ -357,25 +331,6 @@ export function MonitoringPage() {
     }
     setHeaderPresetSelectionId(null);
   }, [headerPresetSelectionId, resetSearchToUnconfiguredState, searchBootstrapDone, searchPresets]);
-
-  const applyHeaderTableLayout = useCallback(
-    async (value: string | null) => {
-      if (!value || value === "__PERSONAL__") {
-        await applyLayoutById(null);
-        return;
-      }
-      try {
-        await applyLayoutById(value);
-      } catch {
-        toastRef.current?.show({
-          severity: "error",
-          summary: t("tableLayouts.applyError"),
-          life: 6000,
-        });
-      }
-    },
-    [applyLayoutById, t],
-  );
 
   const applyHeaderSearchPreset = useCallback(
     async (presetId: string | null) => {
@@ -606,7 +561,11 @@ export function MonitoringPage() {
             <span>{t("workOrders.delete")}</span>
           </button>
         </li>
-        <li className="ml-auto flex items-center gap-2">
+        <li
+          aria-hidden
+          className="mx-1 h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)]"
+        />
+        <li>
           <button
             type="button"
             className={primaryActionNavItem}
@@ -615,9 +574,11 @@ export function MonitoringPage() {
               setSearchPanelVisible(true);
             }}
           >
-            <Filter className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <Search className={`${primaryActionIcon} !h-4 !w-4 shrink-0`} size={16} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.searchPanel.open")}</span>
           </button>
+        </li>
+        <li className="ml-auto flex items-center gap-2">
           {searchPresets.length > 0 ? (
             <Dropdown
               aria-label={t("workOrders.searchPresets.headerLabel")}
@@ -633,26 +594,6 @@ export function MonitoringPage() {
               appendTo={overlayAppendTo}
             />
           ) : null}
-          <Dropdown
-            aria-label={t("tableLayouts.headerLabel")}
-            value={headerLayoutSelectionValue}
-            options={headerLayoutDropdownOptions}
-            optionLabel="label"
-            optionValue="value"
-            onChange={(e) => void applyHeaderTableLayout((e.value as string | null) ?? "__PERSONAL__")}
-            className="app-header-preset-dropdown app-inline-icon-dropdown h-9 min-w-[14rem] w-60 shrink-0 text-sm"
-            panelClassName="app-header-preset-dropdown-panel"
-            appendTo={overlayAppendTo}
-          />
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            onClick={() => setLayoutEditorVisible(true)}
-            title={t("tableLayouts.configure")}
-          >
-            <Columns3 className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("tableLayouts.configure")}</span>
-          </button>
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
             <InputText
@@ -671,10 +612,7 @@ export function MonitoringPage() {
   }, [
     appliedAdvanced,
     applyHeaderSearchPreset,
-    applyHeaderTableLayout,
     confirmDelete,
-    headerLayoutDropdownOptions,
-    headerLayoutSelectionValue,
     headerPresetDropdownOptions,
     headerPresetSelectionId,
     openCreate,
@@ -774,6 +712,35 @@ export function MonitoringPage() {
 
   const statusBody = useCallback((row: WorkOrder) => statusLabel(row.status), [statusLabel]);
 
+  const orderNumberBody = useCallback(
+    (row: WorkOrder) => {
+      if (isPreloadMode) return "…";
+      const severity = monitoringOverdueSeverity(row);
+      const overdueTitle =
+        severity === "critical"
+          ? t("monitoring.overdueMoreThan7Days")
+          : severity === "warning"
+            ? t("monitoring.overdue1To7Days")
+            : undefined;
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <span>{row.orderNumber}</span>
+          {severity ? (
+            <Timer
+              className={`h-3.5 w-3.5 shrink-0 ${
+                severity === "critical" ? "text-red-500" : "text-orange-500"
+              }`}
+              strokeWidth={2}
+              aria-label={overdueTitle}
+              title={overdueTitle}
+            />
+          ) : null}
+        </span>
+      );
+    },
+    [isPreloadMode, t],
+  );
+
   const statusCellClassName = useCallback((row: WorkOrder) => `app-wo-status-cell app-wo-status-${row.status}`, []);
 
   const startOrder = useCallback(
@@ -832,82 +799,54 @@ export function MonitoringPage() {
     [cancelWorkOrder, t],
   );
 
-  const workOrderContextMenuExtraItems = useCallback(
-    (row: WorkOrder | null) => {
-      if (!row) return [];
-      const canOpenFeedbackTab = workOrderStatusAllowsFeedbackTab(row.status);
-      const canCancel = row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
-      const isSubscribed = subscriptions.isSubscribed(row.id);
-      return [
-        {
-          label: t("workOrders.contextMenuCopyOrder"),
-          icon: <Copy className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !row.workgroupId,
-          command: () => {
-            if (row.workgroupId) woDialog.openCopy(row, { onSaved: onDialogSaved });
-          },
-        },
-        {
-          label: t("workOrders.contextMenuAssignEmployees"),
-          icon: <UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: row.status === "ended" || row.status === "done" || row.status === "cancelled",
-          command: () => openPlanningTab(row),
-        },
-        {
-          label: t("workOrders.contextMenuCreateFeedback"),
-          icon: <Send className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !canOpenFeedbackTab,
-          command: () => openFeedbackTab(row, "create"),
-        },
-        {
-          label: isSubscribed ? t("abonnements.unsubscribeOrder") : t("abonnements.subscribeOrder"),
-          icon: isSubscribed ? (
-            <BellOff className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-          ) : (
-            <Bell className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-          ),
-          command: () => {
-            void (async () => {
-              try {
-                if (isSubscribed) {
-                  await subscriptions.unsubscribe(row.id);
-                } else {
-                  await subscriptions.subscribe(row.id);
-                }
-              } catch {
-                toastRef.current?.show({
-                  severity: "error",
-                  summary: t("abonnements.subscriptionActionError"),
-                  life: 6000,
-                });
-              }
-            })();
-          },
-        },
-        {
-          label: t("workOrders.contextMenuCancelOrder"),
-          icon: <CircleX className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-          disabled: !canCancel,
-          command: () => confirmCancelWorkOrder(row),
-        },
-      ];
+  const closeWorkOrder = useCallback(
+    async (row: WorkOrder) => {
+      try {
+        const res = await apiFetch(`/api/work-orders/${row.id}/done`, { method: "POST" });
+        if (!res.ok) {
+          let code: string | undefined;
+          try {
+            code = ((await res.json()) as { error?: string }).error;
+          } catch {
+            /* ignore */
+          }
+          const msg =
+            code === "cannot_done_from_status"
+              ? t("workOrders.cannotCloseFromStatus")
+              : t("workOrders.closeError");
+          toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
+          return;
+        }
+        const updated = (await res.json()) as WorkOrder;
+        setSelectedOrder((cur) => (cur?.id === updated.id ? updated : cur));
+        await loadData();
+        toastRef.current?.show({ severity: "success", summary: t("workOrders.closed"), life: 3000 });
+      } catch {
+        toastRef.current?.show({ severity: "error", summary: t("workOrders.closeError"), life: 6000 });
+      }
     },
-    [confirmCancelWorkOrder, onDialogSaved, openFeedbackTab, openPlanningTab, subscriptions, t, woDialog],
+    [loadData, t],
   );
 
-  const atheneContextMenuItems = useCallback(
-    (row: WorkOrder | null) => [
-      {
-        label: t("assistant.askAthene"),
-        className: "app-context-menu-athene",
-        icon: athene.busy ? (
-          <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-        ) : (
-          <MessageCircle className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-        ),
-        disabled: !row || athene.busy,
-        command: () => {
-          if (!row) return;
+  const confirmCloseWorkOrder = useCallback(
+    (row: WorkOrder) => {
+      confirmDialog({
+        message: t("workOrders.confirmClose", { name: row.name }),
+        header: t("workOrders.confirmCloseTitle"),
+        icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
+        acceptLabel: t("workOrders.yes"),
+        rejectLabel: t("workOrders.no"),
+        accept: () => void closeWorkOrder(row),
+      });
+    },
+    [closeWorkOrder, t],
+  );
+
+  const bigMenuModel = useMemo(
+    () =>
+      buildWorkOrderBigMenuModel(selectedOrder, t, {
+        atheneBusy: athene.busy,
+        onAskAthene: (row) => {
           athene.openWithContext({
             type: "workOrder",
             id: row.id,
@@ -932,18 +871,59 @@ export function MonitoringPage() {
             },
           });
         },
-      },
+        onCreate: openCreate,
+        onEdit: openEdit,
+        onDelete: confirmDelete,
+        onStart: (row) => void startOrder(row),
+        onStop: (row) => openFeedbackTab(row, "stop"),
+        onPause: (row) => openFeedbackTab(row, "pause"),
+        onAssignEmployees: openPlanningTab,
+        onCreateFeedback: (row) => openFeedbackTab(row, "create"),
+        onCloseOrder: confirmCloseWorkOrder,
+        onCancelOrder: confirmCancelWorkOrder,
+        subscription: {
+          isSubscribed: (id) => subscriptions.isSubscribed(id),
+          onToggle: (row) => {
+            void (async () => {
+              try {
+                if (subscriptions.isSubscribed(row.id)) {
+                  await subscriptions.unsubscribe(row.id);
+                } else {
+                  await subscriptions.subscribe(row.id);
+                }
+              } catch {
+                toastRef.current?.show({
+                  severity: "error",
+                  summary: t("abonnements.subscriptionActionError"),
+                  life: 6000,
+                });
+              }
+            })();
+          },
+        },
+      }),
+    [
+      athene,
+      confirmCancelWorkOrder,
+      confirmCloseWorkOrder,
+      confirmDelete,
+      openCreate,
+      openEdit,
+      openFeedbackTab,
+      openPlanningTab,
+      selectedOrder,
+      startOrder,
+      subscriptions,
+      t,
     ],
-    [athene, t],
   );
 
-  const tableCtx = useTableContextMenu<WorkOrder>({
-    labels: { new: t("workOrders.new"), edit: t("workOrders.edit"), delete: t("workOrders.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+  const tableCtx = useTableBigContextMenu<WorkOrder>({
     selection: selectedOrder,
     setSelection: setSelectedOrder,
-    leadingItems: atheneContextMenuItems,
-    extraItems: workOrderContextMenuExtraItems,
+    sections: bigMenuModel.sections,
+    header: bigMenuModel.header,
+    cornerAction: bigMenuModel.cornerAction,
   });
 
   const startStopBody = useCallback(
@@ -990,59 +970,21 @@ export function MonitoringPage() {
     [openFeedbackTab, startOrder, t],
   );
 
-  const effectiveLayoutPayload = useMemo(
-    () => (activePayload ? sanitizeMonitoringTableLayoutPayload(activePayload) : null),
-    [activePayload],
-  );
-
-  /** Persönlich or monitoring default / „Standard Monitoring“ — stateStorage + resize/reorder. */
-  const isMonitoringDefaultLayout = Boolean(
-    tableLayoutBootstrapDone &&
-      activeLayoutId &&
-      (activeLayoutName === STANDARD_MONITORING_LAYOUT_NAME ||
-        (monitoringDefaultLayoutId && isSameLayoutId(activeLayoutId, monitoringDefaultLayoutId))),
-  );
-  const useStatefulTable = activeLayoutId == null || isMonitoringDefaultLayout;
-
-  /** Custom (non-default) layouts: columns/sort/frozen from saved payload only. */
   const [monitoringTableMountEpoch, setMonitoringTableMountEpoch] = useState(0);
 
-  const visibleMonitoringColumnIds = useMemo(() => {
-    if (useStatefulTable) return new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
-    if (!effectiveLayoutPayload) return new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
-    const ids = visibleColumnIdsFromPayload(effectiveLayoutPayload);
-    return ids.length > 0 ? new Set(ids) : new Set<string>(MONITORING_WORK_ORDERS_COLUMN_IDS);
-  }, [effectiveLayoutPayload, useStatefulTable]);
-
-  const isMonitoringColumnVisible = useCallback(
-    (columnId: MonitoringColumnId) => visibleMonitoringColumnIds.has(columnId),
-    [visibleMonitoringColumnIds],
-  );
-
   useLayoutEffect(() => {
-    if (!useStatefulTable) return;
     const before = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
     repairMonitoringTableStateStorage();
     const after = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
     if (before !== after) {
       setMonitoringTableMountEpoch((epoch) => epoch + 1);
     }
-  }, [useStatefulTable, activeLayoutId]);
+  }, []);
 
   const handleMonitoringTableStateSave = useCallback((state: Record<string, unknown>) => {
     if (!isValidMonitoringTablePersistedState(state)) return;
     window.localStorage.setItem(MONITORING_TABLE_STATE_STORAGE_KEY, JSON.stringify(state));
   }, []);
-
-  const layoutMultiSortMeta = useMemo(() => {
-    if (useStatefulTable || !effectiveLayoutPayload) return undefined;
-    const meta = buildMultiSortMeta(effectiveLayoutPayload);
-    return meta.length > 0 ? meta : undefined;
-  }, [effectiveLayoutPayload, useStatefulTable]);
-
-  const editorInitialPayload = activePayload ?? originalMonitoringTableLayoutPayload();
-  const editorLayoutId = activeLayoutId;
-  const editorInitialName = activeLayoutName ?? "";
 
   if (!woDialog.useModalPresentation && woDialog.dialogVisible && woDialog.editDialogState) {
     return <WorkOrderEditPageView {...woDialog.editDialogState} />;
@@ -1090,25 +1032,8 @@ export function MonitoringPage() {
         }}
       />
       <ConfirmDialog />
-      <TableLayoutEditorDialog
-        visible={layoutEditorVisible}
-        onHide={() => setLayoutEditorVisible(false)}
-        tableKey={TABLE_KEY_MONITORING_WORK_ORDERS}
-        layoutId={editorLayoutId}
-        initialName={editorInitialName}
-        initialPayload={editorInitialPayload}
-        onSaved={async (detail) => {
-          await reloadTableLayouts();
-          setActiveFromDetail(detail.id, detail.name, detail.payload);
-          toastRef.current?.show({
-            severity: "success",
-            summary: t("tableLayouts.editor.saveSuccess"),
-            life: 4000,
-          });
-        }}
-      />
       <WorkOrderOverviewOverlay order={overviewOrder} onHide={overview.onHide} />
-      {!isPreloadMode ? tableCtx.ContextMenuEl : null}
+      {!isPreloadMode ? tableCtx.BigContextMenuEl : null}
 
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -1116,11 +1041,7 @@ export function MonitoringPage() {
         {...(!isPreloadMode ? tableCtx.wrapperProps : {})}
       >
         <DataTable
-          key={
-            useStatefulTable
-              ? `stateful-monitoring-${monitoringTableMountEpoch}`
-              : `layout-${activeLayoutId ?? "none"}`
-          }
+          key={`stateful-monitoring-${monitoringTableMountEpoch}`}
           className="app-data-table app-work-orders-data-grid w-full"
           value={tableRows}
           loading={loading}
@@ -1147,30 +1068,23 @@ export function MonitoringPage() {
           stripedRows
           showGridlines
           scrollable
-          resizableColumns={useStatefulTable}
-          reorderableColumns={useStatefulTable}
+          resizableColumns
+          reorderableColumns
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "94rem" }}
-          {...(useStatefulTable
-            ? {
-                stateStorage: "custom" as const,
-                customSaveState: handleMonitoringTableStateSave,
-                customRestoreState: () => {
-                  try {
-                    const raw = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
-                    if (!raw) return {};
-                    const parsed = JSON.parse(raw) as Record<string, unknown>;
-                    return isValidMonitoringTablePersistedState(parsed) ? parsed : {};
-                  } catch {
-                    return {};
-                  }
-                },
-              }
-            : {})}
-          {...(!useStatefulTable && layoutMultiSortMeta
-            ? { sortMode: "multiple" as const, multiSortMeta: layoutMultiSortMeta }
-            : {})}
+          stateStorage="custom"
+          customSaveState={handleMonitoringTableStateSave}
+          customRestoreState={() => {
+            try {
+              const raw = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
+              if (!raw) return {};
+              const parsed = JSON.parse(raw) as Record<string, unknown>;
+              return isValidMonitoringTablePersistedState(parsed) ? parsed : {};
+            } catch {
+              return {};
+            }
+          }}
           virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={t("workOrders.empty")}
           rowClassName={(row) =>
@@ -1184,14 +1098,12 @@ export function MonitoringPage() {
           <Column
             field="orderNumber"
             header={t("workOrders.orderNumber")}
-            hidden={!isMonitoringColumnVisible("orderNumber")}
             sortable={!isPreloadMode}
-            body={(row: WorkOrder) => (isPreloadMode ? "…" : row.orderNumber)}
+            body={orderNumberBody}
           />
           <Column
             field="originalWoOrderNumber"
             header={t("workOrders.originalWo")}
-            hidden={!isMonitoringColumnVisible("originalWoOrderNumber")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => (isPreloadMode ? "…" : formatOriginalWoCell(row))}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
@@ -1199,7 +1111,6 @@ export function MonitoringPage() {
           <Column
             field="maintenancePlanKey"
             header={t("workOrders.maintenancePlan")}
-            hidden={!isMonitoringColumnVisible("maintenancePlanKey")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) =>
               isPreloadMode
@@ -1213,13 +1124,11 @@ export function MonitoringPage() {
           <Column
             field="name"
             header={t("workOrders.name")}
-            hidden={!isMonitoringColumnVisible("name")}
             sortable={!isPreloadMode}
           />
           <Column
             field="status"
             header={t("workOrders.status")}
-            hidden={!isMonitoringColumnVisible("status")}
             sortable={!isPreloadMode}
             body={statusBody}
             bodyClassName={statusCellClassName}
@@ -1227,21 +1136,18 @@ export function MonitoringPage() {
           <Column
             field="assetName"
             header={t("workOrders.asset")}
-            hidden={!isMonitoringColumnVisible("assetName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => `${row.assetKey} - ${row.assetName}`}
           />
           <Column
             field="costCenterName"
             header={t("workOrders.costCenter")}
-            hidden={!isMonitoringColumnVisible("costCenterName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => `${row.costCenterKey} - ${row.costCenterName}`}
           />
           <Column
             field="classificationName"
             header={t("workOrders.classification")}
-            hidden={!isMonitoringColumnVisible("classificationName")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) =>
               row.classificationId ? `${row.classificationKey} - ${row.classificationName ?? ""}` : "—"
@@ -1250,7 +1156,6 @@ export function MonitoringPage() {
           <Column
             field="workgroupKey"
             header={t("workOrders.workgroup")}
-            hidden={!isMonitoringColumnVisible("workgroupKey")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) =>
               row.workgroupKey ? `${row.workgroupKey} - ${row.workgroupName ?? ""}` : "—"
@@ -1259,7 +1164,6 @@ export function MonitoringPage() {
           <Column
             field="documentCount"
             header={t("workOrders.references")}
-            hidden={!isMonitoringColumnVisible("documentCount")}
             body={referencesBody}
             sortable={!isPreloadMode}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
@@ -1267,14 +1171,12 @@ export function MonitoringPage() {
           <Column
             field="orderType"
             header={t("workOrders.orderType")}
-            hidden={!isMonitoringColumnVisible("orderType")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => typeLabel(row.orderType)}
           />
           <Column
             field="plannedStart"
             header={t("workOrders.plannedStart")}
-            hidden={!isMonitoringColumnVisible("plannedStart")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => formatShortDt(row.plannedStart)}
             className="whitespace-nowrap"
@@ -1282,7 +1184,6 @@ export function MonitoringPage() {
           <Column
             field="plannedEnd"
             header={t("workOrders.plannedEnd")}
-            hidden={!isMonitoringColumnVisible("plannedEnd")}
             sortable={!isPreloadMode}
             body={(row: WorkOrder) => formatShortDt(row.plannedEnd)}
             className="whitespace-nowrap"
@@ -1290,13 +1191,11 @@ export function MonitoringPage() {
           <Column
             columnKey="plannedDuration"
             header={t("workOrders.plannedDuration")}
-            hidden={!isMonitoringColumnVisible("plannedDuration")}
             body={durationBody}
           />
           <Column
             columnKey="startStop"
             header={t("workOrders.startStop")}
-            hidden={!isMonitoringColumnVisible("startStop")}
             body={startStopBody}
             style={{ width: "7.5rem", minWidth: "7.5rem" }}
           />

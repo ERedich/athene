@@ -421,8 +421,7 @@ html.theme-crossfade-fallback #root {
 .app-wo-search-sidebar .p-calendar,
 .app-wo-search-sidebar .p-calendar .p-inputtext,
 .app-wo-search-sidebar .p-inputnumber,
-.app-wo-search-sidebar .p-inputnumber .p-inputtext,
-.app-wo-search-sidebar .p-selectbutton .p-button {
+.app-wo-search-sidebar .p-inputnumber .p-inputtext {
   height: 2.25rem !important;
   min-height: 2.25rem !important;
   box-sizing: border-box;
@@ -451,15 +450,21 @@ html.theme-crossfade-fallback #root {
   flex: 1 1 auto;
 }
 
-.app-wo-search-sidebar .p-selectbutton {
-  display: inline-flex;
+/* Nested Relativ/Absolut TabView inside planning cards — keep ink, compact padding. */
+.app-wo-search-sidebar .app-wo-search-planning-tabs.p-tabview .p-tabview-panels {
+  padding: 0.75rem 0 0;
+  background: transparent;
 }
 
-.app-wo-search-sidebar .p-selectbutton .p-button {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  font-size: 0.75rem !important;
-  line-height: 2.25rem !important;
+.app-wo-search-sidebar .app-wo-search-planning-tabs .p-tabview-nav-container {
+  position: relative;
+  top: auto;
+  background: transparent;
+}
+
+.app-wo-search-sidebar .app-wo-search-planning-tabs .p-tabview-nav,
+.app-wo-search-sidebar .app-wo-search-planning-tabs .p-tabview-nav li .p-tabview-nav-link {
+  background: transparent;
 }
 
 [data-theme="light"] .professional-panel {
@@ -1590,23 +1595,6 @@ html.theme-crossfade-fallback #root {
   padding-bottom: 0.75rem;
 }
 
-.app-table-layout-editor-dialog .p-tabview-panels {
-  padding-top: 0.75rem;
-}
-
-.app-table-layout-editor-dialog .app-table-layout-editor-picklist.p-picklist {
-  width: 100%;
-}
-
-.app-table-layout-editor-dialog .app-table-layout-editor-picklist .p-picklist-list-wrapper {
-  min-width: 0;
-  flex: 1 1 0;
-}
-
-.app-table-layout-editor-dialog .app-table-layout-editor-picklist .p-picklist-list {
-  min-height: 10rem;
-}
-
 .app-sticky-tabs .p-tabview-nav-container {
   position: sticky;
   top: 0;
@@ -2425,6 +2413,311 @@ html.theme-crossfade-fallback #root {
 
 .theme-swap-overlay__spinner {
   color: var(--color-primary);
+}
+
+/* Big context menu — horizontal CommandBarFlyout-style panel (Monitoring / Work Orders). */
+.app-big-context-menu {
+  position: fixed;
+  z-index: 1200;
+  width: min(22rem, calc(100vw - 1rem));
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  background: var(--surface-overlay);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+  outline: none;
+  color: var(--color-on-surface);
+}
+
+.app-big-context-menu__header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+}
+
+.app-big-context-menu__header {
+  flex: 1;
+  min-width: 0;
+  padding: 0.125rem 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-big-context-menu__corner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-right: 0.125rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: rgb(21 94 117);
+  cursor: pointer;
+  font: inherit;
+}
+
+.app-big-context-menu__corner:hover:not(:disabled),
+.app-big-context-menu__corner.is-focused:not(:disabled) {
+  background: color-mix(in srgb, rgb(21 94 117) 12%, transparent);
+}
+
+.app-big-context-menu__corner:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.app-big-context-menu__corner .app-big-context-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-big-context-menu__corner .app-big-context-menu__icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.app-big-context-menu__primary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.app-big-context-menu__primary:last-child {
+  margin-bottom: 0;
+}
+
+.app-big-context-menu__primary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-height: 3.25rem;
+  padding: 0.375rem 0.2rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.app-big-context-menu__primary-item:hover:not(:disabled),
+.app-big-context-menu__primary-item.is-focused:not(:disabled) {
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-big-context-menu__primary-item:disabled,
+.app-big-context-menu__primary-item.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.app-big-context-menu__primary-item--split {
+  cursor: default;
+}
+
+.app-big-context-menu__primary-item--split:hover:not(.is-disabled),
+.app-big-context-menu__primary-item--split.is-focused:not(.is-disabled) {
+  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+}
+
+.app-big-context-menu__split-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+}
+
+.app-big-context-menu__split-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.app-big-context-menu__split-btn:hover:not(:disabled),
+.app-big-context-menu__split-btn.is-focused:not(:disabled) {
+  background: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.app-big-context-menu__split-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.app-big-context-menu__primary-item .app-big-context-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.app-big-context-menu__primary-item .app-big-context-menu__icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.app-big-context-menu__primary-item .app-big-context-menu__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-big-context-menu__item--danger:not(:disabled) {
+  color: var(--color-error, #b91c1c);
+}
+
+.app-big-context-menu__item--danger:not(:disabled) .app-big-context-menu__icon {
+  color: inherit;
+}
+
+/* Stop / Pause — same colors as table WO controls */
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:not(:disabled)
+  .app-big-context-menu__icon,
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:not(:disabled)
+  .app-big-context-menu__icon
+  svg,
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:not(:disabled)
+  .app-wo-fill-lucide:is(svg.lucide-square),
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:not(:disabled)
+  .app-wo-fill-lucide:is(svg.lucide-square)
+  :is(path, polygon, rect, line) {
+  color: var(--color-danger);
+  fill: var(--color-danger) !important;
+}
+
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop:hover:not(:disabled),
+.app-big-context-menu__primary-item.app-big-context-menu__action--stop.is-focused:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:not(:disabled) {
+  color: rgb(251 146 60); /* orange-400, matches paused status */
+}
+
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:not(:disabled)
+  .app-big-context-menu__icon,
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:not(:disabled)
+  .app-big-context-menu__icon
+  svg,
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:not(:disabled)
+  .app-wo-fill-lucide:is(svg.lucide-pause),
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:not(:disabled)
+  .app-wo-fill-lucide:is(svg.lucide-pause)
+  :is(path, polygon, rect, line) {
+  color: rgb(251 146 60);
+  fill: rgb(251 146 60) !important;
+}
+
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause:hover:not(:disabled),
+.app-big-context-menu__primary-item.app-big-context-menu__action--pause.is-focused:not(:disabled) {
+  background: color-mix(in srgb, rgb(251 146 60) 14%, transparent);
+}
+
+.app-big-context-menu__columns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+}
+
+.app-big-context-menu__column-title {
+  padding: 0.375rem 0.5rem 0.125rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-on-surface-variant);
+}
+
+.app-big-context-menu__column-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-big-context-menu__column-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.app-big-context-menu__column-item:hover:not(:disabled),
+.app-big-context-menu__column-item.is-focused:not(:disabled) {
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-big-context-menu__column-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.app-big-context-menu__column-item .app-big-context-menu__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-big-context-menu__column-item .app-big-context-menu__icon svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.app-big-context-menu .app-context-menu-athene:not(:disabled) {
+  color: rgb(21 94 117); /* Tailwind cyan-800 */
+}
+
+.app-big-context-menu .app-context-menu-athene:not(:disabled) .app-big-context-menu__icon {
+  color: inherit;
 }
 
 /* DataTable context menu — compact panel (theme default text/icon colors). */
