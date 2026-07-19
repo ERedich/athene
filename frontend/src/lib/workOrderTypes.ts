@@ -59,6 +59,9 @@ export type WorkOrder = {
   maintenancePlanId: string | null;
   maintenancePlanKey: string | null;
   maintenancePlanName: string | null;
+  inspectionRoundId: string | null;
+  inspectionRoundKey: string | null;
+  inspectionRoundName: string | null;
 };
 
 export type WorkOrderAssignment = {

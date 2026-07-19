@@ -11,6 +11,7 @@ import { Check, Pencil, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
+import { Calendar } from "primereact/calendar";
 import { Card } from "primereact/card";
 import { Checkbox } from "primereact/checkbox";
 import { ColorPicker } from "primereact/colorpicker";
@@ -32,6 +33,7 @@ import {
   APP_PARAM_KEY_ASSET_TYPES,
   APP_PARAM_KEY_DEFAULT_WORKGROUP,
   APP_PARAM_KEY_DEFAULT_SHIFT_HOURS,
+  APP_PARAM_KEY_GENERATE_WO_FROM_MP,
   APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
   type AppParameterAssetKeyMode,
 } from "../lib/appParameterKeys";
@@ -59,6 +61,7 @@ type AppParameterRow = {
   jsonValue: unknown | null;
   uuidValue: string | null;
   numValue: number;
+  timeValue: string | null;
   updatedAt: string;
 };
 
@@ -102,10 +105,31 @@ function normalizeNumValue(raw: unknown): number {
   return Number.isFinite(n) && n > 0 ? n : 8;
 }
 
+function normalizeTimeValue(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(raw.trim());
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+function timeStringToDate(time: string | null): Date | null {
+  if (!time) return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)/.exec(time.trim());
+  if (!m) return null;
+  const d = new Date();
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  return d;
+}
+
+function dateToTimeString(date: Date | null | undefined): string {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "06:00";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function parameterRowDirty(a: AppParameterRow, b: AppParameterRow): boolean {
   if (a.boolValue !== b.boolValue) return true;
   if ((a.uuidValue ?? null) !== (b.uuidValue ?? null)) return true;
   if (a.numValue !== b.numValue) return true;
+  if ((a.timeValue ?? null) !== (b.timeValue ?? null)) return true;
   return JSON.stringify(a.jsonValue) !== JSON.stringify(b.jsonValue);
 }
 
@@ -170,6 +194,7 @@ export function AppParametersPage() {
         ...r,
         uuidValue: r.uuidValue ?? null,
         numValue: normalizeNumValue(r.numValue),
+        timeValue: normalizeTimeValue(r.timeValue) ?? (r.valueType === "time" ? "06:00" : null),
       }));
       setPersistedRows(normalized);
       setDraftRows(normalized.map((r) => ({ ...r })));
@@ -303,6 +328,10 @@ export function AppParametersPage() {
     setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, numValue } : r)));
   }, []);
 
+  const updateDraftTime = useCallback((key: string, timeValue: string) => {
+    setDraftRows((cur) => cur.map((r) => (r.key === key ? { ...r, timeValue } : r)));
+  }, []);
+
   const hasUnsavedChanges = useMemo(() => {
     const pmap = new Map(persistedRows.map((r) => [r.key, r]));
     return draftRows.some((d) => {
@@ -335,6 +364,8 @@ export function AppParametersPage() {
           body = { jsonValue: row.jsonValue };
         } else if (row.valueType === "number") {
           body = { numValue: row.numValue };
+        } else if (row.valueType === "time") {
+          body = { timeValue: row.timeValue };
         } else {
           continue;
         }
@@ -351,6 +382,9 @@ export function AppParametersPage() {
                 ...updated,
                 uuidValue: updated.uuidValue ?? null,
                 numValue: normalizeNumValue(updated.numValue),
+                timeValue:
+                  normalizeTimeValue(updated.timeValue) ??
+                  (updated.valueType === "time" ? "06:00" : null),
               }
             : r,
         );
@@ -590,6 +624,22 @@ export function AppParametersPage() {
                     }}
                   />
                 </div>
+              ) : row.key === APP_PARAM_KEY_GENERATE_WO_FROM_MP && row.valueType === "time" ? (
+                <div className="max-w-xs" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                  <Calendar
+                    inputId={`app-param-${row.key}`}
+                    value={timeStringToDate(row.timeValue)}
+                    onChange={(e) => {
+                      const next = e.value instanceof Date ? e.value : null;
+                      updateDraftTime(row.key, dateToTimeString(next));
+                    }}
+                    timeOnly
+                    hourFormat="24"
+                    className="w-full"
+                    disabled={savingAll}
+                    appendTo={overlayAppendTo}
+                  />
+                </div>
               ) : (
                 <span className="text-sm text-on-surface-variant">—</span>
               )}
@@ -607,6 +657,7 @@ export function AppParametersPage() {
       updateDraftBool,
       updateDraftJson,
       updateDraftNum,
+      updateDraftTime,
       updateDraftUuid,
       t,
     ],

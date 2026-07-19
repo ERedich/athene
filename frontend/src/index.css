@@ -515,6 +515,18 @@ html.theme-crossfade-fallback #root {
   padding: 0.65rem 0.75rem !important;
 }
 
+/* PrimeReact puts .p-inputtext on Dropdown labels — reset so they are not a nested input box. */
+.p-dropdown .p-dropdown-label.p-inputtext,
+.p-dropdown span.p-dropdown-label {
+  width: auto !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
 .p-dropdown,
 .p-multiselect {
   background: color-mix(
@@ -534,7 +546,7 @@ html.theme-crossfade-fallback #root {
   padding-bottom: 0.65rem !important;
 }
 
-[data-theme="light"] .p-inputtext,
+[data-theme="light"] .p-inputtext:not(.p-dropdown-label),
 [data-theme="light"] .p-password-input,
 [data-theme="light"] .p-dropdown,
 [data-theme="light"] .p-multiselect {
@@ -546,11 +558,49 @@ html.theme-crossfade-fallback #root {
   ) !important;
 }
 
-.p-inputtext:enabled:focus,
+.p-inputtext:not(.p-dropdown-label):enabled:focus,
 .p-password-input:enabled:focus {
   box-shadow: none !important;
   outline: none !important;
   border-color: var(--color-primary) !important;
+}
+
+/* PrimeReact InputGroup: glue input + button (global radius/border overrides break Lara defaults). */
+.p-inputgroup.app-sel-item {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.p-inputgroup.app-sel-item > .p-inputtext {
+  flex: 1 1 auto;
+  width: 1%;
+  min-width: 0;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.p-inputgroup.app-sel-item > .p-button {
+  flex: 0 0 auto;
+  margin-left: -1px;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  border-top-right-radius: 0.5rem !important;
+  border-bottom-right-radius: 0.5rem !important;
+}
+
+.p-inputgroup.app-sel-item > .p-inputtext:enabled:focus {
+  position: relative;
+  z-index: 1;
+}
+
+.p-inputgroup.app-sel-item > .p-button:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.p-inputgroup.app-sel-item > .p-inputtext.p-invalid {
+  z-index: 1;
 }
 
 /* Header search input inside IconField: override global p-inputtext padding. */
@@ -1145,6 +1195,90 @@ html.theme-crossfade-fallback #root {
 [data-theme="dark"] .app-ref-button--work-orders-empty.p-button:disabled {
   background: rgb(196 181 253) !important;
   border-color: rgb(196 181 253) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
+}
+
+.app-ref-button--inspection-points.p-button:not(:disabled),
+.app-ref-button--inspection-points.p-button:not(.p-disabled) {
+  background: rgb(252 211 77) !important; /* amber-300 */
+  border-color: rgb(252 211 77) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--inspection-points.p-button:not(:disabled):hover,
+.app-ref-button--inspection-points.p-button:not(.p-disabled):hover {
+  background: rgb(251 191 36) !important; /* amber-400 */
+  border-color: rgb(251 191 36) !important;
+}
+
+.app-ref-button--inspection-points-outline.p-button:not(:disabled),
+.app-ref-button--inspection-points-outline.p-button:not(.p-disabled),
+.app-ref-button--inspection-points-outline.p-button.p-disabled,
+.app-ref-button--inspection-points-outline.p-button:disabled {
+  opacity: 1 !important;
+  background: transparent !important;
+  border: 2px solid rgb(252 211 77) !important; /* amber-300 */
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--inspection-points-outline.p-button.p-disabled,
+.app-ref-button--inspection-points-outline.p-button:disabled {
+  cursor: not-allowed !important;
+}
+.app-ref-button--inspection-points-outline.p-button:not(:disabled):hover,
+.app-ref-button--inspection-points-outline.p-button:not(.p-disabled):hover {
+  background: rgb(254 243 199) !important; /* amber-100 */
+  border-color: rgb(251 191 36) !important; /* amber-400 */
+}
+.app-ref-button--inspection-points-outline.p-button.p-disabled .p-button-icon,
+.app-ref-button--inspection-points-outline.p-button:disabled .p-button-icon,
+.app-ref-button--inspection-points-outline.p-button:not(:disabled) .p-button-icon,
+.app-ref-button--inspection-points-outline.p-button:not(.p-disabled) .p-button-icon,
+.app-ref-button--inspection-points-outline.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--inspection-points-outline.p-button:disabled .p-button-icon svg,
+.app-ref-button--inspection-points-outline.p-button:not(:disabled) .p-button-icon svg,
+.app-ref-button--inspection-points-outline.p-button:not(.p-disabled) .p-button-icon svg {
+  color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+.app-ref-button--inspection-points-outline-filled.p-button:not(:disabled),
+.app-ref-button--inspection-points-outline-filled.p-button:not(.p-disabled) {
+  background: rgb(252 211 77) !important; /* amber-300 */
+  border: 2px solid rgb(217 119 6) !important; /* amber-600 */
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--inspection-points-outline-filled.p-button:not(:disabled):hover,
+.app-ref-button--inspection-points-outline-filled.p-button:not(.p-disabled):hover {
+  background: rgb(251 191 36) !important; /* amber-400 */
+  border-color: rgb(180 83 9) !important; /* amber-700 */
+}
+
+.app-ref-button--inspection-points-empty.p-button.p-disabled,
+.app-ref-button--inspection-points-empty.p-button:disabled {
+  opacity: 0.1 !important;
+  background: rgb(252 211 77) !important; /* amber-300 */
+  border: 1px solid rgb(252 211 77) !important;
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+  cursor: not-allowed !important;
+}
+.app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon,
+.app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon,
+.app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon .pi,
+.app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon .pi,
+.app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon svg {
+  color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+[data-theme="dark"] .app-ref-button--inspection-points-empty.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--inspection-points-empty.p-button:disabled {
+  background: rgb(252 211 77) !important;
+  border-color: rgb(252 211 77) !important;
   color: rgb(15 23 42) !important;
   opacity: 0.1 !important;
 }
@@ -2188,33 +2322,52 @@ html.theme-crossfade-fallback #root {
   font-weight: 700;
 }
 
-/* PrimeReact Paginator rows-per-page dropdown
-   (v10: .p-paginator-rpp-options, v11+: .p-paginator-rpp-dropdown) */
+/*
+ * Standardstil: PrimeReact Paginator „Rows per page“-Dropdown
+ * Gilt für alle Paginator (Assets, Drawer, Audit, …).
+ * v10: .p-paginator > .p-dropdown
+ * v11+: .p-paginator-rpp-dropdown / .p-paginator-rpp-options
+ */
+.p-paginator {
+  --app-paginator-rpp-height: 2.5rem;
+  --app-paginator-rpp-trigger-width: 2.5rem;
+  --app-paginator-rpp-label-pad-x: 0.75rem;
+  --app-paginator-rpp-divider: color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+}
+
+.p-paginator .p-dropdown,
 .p-paginator .p-paginator-rpp-options,
 .p-paginator .p-paginator-rpp-dropdown {
-  min-height: 2.5rem;
-  border-radius: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--color-on-surface) 12%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--color-surface-container-lowest) 72%,
-    transparent
-  );
+  margin-left: 0.5rem;
+  height: var(--app-paginator-rpp-height) !important;
+  min-height: var(--app-paginator-rpp-height) !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
+.p-paginator .p-dropdown .p-dropdown-label,
 .p-paginator .p-paginator-rpp-options .p-dropdown-label,
 .p-paginator .p-paginator-rpp-dropdown .p-dropdown-label {
-  padding-top: 0.6rem;
-  padding-bottom: 0.6rem;
+  display: flex !important;
+  align-items: center !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  padding-left: var(--app-paginator-rpp-label-pad-x) !important;
+  padding-right: var(--app-paginator-rpp-label-pad-x) !important;
+  line-height: 1 !important;
   font-weight: 600;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
-/* Make trigger part feel like one unified control */
+.p-paginator .p-dropdown .p-dropdown-trigger,
 .p-paginator .p-paginator-rpp-options .p-dropdown-trigger,
 .p-paginator .p-paginator-rpp-dropdown .p-dropdown-trigger {
-  width: 2.5rem;
-  border-left: 1px solid
-    color-mix(in srgb, var(--color-on-surface) 14%, transparent);
+  width: var(--app-paginator-rpp-trigger-width);
+  height: 100%;
+  border-left: 1px solid var(--app-paginator-rpp-divider);
   background: transparent;
 }
 

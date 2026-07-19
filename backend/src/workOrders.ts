@@ -23,6 +23,10 @@ import {
   type WorkOrderCreateInput,
 } from "./workOrderCreate.js";
 import {
+  assertInspectionRoundForSite,
+  syncWorkOrderInspectionPointsSnapshot,
+} from "./inspectionRoundSnapshot.js";
+import {
   DOCUMENT_MAX_BYTES,
   createDocument,
   deleteDocumentForEntity,
@@ -116,6 +120,9 @@ type WorkOrderRow = {
   maintenancePlanId: string | null;
   maintenancePlanKey: string | null;
   maintenancePlanName: string | null;
+  inspectionRoundId: string | null;
+  inspectionRoundKey: string | null;
+  inspectionRoundName: string | null;
 };
 
 type WorkOrderAssignmentRow = {
@@ -317,6 +324,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const maintenancePlanIdRaw = readTrimmedOptionalString(o.maintenancePlanId);
   if (maintenancePlanIdRaw !== null && !isUuid(maintenancePlanIdRaw)) return null;
 
+  const inspectionRoundIdRaw = readTrimmedOptionalString(o.inspectionRoundId);
+  if (inspectionRoundIdRaw !== null && !isUuid(inspectionRoundIdRaw)) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -331,6 +341,7 @@ function parseBody(body: unknown): ParsedBody | null {
     classificationId: classificationIdRaw,
     originalWo: originalWoRaw,
     maintenancePlanId: maintenancePlanIdRaw,
+    inspectionRoundId: inspectionRoundIdRaw,
   };
 }
 
@@ -492,6 +503,9 @@ const selectWorkOrdersSql = `
     w."maintenancePlanId",
     mp."key" AS "maintenancePlanKey",
     mp."name" AS "maintenancePlanName",
+    w."inspectionRoundId",
+    ir."key" AS "inspectionRoundKey",
+    ir."name" AS "inspectionRoundName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -509,6 +523,7 @@ const selectWorkOrdersSql = `
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
+  LEFT JOIN "inspectionRound" ir ON ir."id" = w."inspectionRoundId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${workOrderDocumentCountSubquery}
@@ -1665,6 +1680,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid_maintenance_plan" });
       return;
     }
+    if (message === "invalid_inspection_round") {
+      res.status(400).json({ error: "invalid_inspection_round" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -1726,9 +1745,11 @@ router.put("/:id", async (req: Request, res: Response) => {
     const previousAssetId = previousAsset.rows[0]?.assetId;
 
     const row = await withAuditContext(meta, async (client) => {
-      const existing = await client.query<QueryResultRow & { id: string; siteId: string }>(
+      const existing = await client.query<
+        QueryResultRow & { id: string; siteId: string; inspectionRoundId: string | null }
+      >(
         `
-        SELECT "id", "siteId"::text AS "siteId"
+        SELECT "id", "siteId"::text AS "siteId", "inspectionRoundId"::text AS "inspectionRoundId"
         FROM "workOrder"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -1767,6 +1788,13 @@ router.put("/:id", async (req: Request, res: Response) => {
         parsed.classificationId,
         "work_order",
       );
+      await assertInspectionRoundForSite(
+        client,
+        meta.userId,
+        parsed.inspectionRoundId,
+        effectiveSiteId,
+        siteAccessSql,
+      );
 
       await client.query(
         `
@@ -1782,8 +1810,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           "plannedDurationMinutes" = $8::integer,
           "orderType" = $9,
           "workgroupId" = $10::uuid,
-          "classificationId" = $11::uuid
-        WHERE "id" = $12::uuid
+          "classificationId" = $11::uuid,
+          "inspectionRoundId" = $12::uuid
+        WHERE "id" = $13::uuid
         `,
         [
           parsed.name,
@@ -1797,10 +1826,14 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.orderType,
           parsed.workgroupId,
           parsed.classificationId,
+          parsed.inspectionRoundId,
           id,
         ],
       );
       await setWorkOrderResponsibles(client, id, parsed.responsibleEmployeeIds);
+      if (existingRow.inspectionRoundId !== parsed.inspectionRoundId) {
+        await syncWorkOrderInspectionPointsSnapshot(client, id, parsed.inspectionRoundId);
+      }
       return await fetchWorkOrderRow(client, id);
     });
     if (!row) {
@@ -2141,6 +2174,7 @@ export async function updateWorkOrderPlanning(
     responsibleEmployeeIds: row.responsibleEmployeeIds,
     workgroupId: row.workgroupId,
     classificationId: row.classificationId,
+    inspectionRoundId: row.inspectionRoundId,
   });
   if (!parsed) {
     return { ok: false, error: "invalid_body" };
@@ -2330,6 +2364,157 @@ export async function updateWorkOrderPlanningBatch(
 }
 
 router.use(workOrderMessagesRouter);
+
+export type WorkOrderInspectionPointRow = {
+  id: string;
+  workOrderId: string;
+  pos: number;
+  name: string;
+  assetId: string | null;
+  assetKey: string | null;
+  assetName: string | null;
+  inspectionPointId: string | null;
+  inspectionPointKey: string | null;
+  inspectionPointName: string | null;
+  checked: boolean;
+  checkedAt: string | null;
+  checkedBy: string | null;
+  checkedByLoginName: string | null;
+};
+
+const selectWoInspectionPointSql = `
+  SELECT
+    p."id",
+    p."workOrderId",
+    p."pos",
+    p."name",
+    p."assetId",
+    p."assetKey",
+    p."assetName",
+    p."inspectionPointId",
+    p."inspectionPointKey",
+    p."inspectionPointName",
+    p."checked",
+    p."checkedAt",
+    p."checkedBy",
+    u."loginName" AS "checkedByLoginName"
+  FROM "workOrderInspectionPoint" p
+  LEFT JOIN "users" u ON u."id" = p."checkedBy"
+`;
+
+router.get("/:id/inspection-points", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const access = await pool.query<{ id: string }>(
+      `
+      SELECT "id"
+      FROM "workOrder"
+      WHERE "id" = $1::uuid
+        AND ${siteAccessSql('"siteId"', "$2")}
+      `,
+      [id, userId],
+    );
+    if (!access.rows[0]) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const { rows } = await pool.query<WorkOrderInspectionPointRow>(
+      `
+      ${selectWoInspectionPointSql}
+      WHERE p."workOrderId" = $1::uuid
+      ORDER BY p."pos" ASC
+      `,
+      [id],
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.patch("/:id/inspection-points/:pointId", async (req: Request, res: Response) => {
+  const { id, pointId } = req.params;
+  if (!isUuid(id) || !isUuid(pointId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const checked = req.body?.checked;
+  if (typeof checked !== "boolean") {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const access = await client.query<{ id: string }>(
+        `
+        SELECT "id"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      if (!access.rows[0]) throw new Error("not_found");
+      const { rows } = await client.query<WorkOrderInspectionPointRow>(
+        `
+        WITH updated AS (
+          UPDATE "workOrderInspectionPoint"
+          SET
+            "checked" = $1,
+            "checkedAt" = CASE WHEN $1 THEN now() ELSE NULL END,
+            "checkedBy" = CASE WHEN $1 THEN $2::uuid ELSE NULL END
+          WHERE "id" = $3::uuid AND "workOrderId" = $4::uuid
+          RETURNING *
+        )
+        SELECT
+          u."id",
+          u."workOrderId",
+          u."pos",
+          u."name",
+          u."assetId",
+          u."assetKey",
+          u."assetName",
+          u."inspectionPointId",
+          u."inspectionPointKey",
+          u."inspectionPointName",
+          u."checked",
+          u."checkedAt",
+          u."checkedBy",
+          usr."loginName" AS "checkedByLoginName"
+        FROM updated u
+        LEFT JOIN "users" usr ON usr."id" = u."checkedBy"
+        `,
+        [checked, meta.userId, pointId, id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
 
 export const workOrdersRouter = router;
 

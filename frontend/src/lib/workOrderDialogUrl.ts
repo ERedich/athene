@@ -11,6 +11,7 @@ export function parseWoTabParam(raw: string | null): OrderDialogTab | undefined 
     orderDialogTabs.General,
     orderDialogTabs.Planning,
     orderDialogTabs.Documents,
+    orderDialogTabs.InspectionPoints,
     orderDialogTabs.Feedback,
     orderDialogTabs.Transactions,
     orderDialogTabs.Messages,

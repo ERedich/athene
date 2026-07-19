@@ -39,6 +39,7 @@ function headerTitleKey(pathname: string): string {
     assets: "assets.appName",
     baumstruktur: "baumstruktur.appName",
     workorders: "workOrders.appName",
+    auftragserstellung: "orderCreation.appName",
     kalendar: "kalendar.appName",
     schichtplaner: "schichtplaner.appName",
     monitoring: "monitoring.appName",

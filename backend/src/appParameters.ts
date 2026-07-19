@@ -33,6 +33,9 @@ export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD";
 /** Schichten: Standard-Schichtstunden wenn Mitarbeiter keine Schichtangaben hat. */
 export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH";
 
+/** Aufträge: tägliche Uhrzeit für Generierung aus Wartungsplänen. */
+export const APP_PARAM_KEY_GENERATE_WO_FROM_MP = "WO-GNWO";
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
 
 export type AssetKeyGenerationMode = "manual" | "auto_incremental";
@@ -66,6 +69,8 @@ export type AppParameterRow = {
   jsonValue: unknown | null;
   uuidValue: string | null;
   numValue: number;
+  /** HH:mm or HH:mm:ss when valueType is time */
+  timeValue: string | null;
   updatedAt: string;
 };
 
@@ -139,6 +144,28 @@ function parseNumValueBody(raw: unknown): number | null {
   if (typeof raw === "string" && raw.trim() !== "") {
     const n = Number(raw);
     if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/** Accepts HH:mm or HH:mm:ss; returns HH:mm:ss for Postgres time. */
+function parseTimeValueBody(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  const m = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/.exec(trimmed);
+  if (!m) return null;
+  const hh = m[1]!;
+  const mm = m[2]!;
+  const ss = m[3] ?? "00";
+  return `${hh}:${mm}:${ss}`;
+}
+
+export function formatTimeValueForApi(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "string") {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?/.exec(raw.trim());
+    if (!m) return null;
+    return `${m[1]}:${m[2]}`;
   }
   return null;
 }
@@ -264,6 +291,26 @@ export async function getDefaultWorkOrderWorkgroupId(client: DbQueryable): Promi
   }
 }
 
+/** Daily generate time as HH:mm (Europe/Berlin clock); default 06:00. */
+export async function getGenerateWoFromMpTime(client: DbQueryable = pool): Promise<string> {
+  try {
+    const { rows } = await client.query<{ timeValue: string | null }>(
+      `
+      SELECT to_char("timeValue", 'HH24:MI') AS "timeValue"
+      FROM "appParameter"
+      WHERE "key" = $1 AND "valueType" = 'time'
+      LIMIT 1
+      `,
+      [APP_PARAM_KEY_GENERATE_WO_FROM_MP],
+    );
+    const raw = rows[0]?.timeValue;
+    if (raw && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) return raw;
+    return "06:00";
+  } catch {
+    return "06:00";
+  }
+}
+
 const selectRowSql = `
   SELECT
     "id",
@@ -279,6 +326,10 @@ const selectRowSql = `
     "jsonValue",
     "uuidValue"::text AS "uuidValue",
     "numValue",
+    CASE
+      WHEN "timeValue" IS NULL THEN NULL
+      ELSE to_char("timeValue", 'HH24:MI')
+    END AS "timeValue",
     "updatedAt"::text AS "updatedAt"
 `;
 
@@ -296,6 +347,10 @@ const returningRowColumns = `
   "jsonValue",
   "uuidValue"::text AS "uuidValue",
   "numValue",
+  CASE
+    WHEN "timeValue" IS NULL THEN NULL
+    ELSE to_char("timeValue", 'HH24:MI')
+  END AS "timeValue",
   "updatedAt"::text AS "updatedAt"
 `;
 
@@ -496,6 +551,40 @@ router.patch("/:key", async (req: Request, res: Response) => {
       if (!row) {
         res.status(404).json({ error: "not_found" });
         return;
+      }
+      res.json(row);
+      return;
+    }
+
+    if (vt === "time") {
+      if (key !== APP_PARAM_KEY_GENERATE_WO_FROM_MP) {
+        res.status(400).json({ error: "unsupported_time_parameter" });
+        return;
+      }
+      const timeValue = parseTimeValueBody(body.timeValue);
+      if (timeValue === null) {
+        res.status(400).json({ error: "invalid_time_value" });
+        return;
+      }
+      const { rows } = await pool.query<AppParameterRow>(
+        `
+        UPDATE "appParameter"
+        SET "timeValue" = $1::time, "updatedAt" = now()
+        WHERE "key" = $2 AND "valueType" = 'time'
+        RETURNING ${returningRowColumns}
+        `,
+        [timeValue, key],
+      );
+      const row = rows[0];
+      if (!row) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      try {
+        const { rescheduleMaintenancePlanDailyGenerate } = await import("./maintenancePlanGenerate.js");
+        rescheduleMaintenancePlanDailyGenerate();
+      } catch (err) {
+        console.error("[app-parameters] reschedule daily generate failed", err);
       }
       res.json(row);
       return;

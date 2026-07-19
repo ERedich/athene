@@ -5,7 +5,9 @@ import {
   Calculator,
   CalendarDays,
   CalendarClock,
+  ClipboardCheck,
   Clock,
+  FilePlus,
   History,
   IdCard,
   Languages,
@@ -146,14 +148,14 @@ export const navGroups: NavGroup[] = [
         labelKey: "suppliers.navSuppliers",
       },
       {
-        to: "/shifts",
-        Icon: Clock,
-        labelKey: "shifts.navShifts",
-      },
-      {
         to: "/maintenance-plans",
         Icon: Wrench,
         labelKey: "maintenancePlans.navMaintenancePlans",
+      },
+      {
+        to: "/inspection-rounds",
+        Icon: ClipboardCheck,
+        labelKey: "inspectionRounds.navInspectionRounds",
       },
     ],
   },
@@ -168,14 +170,14 @@ export const navGroups: NavGroup[] = [
         labelKey: "workOrders.navOrders",
       },
       {
+        to: "/auftragserstellung",
+        Icon: FilePlus,
+        labelKey: "orderCreation.navOrderCreation",
+      },
+      {
         to: "/kalendar",
         Icon: CalendarDays,
         labelKey: "kalendar.navKalendar",
-      },
-      {
-        to: "/schichtplaner",
-        Icon: CalendarClock,
-        labelKey: "schichtplaner.nav",
       },
       {
         to: "/transactions",
@@ -191,6 +193,23 @@ export const navGroups: NavGroup[] = [
         to: "/mitteilungszentrale",
         Icon: MessageSquare,
         labelKey: "mitteilungszentrale.navMitteilungszentrale",
+      },
+    ],
+  },
+  {
+    id: "schichten",
+    labelKey: "shell.navSchichten",
+    Icon: Clock,
+    items: [
+      {
+        to: "/shifts",
+        Icon: Clock,
+        labelKey: "shifts.navShifts",
+      },
+      {
+        to: "/schichtplaner",
+        Icon: CalendarClock,
+        labelKey: "schichtplaner.nav",
       },
     ],
   },

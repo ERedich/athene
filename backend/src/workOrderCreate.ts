@@ -2,6 +2,10 @@ import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
+import {
+  assertInspectionRoundForSite,
+  syncWorkOrderInspectionPointsSnapshot,
+} from "./inspectionRoundSnapshot.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
 export type WorkOrderType = "maintenance" | "repair" | "breakdown";
@@ -20,6 +24,7 @@ export type WorkOrderCreateInput = {
   classificationId: string | null;
   originalWo: string | null;
   maintenancePlanId: string | null;
+  inspectionRoundId: string | null;
 };
 
 export type DbClient = PoolClient;
@@ -215,15 +220,23 @@ export async function createWorkOrderRecord(
     if (!planAccess.rows[0]) throw new Error("invalid_maintenance_plan");
   }
 
+  await assertInspectionRoundForSite(
+    client,
+    userId,
+    input.inspectionRoundId,
+    effectiveSiteId,
+    siteAccessSql,
+  );
+
   const inserted = await client.query<{ id: string }>(
     `
     INSERT INTO "workOrder"
       ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd",
        "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId",
-       "originalWo", "maintenancePlanId")
+       "originalWo", "maintenancePlanId", "inspectionRoundId")
     VALUES
       ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9,
-       'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid)
+       'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid, $14::uuid)
     RETURNING "id"
     `,
     [
@@ -240,10 +253,12 @@ export async function createWorkOrderRecord(
       input.classificationId,
       input.originalWo,
       input.maintenancePlanId,
+      input.inspectionRoundId,
     ],
   );
   const workOrderId = inserted.rows[0]?.id;
   if (!workOrderId) throw new Error("no_row");
   await setWorkOrderResponsibles(client, workOrderId, input.responsibleEmployeeIds);
+  await syncWorkOrderInspectionPointsSnapshot(client, workOrderId, input.inspectionRoundId);
   return { id: workOrderId, siteId: effectiveSiteId };
 }

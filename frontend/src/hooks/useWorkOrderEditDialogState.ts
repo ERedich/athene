@@ -42,6 +42,7 @@ import type {
   WorkOrderAssignment,
   WorkOrderDocument,
   WorkOrderEditMeta,
+  WorkOrderReferenceAsset,
   WorkOrderSelectOption,
   PendingDocumentUpload,
 } from "../lib/workOrderTypes";
@@ -110,6 +111,7 @@ type WorkOrderSavePayload = {
   responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string | null;
+  inspectionRoundId: string | null;
   originalWo?: string | null;
 };
 
@@ -173,6 +175,9 @@ function workOrderRowFromMeta(
     maintenancePlanId: null,
     maintenancePlanKey: null,
     maintenancePlanName: null,
+    inspectionRoundId: form.inspectionRoundId || null,
+    inspectionRoundKey: null,
+    inspectionRoundName: null,
   };
 }
 
@@ -183,11 +188,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const { t, i18n } = useTranslation();
   const athene = useAtheneAssistant();
   const { user, appParameterDefaultWorkgroupId } = useAuth();
-  const refData = useWorkOrderSearchReferenceData({ autoLoad: false });
+  const refData = useWorkOrderSearchReferenceData({ autoLoad: false, includeAssets: false });
   const refDataLoadedRef = useRef(false);
 
   const {
-    accessibleAssets,
     costCenters,
     classifications,
     employees,
@@ -206,6 +210,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingMeta, setEditingMeta] = useState<WorkOrderEditMeta | null>(null);
   const [form, setForm] = useState<FormState>(emptyWorkOrderForm());
+  const [selectedAsset, setSelectedAsset] = useState<WorkOrderReferenceAsset | null>(null);
+  const [assetKeyDisplay, setAssetKeyDisplay] = useState("");
   const prevCreateAssetIdForDefaultWgRef = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [documents, setDocuments] = useState<WorkOrderDocument[]>([]);
@@ -233,6 +239,27 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [workOrderMessagesLoading, setWorkOrderMessagesLoading] = useState(false);
   const [workOrderMessagesLoadedOrderId, setWorkOrderMessagesLoadedOrderId] = useState<string | null>(null);
   const [workOrderMessageSending, setWorkOrderMessageSending] = useState(false);
+  const [inspectionRounds, setInspectionRounds] = useState<
+    Array<{ id: string; key: string; name: string; siteId: string }>
+  >([]);
+  const [inspectionPoints, setInspectionPoints] = useState<
+    Array<{
+      id: string;
+      pos: number;
+      name: string;
+      assetId: string | null;
+      assetKey: string | null;
+      assetName: string | null;
+      inspectionPointId: string | null;
+      inspectionPointKey: string | null;
+      inspectionPointName: string | null;
+      checked: boolean;
+      checkedAt: string | null;
+      checkedByLoginName: string | null;
+    }>
+  >([]);
+  const [inspectionPointsLoading, setInspectionPointsLoading] = useState(false);
+  const [inspectionPointTogglingId, setInspectionPointTogglingId] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<WorkOrderAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
@@ -275,19 +302,15 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     [editingId, editingMeta, form],
   );
 
-  const assetOptions = useMemo<WorkOrderSelectOption[]>(
-    () =>
-      accessibleAssets.map((asset) => ({
-        label: `${asset.key} - ${asset.name}`,
-        value: asset.id,
-      })),
-    [accessibleAssets],
-  );
-
-  const selectedAsset = useMemo(
-    () => accessibleAssets.find((asset) => asset.id === form.assetId) ?? null,
-    [accessibleAssets, form.assetId],
-  );
+  const handleAssetSelect = useCallback((asset: WorkOrderReferenceAsset | null) => {
+    setSelectedAsset(asset);
+    if (asset) {
+      setAssetKeyDisplay(asset.key);
+      setForm((cur) => ({ ...cur, assetId: asset.id }));
+    } else {
+      setForm((cur) => (cur.assetId ? { ...cur, assetId: "" } : cur));
+    }
+  }, []);
 
   const costCenterOptions = useMemo<WorkOrderSelectOption[]>(
     () =>
@@ -349,6 +372,113 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
           value: wg.id,
         })),
     [form.workgroupId, selectedAsset?.siteId, t, workgroups],
+  );
+
+  const inspectionRoundOptions = useMemo<WorkOrderSelectOption[]>(
+    () =>
+      inspectionRounds
+        .filter((r) => selectedAsset?.siteId && r.siteId === selectedAsset.siteId)
+        .map((r) => ({
+          label: `${r.key} - ${r.name}`,
+          value: r.id,
+        })),
+    [inspectionRounds, selectedAsset?.siteId],
+  );
+
+  useEffect(() => {
+    if (!dialogVisible) return;
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/inspection-rounds");
+        if (!res.ok) return;
+        const data = (await res.json()) as Array<{
+          id: string;
+          key: string;
+          name: string;
+          siteId: string;
+        }>;
+        setInspectionRounds(Array.isArray(data) ? data : []);
+      } catch {
+        setInspectionRounds([]);
+      }
+    })();
+  }, [dialogVisible]);
+
+  useEffect(() => {
+    if (!form.inspectionRoundId) return;
+    const stillAllowed = inspectionRoundOptions.some((opt) => opt.value === form.inspectionRoundId);
+    if (stillAllowed) return;
+    setForm((cur) => ({ ...cur, inspectionRoundId: "" }));
+  }, [form.inspectionRoundId, inspectionRoundOptions]);
+
+  const loadInspectionPoints = useCallback(async (orderId: string) => {
+    setInspectionPointsLoading(true);
+    try {
+      const res = await apiFetch(`/api/work-orders/${orderId}/inspection-points`);
+      if (!res.ok) throw new Error("load");
+      const data = (await res.json()) as typeof inspectionPoints;
+      setInspectionPoints(Array.isArray(data) ? data : []);
+    } catch {
+      setInspectionPoints([]);
+      toastRef.current?.show({
+        severity: "error",
+        summary: t("workOrders.inspectionPointsLoadError"),
+        life: 6000,
+      });
+    } finally {
+      setInspectionPointsLoading(false);
+    }
+  }, [t, toastRef]);
+
+  useEffect(() => {
+    if (!dialogVisible || !editingId || !form.inspectionRoundId) {
+      if (!dialogVisible) setInspectionPoints([]);
+      return;
+    }
+    if (activeTabIndex === orderDialogTabs.InspectionPoints) {
+      void loadInspectionPoints(editingId);
+    }
+  }, [
+    activeTabIndex,
+    dialogVisible,
+    editingId,
+    form.inspectionRoundId,
+    loadInspectionPoints,
+  ]);
+
+  const toggleInspectionPoint = useCallback(
+    async (
+      row: {
+        id: string;
+        checked: boolean;
+      },
+      checked: boolean,
+    ) => {
+      if (!editingId) return;
+      setInspectionPointTogglingId(row.id);
+      try {
+        const res = await apiFetch(
+          `/api/work-orders/${editingId}/inspection-points/${row.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ checked }),
+          },
+        );
+        if (!res.ok) throw new Error("patch");
+        const updated = (await res.json()) as (typeof inspectionPoints)[number];
+        setInspectionPoints((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("workOrders.inspectionPointsSaveError"),
+          life: 6000,
+        });
+      } finally {
+        setInspectionPointTogglingId(null);
+      }
+    },
+    [editingId, t, toastRef],
   );
 
   const assignmentEmployeeOptions = useMemo<WorkOrderSelectOption[]>(
@@ -481,17 +611,16 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     if (prev === aid) return;
     prevCreateAssetIdForDefaultWgRef.current = aid;
     if (!appParameterDefaultWorkgroupId) return;
-    const asset = refData.assets.find((a) => a.id === aid);
-    if (!asset) return;
+    if (!selectedAsset || selectedAsset.id !== aid) return;
     const defWg = workgroups.find((w) => w.id === appParameterDefaultWorkgroupId);
-    if (!defWg || defWg.siteId !== asset.siteId) return;
+    if (!defWg || defWg.siteId !== selectedAsset.siteId) return;
     setForm((cur) => ({ ...cur, workgroupId: appParameterDefaultWorkgroupId }));
   }, [
     appParameterDefaultWorkgroupId,
     dialogVisible,
     editingId,
     form.assetId,
-    refData.assets,
+    selectedAsset,
     workgroups,
   ]);
 
@@ -827,6 +956,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       responsibleEmployeeIds: [...formRef.current.responsibleEmployeeIds],
       workgroupId: formRef.current.workgroupId.trim(),
       classificationId: formRef.current.classificationId.trim() || null,
+      inspectionRoundId: formRef.current.inspectionRoundId.trim() || null,
     };
     const isUpdate = editingIdRef.current && !forceCreate;
     const url = isUpdate ? `/api/work-orders/${editingIdRef.current}` : "/api/work-orders";
@@ -1006,6 +1136,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     prevCreateAssetIdForDefaultWgRef.current = null;
     setEditingId(null);
     setEditingMeta(null);
+    setSelectedAsset(null);
+    setAssetKeyDisplay("");
     setForm(emptyWorkOrderForm());
     resetOrderDialogForCreate();
     setActiveTabIndex(orderDialogTabs.General);
@@ -1018,6 +1150,25 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       prevCreateAssetIdForDefaultWgRef.current = row.assetId;
       setEditingId(null);
       setEditingMeta(null);
+      const copied = row as WorkOrderFormSource & {
+        assetKey?: string;
+        assetName?: string;
+        siteId?: string;
+      };
+      const key = typeof copied.assetKey === "string" ? copied.assetKey : "";
+      const siteId = typeof copied.siteId === "string" ? copied.siteId : "";
+      if (row.assetId && siteId) {
+        setSelectedAsset({
+          id: row.assetId,
+          key,
+          name: typeof copied.assetName === "string" ? copied.assetName : "",
+          siteId,
+          costCenterId: null,
+        });
+      } else {
+        setSelectedAsset(null);
+      }
+      setAssetKeyDisplay(key);
       setForm(workOrderRowToFormState(row, { name, asCopy: true }));
       resetOrderDialogForCreate();
       setActiveTabIndex(orderDialogTabs.General);
@@ -1039,6 +1190,21 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
           ? row.meta
           : workOrderToEditMeta(row as WorkOrder);
       setEditingMeta(meta);
+      const key = meta.assetKey ?? ("assetKey" in row ? String(row.assetKey ?? "") : "");
+      const siteId = meta.siteId ?? ("siteId" in row ? String(row.siteId ?? "") : "");
+      const assetId = meta.assetId ?? row.assetId;
+      if (assetId && siteId) {
+        setSelectedAsset({
+          id: assetId,
+          key,
+          name: meta.assetName ?? ("assetName" in row ? String(row.assetName ?? "") : ""),
+          siteId,
+          costCenterId: null,
+        });
+      } else {
+        setSelectedAsset(null);
+      }
+      setAssetKeyDisplay(key);
       setForm(workOrderRowToFormState(row));
       setPendingFiles([]);
       setAssignmentEmployeeIds([]);
@@ -1305,6 +1471,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const save = useCallback(async () => {
     const name = form.name.trim();
     const description = form.description.trim();
+    if (assetKeyDisplay.trim() && !form.assetId) {
+      toastRef.current?.show({ severity: "warn", summary: t("workOrders.invalidAssetKey"), life: 4000 });
+      return;
+    }
     if (!name || !form.assetId || !form.costCenterId || !form.plannedStart || !form.workgroupId.trim() || form.responsibleEmployeeIds.length === 0) {
       toastRef.current?.show({ severity: "warn", summary: t("workOrders.validationRequired"), life: 4000 });
       return;
@@ -1339,6 +1509,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         responsibleEmployeeIds: [...form.responsibleEmployeeIds],
         workgroupId: form.workgroupId.trim(),
         classificationId: form.classificationId.trim() || null,
+        inspectionRoundId: form.inspectionRoundId.trim() || null,
         ...(editingId ? {} : { originalWo: form.originalWoId.trim() || null }),
       };
 
@@ -1358,6 +1529,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       setSaving(false);
     }
   }, [
+    assetKeyDisplay,
     confirmAssetConflictSave,
     editingId,
     finalizeSavedOrder,
@@ -1624,9 +1796,13 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     orderStatusForUi,
     statusLabel,
     orderTypeOptions,
-    assetOptions,
+    selectedAsset,
+    assetKeyDisplay,
+    setAssetKeyDisplay,
+    handleAssetSelect,
     costCenterOptions,
     classificationOptions,
+    inspectionRoundOptions,
     workgroupOptions,
     employeeOptions,
     responsibleEmployeeOptions,
@@ -1694,5 +1870,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     transactionsTabCount,
     messagesTabCount,
     updatePlannedDuration,
+    inspectionPoints,
+    inspectionPointsLoading,
+    inspectionPointTogglingId,
+    toggleInspectionPoint,
+    loadInspectionPoints,
   };
 }

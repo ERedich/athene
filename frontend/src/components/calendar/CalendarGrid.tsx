@@ -17,7 +17,7 @@ type Props = {
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
   workgroupFilterId?: string | null;
-  onEventClick: (workOrder: CalendarWorkOrder) => void;
+  onEventClick: (event: CalendarEvent) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
   onWeekClick?: (weekStart: Date) => void;

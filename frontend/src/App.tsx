@@ -17,6 +17,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { KalendarPage } from "./pages/KalendarPage";
+import { OrderCreationPage } from "./pages/OrderCreationPage";
 import { WorkOrdersPage } from "./pages/WorkOrdersPage";
 import { WorkgroupsPage } from "./pages/WorkgroupsPage";
 import { ShiftsPage } from "./pages/ShiftsPage";
@@ -32,6 +33,7 @@ import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
 import { KpiBuilderPage } from "./pages/KpiBuilderPage";
 import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
+import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 
 export default function App() {
   return (
@@ -44,6 +46,7 @@ export default function App() {
           <Route path="assets" element={<AssetsPage />} />
           <Route path="baumstruktur" element={<BaumstrukturPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />
+          <Route path="auftragserstellung" element={<OrderCreationPage />} />
           <Route path="kalendar" element={<KalendarPage />} />
           <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
@@ -62,6 +65,7 @@ export default function App() {
           <Route path="workgroups" element={<WorkgroupsPage />} />
           <Route path="shifts" element={<ShiftsPage />} />
           <Route path="maintenance-plans" element={<MaintenancePlansPage />} />
+          <Route path="inspection-rounds" element={<InspectionRoundsPage />} />
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />

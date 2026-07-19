@@ -2,9 +2,10 @@ export const orderDialogTabs = {
   General: 0,
   Planning: 1,
   Documents: 2,
-  Feedback: 3,
-  Transactions: 4,
-  Messages: 5,
+  InspectionPoints: 3,
+  Feedback: 4,
+  Transactions: 5,
+  Messages: 6,
 } as const;
 
 export type OrderDialogTab = (typeof orderDialogTabs)[keyof typeof orderDialogTabs];

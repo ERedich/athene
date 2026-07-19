@@ -9,6 +9,7 @@ import {
 } from "../../lib/calendar/calendarEventLayout";
 import type { CalendarWeekRow as WeekRow } from "../../lib/calendar/calendarDates";
 import { isBeforeToday, isValidMoveTarget } from "../../lib/calendar/calendarMove";
+import type { CalendarMaintenancePlan } from "../../lib/calendar/calendarMaintenancePlans";
 import { CALENDAR_MONTH_MAX_EVENT_LANES, type CalendarEvent } from "../../lib/calendar/calendarTypes";
 import type { CalendarWorkOrder } from "../../lib/calendar/calendarWorkOrders";
 import { CalendarDayCell } from "./CalendarDayCell";
@@ -24,7 +25,7 @@ type Props = {
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
   workgroupFilterId?: string | null;
-  onEventClick: (workOrder: CalendarWorkOrder) => void;
+  onEventClick: (event: CalendarEvent) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onOverflowWeekClick?: (weekStart: Date) => void;
   onDayClick?: (day: Date) => void;
@@ -73,6 +74,12 @@ export function CalendarWeekRow({
   });
 
   const segmentTooltip = (seg: CalendarEventSegment): string => {
+    if (seg.kind === "maintenancePlan") {
+      const plan = seg.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
+      const typeLabel = t("kalendar.orderType.maintenancePlan");
+      if (!plan) return `${seg.title}\n${typeLabel}`;
+      return `${seg.title}\n${typeLabel}\n${formatDateTime(plan.nextDueAt)}`;
+    }
     const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
     if (!wo) return seg.title;
     const typeKey = `kalendar.orderType.${wo.orderType}` as const;
@@ -81,13 +88,13 @@ export function CalendarWeekRow({
   };
 
   const handleSegmentClick = (seg: CalendarEventSegment) => {
-    const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
-    if (wo) onEventClick(wo);
+    const event = events.find((ev) => ev.id === seg.eventId);
+    if (event) onEventClick(event);
   };
 
   const resolveWorkOrder = (workOrderId: string): CalendarWorkOrder | undefined => {
     for (const ev of events) {
-      if (ev.id === workOrderId) {
+      if (ev.id === workOrderId && ev.kind === "workOrder") {
         return ev.meta?.workOrder as CalendarWorkOrder | undefined;
       }
     }
@@ -129,30 +136,38 @@ export function CalendarWeekRow({
         aria-hidden={segments.length === 0 && !showOverflowRow}
       >
         {segments.map((seg) => {
+          const isPlan = seg.kind === "maintenancePlan";
           const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
+          const plan = seg.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
           const filterDisabled =
-            workgroupFilterId != null && wo != null && wo.workgroupId !== workgroupFilterId;
+            workgroupFilterId != null &&
+            (isPlan
+              ? plan != null && plan.workgroupId !== workgroupFilterId
+              : wo != null && wo.workgroupId !== workgroupFilterId);
           return (
           <CalendarEventBar
             key={`${seg.eventId}-${seg.colStart}-${seg.laneIndex}`}
             segment={seg}
             tooltip={segmentTooltip(seg)}
-            isDragging={draggingWorkOrderId === seg.eventId}
+            isDragging={!isPlan && draggingWorkOrderId === seg.eventId}
             disabled={filterDisabled}
             disabledTooltip={filterDisabled ? t("kalendar.workgroupFilterDisabledOrder") : undefined}
-            draggingEmployeeId={draggingEmployeeId}
-            employeeDropAllowed={!filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)}
+            draggingEmployeeId={isPlan ? null : draggingEmployeeId}
+            employeeDropAllowed={
+              !isPlan && !filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)
+            }
+            readOnly={isPlan}
             onClick={() => handleSegmentClick(seg)}
             onAskAthene={
-              onAskAthene
+              !isPlan && onAskAthene
                 ? () => {
                     if (wo) onAskAthene(wo);
                   }
                 : undefined
             }
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            onAssignEmployee={onAssignEmployee}
+            onDragStart={isPlan ? undefined : onDragStart}
+            onDragEnd={isPlan ? undefined : onDragEnd}
+            onAssignEmployee={isPlan ? undefined : onAssignEmployee}
           />
           );
         })}

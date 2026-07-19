@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
+  CheckSquare,
   ChevronsDownUp,
   ChevronsUpDown,
   ClipboardList,
@@ -68,7 +69,14 @@ type AssetDocumentRow = {
   fileSize: number;
 };
 
-type RefsTabIndex = 0 | 1;
+type RefsTabIndex = 0 | 1 | 2;
+
+type InspectionPointRow = {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+};
 
 function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -213,6 +221,20 @@ function workOrdersRefClass(appearance: RefButtonAppearance): string {
   }
 }
 
+function inspectionPointsRefClass(appearance: RefButtonAppearance): string {
+  switch (appearance) {
+    case "filled":
+      return "app-ref-button--inspection-points";
+    case "outline":
+      return "app-ref-button--inspection-points-outline";
+    case "outlineFilled":
+      return "app-ref-button--inspection-points-outline-filled";
+    case "empty":
+    default:
+      return "app-ref-button--inspection-points-empty";
+  }
+}
+
 function parseCount(raw: unknown): number {
   if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) return Math.trunc(raw);
   if (typeof raw === "string" && raw.trim()) {
@@ -242,6 +264,7 @@ function parseAssetRow(raw: unknown): AssetTreeAsset | null {
     parentAssetType: isAssetType(o.parentAssetType) ? o.parentAssetType : null,
     documentCount: parseCount(o.documentCount),
     workOrderCount: parseCount(o.workOrderCount),
+    inspectionPointCount: parseCount(o.inspectionPointCount),
   };
 }
 
@@ -274,6 +297,9 @@ export function BaumstrukturPage() {
   const [woLoading, setWoLoading] = useState(false);
   const [woRows, setWoRows] = useState<WorkOrder[]>([]);
   const [woLoadedAssetId, setWoLoadedAssetId] = useState<string | null>(null);
+  const [ipLoading, setIpLoading] = useState(false);
+  const [ipRows, setIpRows] = useState<InspectionPointRow[]>([]);
+  const [ipLoadedAssetId, setIpLoadedAssetId] = useState<string | null>(null);
   const [imageHoverPreview, setImageHoverPreview] = useState<ImageHoverPreview | null>(null);
   const imagePreviewCacheRef = useRef<Map<string, string>>(new Map());
   const imagePreviewHoverTimerRef = useRef<number | null>(null);
@@ -407,6 +433,31 @@ export function BaumstrukturPage() {
     [t],
   );
 
+  const loadInspectionPoints = useCallback(
+    async (asset: AssetTreeAsset) => {
+      setIpLoading(true);
+      try {
+        const res = await apiFetch(`/api/assets/${asset.id}/inspection-points`);
+        if (!res.ok) throw new Error("ips");
+        const data = (await res.json()) as unknown;
+        const rows = Array.isArray(data) ? (data as InspectionPointRow[]) : [];
+        setIpRows(rows);
+        setIpLoadedAssetId(asset.id);
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("baumstruktur.inspectionPointsLoadError"),
+          life: 6000,
+        });
+        setIpRows([]);
+        setIpLoadedAssetId(null);
+      } finally {
+        setIpLoading(false);
+      }
+    },
+    [t],
+  );
+
   const openRefsDrawer = useCallback(
     (asset: AssetTreeAsset, tab: RefsTabIndex) => {
       const sameAsset = refsAsset?.id === asset.id;
@@ -415,17 +466,29 @@ export function BaumstrukturPage() {
       if (!sameAsset) {
         setDocsRows([]);
         setWoRows([]);
+        setIpRows([]);
         setDocsLoadedAssetId(null);
         setWoLoadedAssetId(null);
+        setIpLoadedAssetId(null);
         setDocsSearchTerm("");
       }
       if (tab === 0) {
         if (!sameAsset || docsLoadedAssetId !== asset.id) void loadDocuments(asset);
-      } else if (!sameAsset || woLoadedAssetId !== asset.id) {
-        void loadWorkOrders(asset);
+      } else if (tab === 1) {
+        if (!sameAsset || woLoadedAssetId !== asset.id) void loadWorkOrders(asset);
+      } else if (!sameAsset || ipLoadedAssetId !== asset.id) {
+        void loadInspectionPoints(asset);
       }
     },
-    [docsLoadedAssetId, loadDocuments, loadWorkOrders, refsAsset?.id, woLoadedAssetId],
+    [
+      docsLoadedAssetId,
+      ipLoadedAssetId,
+      loadDocuments,
+      loadInspectionPoints,
+      loadWorkOrders,
+      refsAsset?.id,
+      woLoadedAssetId,
+    ],
   );
 
   const closeRefsDrawer = useCallback(() => {
@@ -535,13 +598,22 @@ export function BaumstrukturPage() {
 
   const onRefsTabChange = useCallback(
     (index: number) => {
-      const tab: RefsTabIndex = index === 1 ? 1 : 0;
+      const tab: RefsTabIndex = index === 2 ? 2 : index === 1 ? 1 : 0;
       setRefsTab(tab);
       if (!refsAsset) return;
       if (tab === 0 && docsLoadedAssetId !== refsAsset.id) void loadDocuments(refsAsset);
       if (tab === 1 && woLoadedAssetId !== refsAsset.id) void loadWorkOrders(refsAsset);
+      if (tab === 2 && ipLoadedAssetId !== refsAsset.id) void loadInspectionPoints(refsAsset);
     },
-    [docsLoadedAssetId, loadDocuments, loadWorkOrders, refsAsset, woLoadedAssetId],
+    [
+      docsLoadedAssetId,
+      ipLoadedAssetId,
+      loadDocuments,
+      loadInspectionPoints,
+      loadWorkOrders,
+      refsAsset,
+      woLoadedAssetId,
+    ],
   );
 
   const openDocumentContent = useCallback(
@@ -654,10 +726,16 @@ export function BaumstrukturPage() {
         asset.workOrderCount,
         flags.hasDescendantWorkOrders === true,
       );
+      const ipAppearance = refButtonAppearance(
+        asset.inspectionPointCount,
+        flags.hasDescendantInspectionPoints === true,
+      );
       const hasDocuments = asset.documentCount > 0;
       const hasWorkOrders = asset.workOrderCount > 0;
+      const hasInspectionPoints = asset.inspectionPointCount > 0;
       const docsBadge = hasDocuments ? String(asset.documentCount) : " ";
       const woBadge = hasWorkOrders ? String(asset.workOrderCount) : " ";
+      const ipBadge = hasInspectionPoints ? String(asset.inspectionPointCount) : " ";
       const stop = (e: MouseEvent) => {
         e.stopPropagation();
       };
@@ -683,6 +761,17 @@ export function BaumstrukturPage() {
             onClick={() => openRefsDrawer(asset, 1)}
             aria-label={t("baumstruktur.referencesWorkOrders")}
             title={t("baumstruktur.referencesWorkOrders")}
+          />
+          <Button
+            type="button"
+            icon={<CheckSquare className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+            badge={ipBadge}
+            badgeClassName={`${refBadgeClass} ${hasInspectionPoints ? "" : "app-ref-badge--placeholder"}`}
+            className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${inspectionPointsRefClass(ipAppearance)}`}
+            disabled={!hasInspectionPoints}
+            onClick={() => openRefsDrawer(asset, 2)}
+            aria-label={t("baumstruktur.referencesInspectionPoints")}
+            title={t("baumstruktur.referencesInspectionPoints")}
           />
         </div>
       );
@@ -723,7 +812,7 @@ export function BaumstrukturPage() {
     if (refsAsset == null) return;
     const raf = requestAnimationFrame(updateRefsTabInk);
     return () => cancelAnimationFrame(raf);
-  }, [refsAsset, refsTab, docsLoading, woLoading, updateRefsTabInk]);
+  }, [refsAsset, refsTab, docsLoading, woLoading, ipLoading, updateRefsTabInk]);
 
   useEffect(() => {
     if (refsAsset == null) return;
@@ -1065,6 +1154,48 @@ export function BaumstrukturPage() {
                           </div>
                           <div className="truncate text-sm text-on-surface" title={row.name}>
                             {row.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </TabPanel>
+              <TabPanel
+                header={
+                  <span className="inline-flex items-center gap-2">
+                    <span>{t("baumstruktur.referencesInspectionPoints")}</span>
+                    {refsAsset.inspectionPointCount > 0 ? (
+                      <Badge value={refsAsset.inspectionPointCount} />
+                    ) : null}
+                  </span>
+                }
+              >
+                <div className="space-y-3">
+                  {ipLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                      <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
+                      <span>{t("baumstruktur.loading")}</span>
+                    </div>
+                  ) : ipRows.length === 0 ? (
+                    <div className="text-sm text-on-surface-variant">
+                      {t("baumstruktur.inspectionPointsEmpty")}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2">
+                      {ipRows.map((row, index) => (
+                        <div
+                          key={row.id}
+                          className="app-card-cascade flex flex-col gap-0.5 rounded-sm border border-solid border-outline-variant px-3 py-2"
+                          style={{ ["--app-cascade-index" as string]: index }}
+                        >
+                          <div className="truncate text-sm font-medium text-on-surface">
+                            {row.key} – {row.name}
+                          </div>
+                          <div className="text-xs text-on-surface-variant">
+                            {t(`assets.inspectionPointTypeValues.${row.type}`, {
+                              defaultValue: row.type,
+                            })}
                           </div>
                         </div>
                       ))}

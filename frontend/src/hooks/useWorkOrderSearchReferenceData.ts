@@ -20,11 +20,13 @@ export type WorkOrderSearchReferenceSelectOption = { label: string; value: strin
 type Options = {
   /** When false, call `reload()` manually (e.g. lazy load for dialog). Default true. */
   autoLoad?: boolean;
+  /** When false, skip `GET /api/assets` (edit dialog uses SelItem lookup/picker). Default true. */
+  includeAssets?: boolean;
 };
 
 /** Loads sites, assets, … for WorkOrderSearchPanel and the global edit dialog. */
 export function useWorkOrderSearchReferenceData(options: Options = {}) {
-  const { autoLoad = true } = options;
+  const { autoLoad = true, includeAssets = true } = options;
   const { t, i18n } = useTranslation();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
@@ -53,7 +55,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         usersRes,
         maintenancePlansRes,
       ] = await Promise.all([
-        apiFetch("/api/assets"),
+        includeAssets ? apiFetch("/api/assets") : Promise.resolve(null),
         apiFetch("/api/cost-centers"),
         apiFetch("/api/classifications"),
         apiFetch("/api/employees"),
@@ -63,7 +65,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         apiFetch("/api/maintenance-plans"),
       ]);
       if (
-        !assetsRes.ok ||
+        (includeAssets && !assetsRes?.ok) ||
         !costCentersRes.ok ||
         !classificationsRes.ok ||
         !employeesRes.ok ||
@@ -84,7 +86,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         usersData,
         maintenancePlansData,
       ] = (await Promise.all([
-        assetsRes.json(),
+        includeAssets && assetsRes ? assetsRes.json() : Promise.resolve([]),
         costCentersRes.json(),
         classificationsRes.json(),
         employeesRes.json(),
@@ -145,7 +147,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeAssets]);
 
   useEffect(() => {
     if (autoLoad) void load();

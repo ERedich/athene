@@ -28,4 +28,7 @@ export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD" as const;
 /** Must match backend `APP_PARAM_KEY_DEFAULT_SHIFT_HOURS` (SH-DSH). */
 export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH" as const;
 
+/** Must match backend `APP_PARAM_KEY_GENERATE_WO_FROM_MP` (WO-GNWO). */
+export const APP_PARAM_KEY_GENERATE_WO_FROM_MP = "WO-GNWO" as const;
+
 export type AppParameterAssetKeyMode = "manual" | "auto_incremental";

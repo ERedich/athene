@@ -13,6 +13,7 @@ export type WorkOrderFormFields = {
   responsibleEmployeeIds: string[];
   workgroupId: string;
   classificationId: string;
+  inspectionRoundId: string;
   originalWoId: string;
   /** Shown in create dialog when copying; not sent to API. */
   copySourceOrderNumber: number | null;
@@ -32,6 +33,7 @@ export type WorkOrderFormSource = {
   responsibleEmployeeIds: string[];
   workgroupId: string | null;
   classificationId: string | null;
+  inspectionRoundId?: string | null;
   originalWo?: string | null;
   originalWoOrderNumber?: number | null;
 };
@@ -58,6 +60,7 @@ export function emptyWorkOrderForm(): WorkOrderFormFields {
     responsibleEmployeeIds: [],
     workgroupId: "",
     classificationId: "",
+    inspectionRoundId: "",
     originalWoId: "",
     copySourceOrderNumber: null,
   };
@@ -86,6 +89,7 @@ export function workOrderRowToFormState(
     responsibleEmployeeIds: [...(row.responsibleEmployeeIds ?? [])],
     workgroupId: row.workgroupId ?? "",
     classificationId: row.classificationId ?? "",
+    inspectionRoundId: row.inspectionRoundId ?? "",
     originalWoId: asCopy ? row.id : (row.originalWo ?? ""),
     copySourceOrderNumber: asCopy
       ? row.orderNumber

@@ -9,6 +9,7 @@ import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
 import { appParametersRouter } from "./appParameters.js";
 import { assetsRouter } from "./assets.js";
 import { authRouter } from "./auth.js";
+import inspectionRoundsRouter from "./inspectionRounds.js";
 import { dashboardRouter } from "./dashboard.js";
 import { atheneBriefingRouter } from "./atheneBriefing.js";
 import { classificationsRouter } from "./classifications.js";
@@ -35,7 +36,7 @@ import { workOrderSubscriptionsRouter } from "./workOrderSubscriptions.js";
 import { tableLayoutsRouter } from "./tableLayouts.js";
 import { customKpisRouter } from "./customKpis.js";
 import { maintenancePlansRouter } from "./maintenancePlans.js";
-import { startMaintenancePlanSweep } from "./maintenancePlanGenerate.js";
+import { startMaintenancePlanDailyGenerate } from "./maintenancePlanGenerate.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -84,6 +85,7 @@ app.use("/api/classifications", requireAuth, classificationsRouter);
 app.use("/api/workgroups", requireAuth, workgroupsRouter);
 app.use("/api/employees", requireAuth, employeesRouter);
 app.use("/api/assets", requireAuth, assetsRouter);
+app.use("/api/inspection-rounds", requireAuth, inspectionRoundsRouter);
 app.use("/api/maintenance-plans", requireAuth, maintenancePlansRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/dashboard", requireAuth, atheneBriefingRouter);
@@ -124,5 +126,5 @@ server.listen(port, listenHost, () => {
   console.log(
     `backend listening on http://localhost:${port} (bound to ${listenHost}, use http://<this-machine-ip>:${port} on LAN)`,
   );
-  startMaintenancePlanSweep();
+  startMaintenancePlanDailyGenerate();
 });

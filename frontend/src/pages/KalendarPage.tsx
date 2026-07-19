@@ -34,7 +34,14 @@ import {
   filterAssignableEmployees,
   type CalendarAssignableEmployee,
 } from "../lib/calendar/calendarEmployeeAssignment";
-import type { CalendarViewMode } from "../lib/calendar/calendarTypes";
+import type { CalendarEvent, CalendarViewMode } from "../lib/calendar/calendarTypes";
+import {
+  fetchCalendarMaintenancePlans,
+  filterPlansForCalendarRange,
+  maintenancePlanMatchesWorkgroupFilter,
+  maintenancePlanToCalendarEvent,
+  type CalendarMaintenancePlan,
+} from "../lib/calendar/calendarMaintenancePlans";
 import {
   calendarWorkOrderToEditSource,
   fetchCalendarWorkOrders,
@@ -53,11 +60,13 @@ import {
 import { apiFetch } from "../lib/api";
 import type { WorkOrderReferenceEmployee, WorkOrderReferenceWorkgroup } from "../lib/workOrderTypes";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
+import { useMaintenancePlanDialog } from "../maintenancePlans/MaintenancePlanDialogContext";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 
 export function KalendarPage() {
   const { t, i18n } = useTranslation();
   const woDialog = useWorkOrderDialog();
+  const mpDialog = useMaintenancePlanDialog();
   const athene = useAtheneAssistant();
   const toastRef = useRef<Toast>(null);
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
@@ -67,6 +76,7 @@ export function KalendarPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [workgroupFilterId, setWorkgroupFilterId] = useState<string | null>(null);
   const [workOrders, setWorkOrders] = useState<CalendarWorkOrder[]>([]);
+  const [maintenancePlans, setMaintenancePlans] = useState<CalendarMaintenancePlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggingWorkOrderId, setDraggingWorkOrderId] = useState<string | null>(null);
@@ -152,11 +162,25 @@ export function KalendarPage() {
     setLoading(true);
     setError(null);
     try {
-      const rows = await fetchCalendarWorkOrders(rangeStart, rangeEnd);
-      setWorkOrders(rows);
+      const [woResult, planResult] = await Promise.allSettled([
+        fetchCalendarWorkOrders(rangeStart, rangeEnd),
+        fetchCalendarMaintenancePlans(),
+      ]);
+
+      if (woResult.status === "rejected") {
+        throw woResult.reason;
+      }
+      setWorkOrders(woResult.value);
+
+      if (planResult.status === "fulfilled") {
+        setMaintenancePlans(filterPlansForCalendarRange(planResult.value, rangeStart, rangeEnd));
+      } else {
+        setMaintenancePlans([]);
+      }
     } catch {
       setError(t("kalendar.loadError"));
       setWorkOrders([]);
+      setMaintenancePlans([]);
     } finally {
       setLoading(false);
     }
@@ -166,7 +190,13 @@ export function KalendarPage() {
     void loadData();
   }, [loadData]);
 
-  const allEvents = useMemo(() => workOrders.map(workOrderToCalendarEvent), [workOrders]);
+  const allEvents = useMemo(
+    () => [
+      ...workOrders.map(workOrderToCalendarEvent),
+      ...maintenancePlans.map(maintenancePlanToCalendarEvent),
+    ],
+    [maintenancePlans, workOrders],
+  );
 
   const filteredEvents = useMemo(
     () => filterCalendarEventsBySearch(allEvents, searchTerm),
@@ -193,6 +223,10 @@ export function KalendarPage() {
     const countMatching = (events: typeof filteredEvents) => {
       if (!workgroupFilterId) return events.length;
       return events.filter((ev) => {
+        if (ev.kind === "maintenancePlan") {
+          const plan = ev.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
+          return plan != null && maintenancePlanMatchesWorkgroupFilter(plan, workgroupFilterId);
+        }
         const wo = ev.meta?.workOrder as CalendarWorkOrder | undefined;
         return wo != null && workOrderMatchesWorkgroupFilter(wo, workgroupFilterId);
       }).length;
@@ -239,12 +273,24 @@ export function KalendarPage() {
   }, []);
 
   const handleEventClick = useCallback(
-    (wo: CalendarWorkOrder) => {
-      woDialog.openEdit(calendarWorkOrderToEditSource(wo), {
-        onSaved: () => void loadData(),
-      });
+    (event: CalendarEvent) => {
+      if (event.kind === "workOrder") {
+        const wo = event.meta?.workOrder as CalendarWorkOrder | undefined;
+        if (!wo) return;
+        woDialog.openEdit(calendarWorkOrderToEditSource(wo), {
+          onSaved: () => void loadData(),
+        });
+        return;
+      }
+      if (event.kind === "maintenancePlan") {
+        const plan = event.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
+        if (!plan) return;
+        mpDialog.openEdit(plan.id, {
+          onSaved: () => void loadData(),
+        });
+      }
     },
-    [loadData, woDialog],
+    [loadData, mpDialog, woDialog],
   );
 
   const handleAskAthene = useCallback(
@@ -501,10 +547,12 @@ export function KalendarPage() {
       ) : (
         <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden bg-surface-container-low">
           <div className="app-calendar-layout__main flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-            {!loading && filteredEvents.length === 0 && workOrders.length === 0 ? (
+            {!loading && filteredEvents.length === 0 && workOrders.length === 0 && maintenancePlans.length === 0 ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>
             ) : null}
-            {!loading && filteredEvents.length === 0 && workOrders.length > 0 ? (
+            {!loading &&
+            filteredEvents.length === 0 &&
+            (workOrders.length > 0 || maintenancePlans.length > 0) ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEventsFiltered")}</p>
             ) : null}
             {viewMode === "day" ? (

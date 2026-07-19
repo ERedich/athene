@@ -11,6 +11,7 @@ import {
   generateDueMaintenancePlans,
   generateWorkOrderForPlan,
   getMaintenancePlanSweepStatus,
+  rolloutMaintenancePlan,
   type MaintenanceIntervalUnit,
 } from "./maintenancePlanGenerate.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
@@ -20,6 +21,7 @@ import {
   assertWorkgroupForOrderSite,
   type DbClient,
 } from "./workOrderCreate.js";
+import { assertInspectionRoundForSite } from "./inspectionRoundSnapshot.js";
 
 export type MaintenancePlanStatus = "active" | "paused" | "ended";
 
@@ -44,6 +46,9 @@ export type MaintenancePlanRow = {
   classificationId: string | null;
   classificationKey: string | null;
   classificationName: string | null;
+  inspectionRoundId: string | null;
+  inspectionRoundKey: string | null;
+  inspectionRoundName: string | null;
   plannedDurationMinutes: number | null;
   intervalUnit: MaintenanceIntervalUnit;
   intervalValue: number;
@@ -52,6 +57,7 @@ export type MaintenancePlanRow = {
   leadTimeDays: number;
   status: MaintenancePlanStatus;
   executionCount: number;
+  ignoreOpenWorkOrders: boolean;
   responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;
   responsibleEmployeeName: string | null;
@@ -71,6 +77,7 @@ type ParsedBody = {
   costCenterId: string;
   workgroupId: string;
   classificationId: string | null;
+  inspectionRoundId: string | null;
   plannedDurationMinutes: number | null;
   intervalUnit: MaintenanceIntervalUnit;
   intervalValue: number;
@@ -78,6 +85,7 @@ type ParsedBody = {
   nextDueAt: string;
   leadTimeDays: number;
   status: MaintenancePlanStatus;
+  ignoreOpenWorkOrders: boolean;
   responsibleEmployeeIds: string[];
 };
 
@@ -167,6 +175,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
   if (classificationIdRaw !== null && !isUuid(classificationIdRaw)) return null;
 
+  const inspectionRoundIdRaw = readTrimmedOptionalString(o.inspectionRoundId);
+  if (inspectionRoundIdRaw !== null && !isUuid(inspectionRoundIdRaw)) return null;
+
   const rawDuration = o.plannedDurationMinutes;
   const plannedDurationMinutes =
     rawDuration === null || rawDuration === undefined
@@ -204,6 +215,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const status = resolveStatus(o);
   if (!status) return null;
 
+  const ignoreOpenWorkOrders =
+    typeof o.ignoreOpenWorkOrders === "boolean" ? o.ignoreOpenWorkOrders : false;
+
   const responsibleEmployeeIds = normalizeEmployeeIds(o.responsibleEmployeeIds);
   if (!responsibleEmployeeIds || responsibleEmployeeIds.length === 0) return null;
 
@@ -216,6 +230,7 @@ function parseBody(body: unknown): ParsedBody | null {
     costCenterId,
     workgroupId,
     classificationId: classificationIdRaw,
+    inspectionRoundId: inspectionRoundIdRaw,
     plannedDurationMinutes,
     intervalUnit: intervalUnit as MaintenanceIntervalUnit,
     intervalValue,
@@ -223,6 +238,7 @@ function parseBody(body: unknown): ParsedBody | null {
     nextDueAt,
     leadTimeDays,
     status,
+    ignoreOpenWorkOrders,
     responsibleEmployeeIds,
   };
 }
@@ -335,6 +351,9 @@ const selectPlansSql = `
     p."classificationId",
     cl."key" AS "classificationKey",
     cl."name" AS "classificationName",
+    p."inspectionRoundId",
+    ir."key" AS "inspectionRoundKey",
+    ir."name" AS "inspectionRoundName",
     p."plannedDurationMinutes",
     p."intervalUnit",
     p."intervalValue",
@@ -343,6 +362,7 @@ const selectPlansSql = `
     p."leadTimeDays",
     p."status",
     p."executionCount",
+    p."ignoreOpenWorkOrders",
     ${responsibleColumnsSql},
     p."createdAt",
     p."updatedAt",
@@ -354,6 +374,7 @@ const selectPlansSql = `
   JOIN "costCenter" c ON c."id" = p."costCenterId"
   JOIN "workgroup" wg ON wg."id" = p."workgroupId"
   LEFT JOIN "classification" cl ON cl."id" = p."classificationId"
+  LEFT JOIN "inspectionRound" ir ON ir."id" = p."inspectionRoundId"
   LEFT JOIN "users" created_by ON created_by."id" = p."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = p."updatedBy"
 `;
@@ -425,6 +446,13 @@ async function assertPlanContext(
     effectiveSiteId,
     parsed.classificationId,
     "work_order",
+  );
+  await assertInspectionRoundForSite(
+    client,
+    userId,
+    parsed.inspectionRoundId,
+    effectiveSiteId,
+    siteAccessSql,
   );
   return effectiveSiteId;
 }
@@ -533,6 +561,42 @@ router.post("/:id/generate", async (req: Request, res: Response) => {
   }
 });
 
+router.post("/:id/rollout", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const untilDate =
+    typeof (req.body as { untilDate?: unknown } | null)?.untilDate === "string"
+      ? (req.body as { untilDate: string }).untilDate.trim()
+      : "";
+  if (!untilDate) {
+    res.status(400).json({ error: "invalid_until_date" });
+    return;
+  }
+  try {
+    const result = await rolloutMaintenancePlan({
+      planId: id,
+      actorUserId: userId,
+      untilDate,
+    });
+    res.json(result);
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message === "invalid_until_date" || message === "until_date_in_past") {
+      res.status(400).json({ error: message });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
 router.post("/", async (req: Request, res: Response) => {
   const parsed = parseBody(req.body);
   if (!parsed) {
@@ -550,11 +614,11 @@ router.post("/", async (req: Request, res: Response) => {
         `
         INSERT INTO "maintenancePlan"
           ("key", "name", "description", "siteId", "assetId", "costCenterId", "workgroupId",
-           "classificationId", "plannedDurationMinutes", "intervalUnit", "intervalValue",
-           "anchorDate", "nextDueAt", "leadTimeDays", "status")
+           "classificationId", "inspectionRoundId", "plannedDurationMinutes", "intervalUnit", "intervalValue",
+           "anchorDate", "nextDueAt", "leadTimeDays", "status", "ignoreOpenWorkOrders")
         VALUES
-          ($1, $2, $3, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9::integer,
-           $10, $11::integer, $12::date, $13::timestamptz, $14::integer, $15)
+          ($1, $2, $3, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::integer,
+           $11, $12::integer, $13::date, $14::timestamptz, $15::integer, $16, $17)
         RETURNING "id"
         `,
         [
@@ -566,6 +630,7 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.costCenterId,
           parsed.workgroupId,
           parsed.classificationId,
+          parsed.inspectionRoundId,
           parsed.plannedDurationMinutes,
           parsed.intervalUnit,
           parsed.intervalValue,
@@ -573,6 +638,7 @@ router.post("/", async (req: Request, res: Response) => {
           nextDueAt,
           parsed.leadTimeDays,
           parsed.status,
+          parsed.ignoreOpenWorkOrders,
         ],
       );
       const planId = inserted.rows[0]?.id;
@@ -632,14 +698,16 @@ router.put("/:id", async (req: Request, res: Response) => {
           "costCenterId" = $6::uuid,
           "workgroupId" = $7::uuid,
           "classificationId" = $8::uuid,
-          "plannedDurationMinutes" = $9::integer,
-          "intervalUnit" = $10,
-          "intervalValue" = $11::integer,
-          "anchorDate" = $12::date,
-          "nextDueAt" = $13::timestamptz,
-          "leadTimeDays" = $14::integer,
-          "status" = $15
-        WHERE "id" = $16::uuid
+          "inspectionRoundId" = $9::uuid,
+          "plannedDurationMinutes" = $10::integer,
+          "intervalUnit" = $11,
+          "intervalValue" = $12::integer,
+          "anchorDate" = $13::date,
+          "nextDueAt" = $14::timestamptz,
+          "leadTimeDays" = $15::integer,
+          "status" = $16,
+          "ignoreOpenWorkOrders" = $17
+        WHERE "id" = $18::uuid
         `,
         [
           parsed.key,
@@ -650,6 +718,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.costCenterId,
           parsed.workgroupId,
           parsed.classificationId,
+          parsed.inspectionRoundId,
           parsed.plannedDurationMinutes,
           parsed.intervalUnit,
           parsed.intervalValue,
@@ -657,6 +726,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           nextDueAt,
           parsed.leadTimeDays,
           parsed.status,
+          parsed.ignoreOpenWorkOrders,
           id,
         ],
       );

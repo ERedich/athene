@@ -21,6 +21,9 @@ import {
   assetWorkOrderCountSubquery,
   assetWorkOrderCountSubqueryOnInsert,
   assetWorkOrderCountSubqueryOnUpdate,
+  assetInspectionPointCountSubquery,
+  assetInspectionPointCountSubqueryOnInsert,
+  assetInspectionPointCountSubqueryOnUpdate,
   createDocument,
   deleteDocumentForEntity,
   getDocumentContentForAsset,
@@ -67,6 +70,7 @@ export type AssetRow = {
   updatedBy: string;
   documentCount: number;
   workOrderCount: number;
+  inspectionPointCount: number;
   /** Present when GN-SAKP enabled; computed server-side. */
   keyPath: string | null;
 };
@@ -223,6 +227,7 @@ const selectAssetsSqlBase = `
     COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
     COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
+    COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
     NULL::text AS "keyPath"
   FROM "asset" a
   JOIN "site" s ON s."id" = a."siteId"
@@ -233,6 +238,7 @@ const selectAssetsSqlBase = `
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
   ${assetDocumentCountSubquery}
   ${assetWorkOrderCountSubquery}
+  ${assetInspectionPointCountSubquery}
 `;
 
 /** Same as selectAssetsSql but computes keyPath when $2 is the separator character. $1 = site-access user id. */
@@ -266,6 +272,7 @@ const selectAssetsSqlWithKeyPath = `
     COALESCE(updated_by."loginName", a."updatedBy"::text) AS "updatedBy",
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
     COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
+    COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
     (
       s."key" || $2::text || COALESCE(
         (
@@ -293,6 +300,7 @@ const selectAssetsSqlWithKeyPath = `
   LEFT JOIN "users" updated_by ON updated_by."id" = a."updatedBy"
   ${assetDocumentCountSubquery}
   ${assetWorkOrderCountSubquery}
+  ${assetInspectionPointCountSubquery}
 `;
 
 type AssetTypeRow = QueryResultRow & { type: AssetType; id: string; siteId: string };
@@ -442,6 +450,51 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+/** Compact lookup by business key for SelItem direct entry (must be before /:id routes). */
+router.get("/by-key", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const key = typeof req.query.key === "string" ? req.query.key.trim() : "";
+  if (!key) {
+    res.status(400).json({ error: "invalid_key" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{
+      id: string;
+      key: string;
+      name: string;
+      siteId: string;
+      costCenterId: string | null;
+    }>(
+      `
+      SELECT
+        a."id",
+        a."key",
+        a."name",
+        a."siteId",
+        a."costCenterId"
+      FROM "asset" a
+      WHERE a."key" = $2
+        AND ${siteAccessSql('a."siteId"', "$1")}
+      LIMIT 1
+      `,
+      [userId, key],
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.get("/:id/documents", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -461,6 +514,213 @@ router.get("/:id/documents", async (req: Request, res: Response) => {
     }
     res.json(rows);
   } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+export type InspectionPointType = "inspection" | "lubrication";
+
+export type InspectionPointRow = {
+  id: string;
+  assetId: string;
+  key: string;
+  name: string;
+  type: InspectionPointType;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+};
+
+function isInspectionPointType(value: unknown): value is InspectionPointType {
+  return value === "inspection" || value === "lubrication";
+}
+
+function parseInspectionPointBody(
+  body: unknown,
+): { key: string; name: string; type: InspectionPointType } | null {
+  if (body === null || typeof body !== "object") return null;
+  const o = body as Record<string, unknown>;
+  const key = typeof o.key === "string" ? o.key.trim() : "";
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  const typeRaw = o.type === undefined ? "inspection" : o.type;
+  if (!key || !name || !isInspectionPointType(typeRaw)) return null;
+  return { key, name, type: typeRaw };
+}
+
+const selectInspectionPointSql = `
+  SELECT
+    ip."id",
+    ip."assetId",
+    ip."key",
+    ip."name",
+    ip."type",
+    ip."createdAt",
+    ip."updatedAt",
+    COALESCE(created_by."loginName", ip."createdBy"::text) AS "createdBy",
+    COALESCE(updated_by."loginName", ip."updatedBy"::text) AS "updatedBy"
+  FROM "inspectionPoint" ip
+  LEFT JOIN "users" created_by ON created_by."id" = ip."createdBy"
+  LEFT JOIN "users" updated_by ON updated_by."id" = ip."updatedBy"
+`;
+
+router.get("/:id/inspection-points", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const asset = await getAccessibleAsset(userId, id);
+    if (!asset) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const { rows } = await pool.query<InspectionPointRow>(
+      `
+      ${selectInspectionPointSql}
+      WHERE ip."assetId" = $1::uuid
+      ORDER BY ip."key" ASC
+      `,
+      [id],
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/inspection-points", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const parsed = parseInspectionPointBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const asset = await getAccessibleAsset(meta.userId, id);
+      if (!asset) throw new Error("not_found");
+      const { rows } = await client.query<InspectionPointRow>(
+        `
+        WITH inserted AS (
+          INSERT INTO "inspectionPoint" ("assetId", "key", "name", "type")
+          VALUES ($1::uuid, $2, $3, $4)
+          RETURNING *
+        )
+        ${selectInspectionPointSql.replace('FROM "inspectionPoint" ip', "FROM inserted ip")}
+        `,
+        [id, parsed.key, parsed.name, parsed.type],
+      );
+      return rows[0];
+    });
+    if (!row) {
+      res.status(500).json({ error: "no_row" });
+      return;
+    }
+    res.status(201).json(row);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.put("/:id/inspection-points/:pointId", async (req: Request, res: Response) => {
+  const { id, pointId } = req.params;
+  if (!isUuid(id) || !isUuid(pointId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const parsed = parseInspectionPointBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const row = await withAuditContext(meta, async (client) => {
+      const asset = await getAccessibleAsset(meta.userId, id);
+      if (!asset) throw new Error("not_found");
+      const { rows } = await client.query<InspectionPointRow>(
+        `
+        WITH updated AS (
+          UPDATE "inspectionPoint"
+          SET "key" = $1, "name" = $2, "type" = $3
+          WHERE "id" = $4::uuid AND "assetId" = $5::uuid
+          RETURNING *
+        )
+        ${selectInspectionPointSql.replace('FROM "inspectionPoint" ip', "FROM updated ip")}
+        `,
+        [parsed.key, parsed.name, parsed.type, pointId, id],
+      );
+      return rows[0] ?? null;
+    });
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.delete("/:id/inspection-points/:pointId", async (req: Request, res: Response) => {
+  const { id, pointId } = req.params;
+  if (!isUuid(id) || !isUuid(pointId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const deleted = await withAuditContext(meta, async (client) => {
+      const asset = await getAccessibleAsset(meta.userId, id);
+      if (!asset) throw new Error("not_found");
+      const { rowCount } = await client.query(
+        `DELETE FROM "inspectionPoint" WHERE "id" = $1::uuid AND "assetId" = $2::uuid`,
+        [pointId, id],
+      );
+      return (rowCount ?? 0) > 0;
+    });
+    if (!deleted) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.status(204).send();
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -708,6 +968,7 @@ router.post("/", async (req: Request, res: Response) => {
           COALESCE(updated_by."loginName", i."updatedBy"::text) AS "updatedBy",
           COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
           COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
+          COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
           NULL::text AS "keyPath"
         FROM inserted i
         JOIN "site" s ON s."id" = i."siteId"
@@ -718,6 +979,7 @@ router.post("/", async (req: Request, res: Response) => {
         LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
         ${assetDocumentCountSubqueryOnInsert}
         ${assetWorkOrderCountSubqueryOnInsert}
+        ${assetInspectionPointCountSubqueryOnInsert}
         `,
         [
           resolvedKey,
@@ -903,6 +1165,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           COALESCE(updated_by."loginName", u."updatedBy"::text) AS "updatedBy",
           COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
           COALESCE(wo_counts."workOrderCount", 0)::int AS "workOrderCount",
+          COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
           NULL::text AS "keyPath"
         FROM updated u
         JOIN "site" s ON s."id" = u."siteId"
@@ -913,6 +1176,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         ${assetDocumentCountSubqueryOnUpdate}
         ${assetWorkOrderCountSubqueryOnUpdate}
+        ${assetInspectionPointCountSubqueryOnUpdate}
         `,
         [
           keyForUpdate,

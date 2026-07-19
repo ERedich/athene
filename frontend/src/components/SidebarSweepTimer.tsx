@@ -5,7 +5,8 @@ import { apiFetch } from "../lib/api";
 
 type SweepStatus = {
   enabled: boolean;
-  intervalMs: number;
+  intervalMs: number | null;
+  scheduleTime?: string | null;
   lastRunAt: string | null;
   nextRunAt: string | null;
   remainingMs: number | null;

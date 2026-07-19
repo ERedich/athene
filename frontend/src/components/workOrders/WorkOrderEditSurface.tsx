@@ -11,8 +11,10 @@ import { MultiSelect } from "primereact/multiselect";
 import { TabPanel, TabView } from "primereact/tabview";
 
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
+import { AssetSelItem } from "../selItem/AssetSelItem";
 import { WorkOrderFeedbackTabContent } from "./WorkOrderFeedbackTabContent";
 import { WorkOrderFeedbackTransactionsSection } from "./WorkOrderFeedbackTransactionsSection";
+import { WorkOrderInspectionPointsTabContent } from "./WorkOrderInspectionPointsTabContent";
 import { WorkOrderMessagesTabContent } from "./WorkOrderMessagesTabContent";
 import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
@@ -191,9 +193,12 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     statusLabel,
     orderStatusForUi,
     orderTypeOptions,
-    assetOptions,
+    assetKeyDisplay,
+    setAssetKeyDisplay,
+    handleAssetSelect,
     costCenterOptions,
     classificationOptions,
+    inspectionRoundOptions,
     workgroupOptions,
     responsibleEmployeeOptions,
     calendarDateFormat,
@@ -253,10 +258,15 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     messagesTabCount,
     updatePlannedDuration,
     saving,
+    inspectionPoints,
+    inspectionPointsLoading,
+    inspectionPointTogglingId,
+    toggleInspectionPoint,
   } = props;
 
   const assignmentsLocked =
     editingMeta?.status === "ended" || editingMeta?.status === "done" || editingMeta?.status === "cancelled";
+  const inspectionPointsTabEnabled = Boolean(editingId && form.inspectionRoundId);
 
   return (
     <div ref={tabHostRef} className="app-tabview-with-ink app-wo-edit-tab-host">
@@ -272,6 +282,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
             idx === orderDialogTabs.General ||
             idx === orderDialogTabs.Planning ||
             idx === orderDialogTabs.Documents ||
+            idx === orderDialogTabs.InspectionPoints ||
             idx === orderDialogTabs.Feedback ||
             idx === orderDialogTabs.Transactions ||
             idx === orderDialogTabs.Messages
@@ -375,18 +386,13 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                   *
                 </span>
               </label>
-              <Dropdown
+              <AssetSelItem
                 inputId="order-asset"
-                value={form.assetId}
-                options={assetOptions}
-                onChange={(e) => {
-                  const nextAssetId = String(e.value ?? "");
-                  setForm((cur) => ({ ...cur, assetId: nextAssetId }));
-                }}
+                assetId={form.assetId}
+                assetKey={assetKeyDisplay}
+                onSelect={handleAssetSelect}
+                onAssetKeyChange={setAssetKeyDisplay}
                 placeholder={t("workOrders.assetPlaceholder")}
-                className="w-full app-inline-icon-dropdown"
-                filter
-                appendTo={overlayAppendTo}
               />
             </div>
 
@@ -420,6 +426,26 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                 options={classificationOptions}
                 onChange={(e) => setForm((cur) => ({ ...cur, classificationId: String(e.value ?? "") }))}
                 placeholder={t("workOrders.classificationPlaceholder")}
+                className="w-full app-inline-icon-dropdown"
+                disabled={!form.assetId}
+                filter
+                showClear
+                appendTo={overlayAppendTo}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-6">
+              <label htmlFor="order-inspection-round" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                {t("workOrders.inspectionRound")}
+              </label>
+              <Dropdown
+                inputId="order-inspection-round"
+                value={form.inspectionRoundId || null}
+                options={inspectionRoundOptions}
+                onChange={(e) =>
+                  setForm((cur) => ({ ...cur, inspectionRoundId: String(e.value ?? "") }))
+                }
+                placeholder={t("workOrders.inspectionRoundPlaceholder")}
                 className="w-full app-inline-icon-dropdown"
                 disabled={!form.assetId}
                 filter
@@ -832,6 +858,33 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               </div>
             )}
           </div>
+        </TabPanel>
+        <TabPanel
+          header={
+            <span className="inline-flex items-center gap-2">
+              <span>{t("workOrders.tabInspectionPoints")}</span>
+              {inspectionPoints.length > 0 ? (
+                <Badge
+                  value={`${inspectionPoints.filter((p) => p.checked).length}/${inspectionPoints.length}`}
+                />
+              ) : null}
+            </span>
+          }
+          disabled={!inspectionPointsTabEnabled}
+        >
+          <WorkOrderInspectionPointsTabContent
+            rows={inspectionPoints}
+            loading={inspectionPointsLoading}
+            togglingId={inspectionPointTogglingId}
+            emptyLabel={t("workOrders.inspectionPointsEmpty")}
+            loadingLabel={t("workOrders.inspectionPointsLoading")}
+            posLabel={t("workOrders.inspectionPointPos")}
+            nameLabel={t("workOrders.inspectionPointName")}
+            assetLabel={t("workOrders.asset")}
+            pointLabel={t("workOrders.inspectionPoint")}
+            formatPos={(pos) => String(pos).padStart(4, "0")}
+            onToggle={(row, checked) => void toggleInspectionPoint(row, checked)}
+          />
         </TabPanel>
         <TabPanel
           header={

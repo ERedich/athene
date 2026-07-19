@@ -17,12 +17,14 @@ export type AssetTreeAsset = {
   parentAssetType: AssetTreeType | null;
   documentCount: number;
   workOrderCount: number;
+  inspectionPointCount: number;
 };
 
 /** Descendant ref flags attached to TreeNode after `annotateDescendantRefs`. */
 export type AssetTreeRefFlags = {
   hasDescendantDocuments: boolean;
   hasDescendantWorkOrders: boolean;
+  hasDescendantInspectionPoints: boolean;
 };
 
 export type AnnotatedTreeNode = TreeNode & AssetTreeRefFlags;
@@ -93,6 +95,7 @@ export function annotateDescendantRefs(nodes: TreeNode[]): TreeNode[] {
       if (node.children?.length) walk(node.children);
       let hasDescendantDocuments = false;
       let hasDescendantWorkOrders = false;
+      let hasDescendantInspectionPoints = false;
       for (const child of node.children ?? []) {
         const asset = child.data as AssetTreeAsset | undefined;
         const flags = child as AnnotatedTreeNode;
@@ -102,10 +105,17 @@ export function annotateDescendantRefs(nodes: TreeNode[]): TreeNode[] {
         if ((asset?.workOrderCount ?? 0) > 0 || flags.hasDescendantWorkOrders) {
           hasDescendantWorkOrders = true;
         }
+        if (
+          (asset?.inspectionPointCount ?? 0) > 0 ||
+          flags.hasDescendantInspectionPoints
+        ) {
+          hasDescendantInspectionPoints = true;
+        }
       }
       const annotated = node as AnnotatedTreeNode;
       annotated.hasDescendantDocuments = hasDescendantDocuments;
       annotated.hasDescendantWorkOrders = hasDescendantWorkOrders;
+      annotated.hasDescendantInspectionPoints = hasDescendantInspectionPoints;
     }
   };
   walk(nodes);
@@ -154,4 +164,30 @@ export function filterAssetTree(nodes: TreeNode[], query: string): TreeNode[] {
   };
 
   return nodes.map(filterNode).filter((n): n is TreeNode => n != null);
+}
+
+/** Collect root asset id plus all descendants via parentAssetId adjacency. */
+export function collectSubtreeAssetIds(
+  assets: Array<{ id: string; parentAssetId: string | null }>,
+  rootId: string,
+): Set<string> {
+  const childrenByParent = new Map<string, string[]>();
+  for (const asset of assets) {
+    if (!asset.parentAssetId) continue;
+    const list = childrenByParent.get(asset.parentAssetId);
+    if (list) list.push(asset.id);
+    else childrenByParent.set(asset.parentAssetId, [asset.id]);
+  }
+  const result = new Set<string>();
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (result.has(id)) continue;
+    result.add(id);
+    const children = childrenByParent.get(id);
+    if (children) {
+      for (const childId of children) stack.push(childId);
+    }
+  }
+  return result;
 }

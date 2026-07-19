@@ -135,13 +135,21 @@ export function filterCalendarEventsBySearch(
   const q = searchTerm.trim().toLowerCase();
   if (!q) return events;
   return events.filter((ev) => {
+    if (ev.title.toLowerCase().includes(q)) return true;
     const wo = ev.meta?.workOrder as CalendarWorkOrder | undefined;
-    if (!wo) return ev.title.toLowerCase().includes(q);
-    return (
-      ev.title.toLowerCase().includes(q) ||
-      String(wo.orderNumber).includes(q) ||
-      wo.name.toLowerCase().includes(q)
-    );
+    if (wo) {
+      return String(wo.orderNumber).includes(q) || wo.name.toLowerCase().includes(q);
+    }
+    const plan = ev.meta?.maintenancePlan as
+      | { key?: string; name?: string }
+      | undefined;
+    if (plan) {
+      return (
+        (plan.key?.toLowerCase().includes(q) ?? false) ||
+        (plan.name?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    return false;
   });
 }
 

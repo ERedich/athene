@@ -12,6 +12,7 @@ import {
   ArrowLeftRight,
   Calendar as CalendarIcon,
   Check,
+  CheckSquare,
   ExternalLink,
   File,
   FilePenLine,
@@ -188,6 +189,7 @@ type Asset = {
   createdBy: string;
   updatedBy: string;
   documentCount: number;
+  inspectionPointCount: number;
   keyPath?: string | null;
 };
 
@@ -510,11 +512,21 @@ const allowedParentTypes: Record<AssetType, AssetType[]> = {
 
 const assetDialogTabs = {
   General: 0,
-  Documents: 1,
+  InspectionPoints: 1,
+  Documents: 2,
 } as const;
 
 type AssetDialogTab = (typeof assetDialogTabs)[keyof typeof assetDialogTabs];
-type HeaderActionsProps = {
+
+type InspectionPointType = "inspection" | "lubrication";
+
+type AssetInspectionPoint = {
+  id: string;
+  assetId: string;
+  key: string;
+  name: string;
+  type: InspectionPointType;
+};type HeaderActionsProps = {
   t: (key: string) => string;
   selectedAsset: Asset | null;
   onCreate: () => void;
@@ -682,6 +694,13 @@ export function AssetsPage() {
   const [uploadMetaVisible, setUploadMetaVisible] = useState(false);
   const [uploadDrafts, setUploadDrafts] = useState<DocumentUploadDraft[]>([]);
   const [documentsSearchTerm, setDocumentsSearchTerm] = useState("");
+  const [inspectionPoints, setInspectionPoints] = useState<AssetInspectionPoint[]>([]);
+  const [inspectionPointsLoading, setInspectionPointsLoading] = useState(false);
+  const [inspectionPointDraft, setInspectionPointDraft] = useState({
+    key: "",
+    name: "",
+  });
+  const [inspectionPointSaving, setInspectionPointSaving] = useState(false);
   const [pendingUiTick, setPendingUiTick] = useState(0);
   const [pendingRowUploading, setPendingRowUploading] = useState<
     Record<string, boolean>
@@ -1247,9 +1266,18 @@ export function AssetsPage() {
     [openEdit],
   );
 
+  const openInspectionPoints = useCallback(
+    (row: Asset) => {
+      openEdit(row);
+      setActiveTabIndex(assetDialogTabs.InspectionPoints);
+    },
+    [openEdit],
+  );
+
   const handleAssetTabChange = useCallback((event: { index: number }) => {
     if (
       event.index === assetDialogTabs.General ||
+      event.index === assetDialogTabs.InspectionPoints ||
       event.index === assetDialogTabs.Documents
     ) {
       setActiveTabIndex(event.index);
@@ -1360,6 +1388,107 @@ export function AssetsPage() {
       }
     },
     [t],
+  );
+
+  const loadInspectionPoints = useCallback(
+    async (assetId: string) => {
+      setInspectionPointsLoading(true);
+      try {
+        const res = await apiFetch(`/api/assets/${assetId}/inspection-points`);
+        if (!res.ok) throw new Error("load_inspection_points");
+        const data = (await res.json()) as AssetInspectionPoint[];
+        setInspectionPoints(data);
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("assets.inspectionPointsLoadError"),
+          life: 6000,
+        });
+      } finally {
+        setInspectionPointsLoading(false);
+      }
+    },
+    [t],
+  );
+
+  const addInspectionPoint = useCallback(async () => {
+    if (!editingId) return;
+    const key = inspectionPointDraft.key.trim();
+    const name = inspectionPointDraft.name.trim();
+    if (!key || !name) {
+      toastRef.current?.show({
+        severity: "warn",
+        summary: t("assets.inspectionPointsValidation"),
+        life: 4000,
+      });
+      return;
+    }
+    setInspectionPointSaving(true);
+    try {
+      const res = await apiFetch(`/api/assets/${editingId}/inspection-points`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, name, type: "inspection" }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        if (err.error === "duplicate_key") {
+          throw new Error("duplicate_key");
+        }
+        throw new Error("save_failed");
+      }
+      setInspectionPointDraft({ key: "", name: "" });
+      await loadInspectionPoints(editingId);
+      await loadData();
+    } catch (err) {
+      toastRef.current?.show({
+        severity: "error",
+        summary:
+          (err as Error).message === "duplicate_key"
+            ? t("assets.inspectionPointsDuplicateKey")
+            : t("assets.inspectionPointsSaveError"),
+        life: 6000,
+      });
+    } finally {
+      setInspectionPointSaving(false);
+    }
+  }, [editingId, inspectionPointDraft, loadData, loadInspectionPoints, t]);
+
+  const deleteInspectionPoint = useCallback(
+    (point: AssetInspectionPoint) => {
+      if (!editingId) return;
+      confirmDialog({
+        message: t("assets.inspectionPointsDeleteConfirm", {
+          key: point.key,
+          name: point.name,
+        }),
+        header: t("assets.inspectionPointsDeleteTitle"),
+        icon: "pi pi-exclamation-triangle",
+        acceptLabel: t("assets.delete"),
+        rejectLabel: t("assets.cancel"),
+        acceptClassName: "p-button-danger",
+        accept: () => {
+          void (async () => {
+            try {
+              const res = await apiFetch(
+                `/api/assets/${editingId}/inspection-points/${point.id}`,
+                { method: "DELETE" },
+              );
+              if (!res.ok) throw new Error("delete_failed");
+              await loadInspectionPoints(editingId);
+              await loadData();
+            } catch {
+              toastRef.current?.show({
+                severity: "error",
+                summary: t("assets.inspectionPointsDeleteError"),
+                life: 6000,
+              });
+            }
+          })();
+        },
+      });
+    },
+    [editingId, loadData, loadInspectionPoints, t],
   );
 
   const uploadDocument = useCallback(
@@ -1536,11 +1665,20 @@ export function AssetsPage() {
         setPendingRowUploading({});
         setDocumentEdit(null);
         setDocumentEditSaving(false);
+        setInspectionPoints([]);
+        setInspectionPointDraft({ key: "", name: "" });
       }
       return;
     }
     void loadDocuments(editingId);
-  }, [clearAllPendingAutoTimers, dialogVisible, editingId, loadDocuments]);
+    void loadInspectionPoints(editingId);
+  }, [
+    clearAllPendingAutoTimers,
+    dialogVisible,
+    editingId,
+    loadDocuments,
+    loadInspectionPoints,
+  ]);
 
   const save = async () => {
     const keyTrim = form.key.trim();
@@ -2038,17 +2176,20 @@ export function AssetsPage() {
 
   const referencesBody = (row: Asset) => {
     const hasDocuments = row.documentCount > 0;
-    const badgeValue = hasDocuments ? String(row.documentCount) : " ";
-    const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0 ${
-      hasDocuments ? "" : "app-ref-badge--placeholder"
-    }`;
+    const hasInspectionPoints = row.inspectionPointCount > 0;
+    const docsBadge = hasDocuments ? String(row.documentCount) : " ";
+    const ipBadge = hasInspectionPoints ? String(row.inspectionPointCount) : " ";
+    const badgeClassName = (has: boolean) =>
+      `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0 ${
+        has ? "" : "app-ref-badge--placeholder"
+      }`;
     return (
-      <div className="flex items-center">
+      <div className="flex items-center gap-1">
         <Button
           type="button"
           icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-          badge={badgeValue}
-          badgeClassName={badgeClassName}
+          badge={docsBadge}
+          badgeClassName={badgeClassName(hasDocuments)}
           className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
             hasDocuments
               ? "app-ref-button--documents"
@@ -2056,8 +2197,23 @@ export function AssetsPage() {
           }`}
           disabled={!hasDocuments}
           onClick={() => openDocuments(row)}
-          aria-label={t("assets.references")}
-          title={t("assets.references")}
+          aria-label={t("assets.referencesDocuments")}
+          title={t("assets.referencesDocuments")}
+        />
+        <Button
+          type="button"
+          icon={<CheckSquare className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+          badge={ipBadge}
+          badgeClassName={badgeClassName(hasInspectionPoints)}
+          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
+            hasInspectionPoints
+              ? "app-ref-button--inspection-points"
+              : "app-ref-button--inspection-points-empty"
+          }`}
+          disabled={!hasInspectionPoints}
+          onClick={() => openInspectionPoints(row)}
+          aria-label={t("assets.referencesInspectionPoints")}
+          title={t("assets.referencesInspectionPoints")}
         />
       </div>
     );
@@ -2537,6 +2693,104 @@ export function AssetsPage() {
                     })}
                   </div>
                 </div>
+              </div>
+            </TabPanel>
+            <TabPanel header={t("assets.tabInspectionPoints")}>
+              <div className="space-y-4 pt-1">
+                {!editingId ? (
+                  <div className="text-sm text-on-surface-variant">
+                    {t("assets.inspectionPointsSaveAssetFirst")}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_2fr_auto]">
+                      <InputText
+                        value={inspectionPointDraft.key}
+                        onChange={(e) =>
+                          setInspectionPointDraft((cur) => ({
+                            ...cur,
+                            key: e.target.value,
+                          }))
+                        }
+                        placeholder={t("assets.inspectionPointKey")}
+                        className="w-full"
+                        autoComplete="off"
+                      />
+                      <InputText
+                        value={inspectionPointDraft.name}
+                        onChange={(e) =>
+                          setInspectionPointDraft((cur) => ({
+                            ...cur,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder={t("assets.inspectionPointName")}
+                        className="w-full"
+                        autoComplete="off"
+                      />
+                      <Button
+                        type="button"
+                        icon={<Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                        label={t("assets.inspectionPointsAdd")}
+                        loading={inspectionPointSaving}
+                        onClick={() => void addInspectionPoint()}
+                      />
+                    </div>
+                    {inspectionPointsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                        <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
+                        <span>{t("assets.inspectionPointsLoading")}</span>
+                      </div>
+                    ) : inspectionPoints.length === 0 ? (
+                      <div className="text-sm text-on-surface-variant">
+                        {t("assets.inspectionPointsEmpty")}
+                      </div>
+                    ) : (
+                      <DataTable
+                        value={inspectionPoints}
+                        dataKey="id"
+                        className="app-data-table"
+                        size="small"
+                      >
+                        <Column
+                          field="key"
+                          header={t("assets.inspectionPointKey")}
+                        />
+                        <Column
+                          field="name"
+                          header={t("assets.inspectionPointName")}
+                        />
+                        <Column
+                          field="type"
+                          header={t("assets.inspectionPointType")}
+                          body={(row: AssetInspectionPoint) =>
+                            t(`assets.inspectionPointTypeValues.${row.type}`)
+                          }
+                        />
+                        <Column
+                          header=""
+                          body={(row: AssetInspectionPoint) => (
+                            <Button
+                              type="button"
+                              icon={
+                                <Trash2
+                                  className={lucidePrimeBtnIcon}
+                                  strokeWidth={1.75}
+                                />
+                              }
+                              severity="danger"
+                              text
+                              rounded
+                              onClick={() => deleteInspectionPoint(row)}
+                              aria-label={t("assets.delete")}
+                            />
+                          )}
+                          style={{ width: "3.5rem" }}
+                        />
+                      </DataTable>
+                    )}
+                  </>
+                )}
               </div>
             </TabPanel>
             <TabPanel header={t("assets.tabDocuments")}>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
 import { AtheneAssistantProvider } from "../assistant/AtheneAssistantContext";
+import { MaintenancePlanDialogProvider } from "../maintenancePlans/MaintenancePlanDialogContext";
 import { WorkOrderDialogProvider } from "../workOrders/WorkOrderDialogContext";
 import { WorkOrderSubscriptionProvider } from "../workOrders/WorkOrderSubscriptionContext";
 import { apiFetch } from "../lib/api";
@@ -167,9 +168,11 @@ export function RequireAuth() {
       <AtheneAssistantProvider>
         <WorkOrderSubscriptionProvider>
           <WorkOrderDialogProvider>
-            <div className={`min-h-screen w-full ${shellEnterClass}`}>
-              <Outlet />
-            </div>
+            <MaintenancePlanDialogProvider>
+              <div className={`min-h-screen w-full ${shellEnterClass}`}>
+                <Outlet />
+              </div>
+            </MaintenancePlanDialogProvider>
           </WorkOrderDialogProvider>
         </WorkOrderSubscriptionProvider>
       </AtheneAssistantProvider>

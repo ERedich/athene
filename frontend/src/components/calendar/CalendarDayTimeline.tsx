@@ -9,6 +9,7 @@ import {
   timelineTrackHeight,
   type CalendarTimelineSegment,
 } from "../../lib/calendar/calendarDayTimelineLayout";
+import type { CalendarMaintenancePlan } from "../../lib/calendar/calendarMaintenancePlans";
 import type { CalendarEvent } from "../../lib/calendar/calendarTypes";
 import type { CalendarWorkOrder } from "../../lib/calendar/calendarWorkOrders";
 import { CalendarTimelineEventBar } from "./CalendarTimelineEventBar";
@@ -21,7 +22,7 @@ type Props = {
   draggingEmployeeId?: string | null;
   droppableWorkOrderIds?: ReadonlySet<string> | null;
   workgroupFilterId?: string | null;
-  onEventClick: (workOrder: CalendarWorkOrder) => void;
+  onEventClick: (event: CalendarEvent) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
   onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
@@ -52,6 +53,12 @@ export function CalendarDayTimeline({
   const trackHeight = timelineTrackHeight(maxTimelineLaneIndex(segments));
 
   const segmentTooltip = (seg: CalendarTimelineSegment): string => {
+    if (seg.kind === "maintenancePlan") {
+      const plan = seg.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
+      const typeLabel = t("kalendar.orderType.maintenancePlan");
+      if (!plan) return `${seg.title}\n${typeLabel}`;
+      return `${seg.title}\n${typeLabel}\n${formatDateTime(plan.nextDueAt)}`;
+    }
     const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
     if (!wo) return seg.title;
     const typeKey = `kalendar.orderType.${wo.orderType}` as const;
@@ -60,8 +67,8 @@ export function CalendarDayTimeline({
   };
 
   const handleSegmentClick = (seg: CalendarTimelineSegment) => {
-    const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
-    if (wo) onEventClick(wo);
+    const event = dayEvents.find((ev) => ev.id === seg.eventId);
+    if (event) onEventClick(event);
   };
 
   return (
@@ -84,9 +91,14 @@ export function CalendarDayTimeline({
             </div>
             <div className="app-calendar-timeline-events">
               {segments.map((seg) => {
+                const isPlan = seg.kind === "maintenancePlan";
                 const wo = seg.meta?.workOrder as CalendarWorkOrder | undefined;
+                const plan = seg.meta?.maintenancePlan as CalendarMaintenancePlan | undefined;
                 const filterDisabled =
-                  workgroupFilterId != null && wo != null && wo.workgroupId !== workgroupFilterId;
+                  workgroupFilterId != null &&
+                  (isPlan
+                    ? plan != null && plan.workgroupId !== workgroupFilterId
+                    : wo != null && wo.workgroupId !== workgroupFilterId);
                 return (
                 <CalendarTimelineEventBar
                   key={`${seg.eventId}-${seg.startMinute}-${seg.laneIndex}`}
@@ -94,17 +106,20 @@ export function CalendarDayTimeline({
                   tooltip={segmentTooltip(seg)}
                   disabled={filterDisabled}
                   disabledTooltip={filterDisabled ? t("kalendar.workgroupFilterDisabledOrder") : undefined}
-                  draggingEmployeeId={draggingEmployeeId}
-                  employeeDropAllowed={!filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)}
+                  draggingEmployeeId={isPlan ? null : draggingEmployeeId}
+                  employeeDropAllowed={
+                    !isPlan && !filterDisabled && (droppableWorkOrderIds?.has(seg.eventId) ?? false)
+                  }
+                  readOnly={isPlan}
                   onClick={() => handleSegmentClick(seg)}
                   onAskAthene={
-                    onAskAthene
+                    !isPlan && onAskAthene
                       ? () => {
                           if (wo) onAskAthene(wo);
                         }
                       : undefined
                   }
-                  onAssignEmployee={onAssignEmployee}
+                  onAssignEmployee={isPlan ? undefined : onAssignEmployee}
                 />
                 );
               })}

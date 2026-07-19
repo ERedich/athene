@@ -17,6 +17,15 @@ export const assetWorkOrderCountSubquery = `
   ) wo_counts ON wo_counts."assetId" = a."id"
 `;
 
+/** Inspection-point counts for asset list queries. */
+export const assetInspectionPointCountSubquery = `
+  LEFT JOIN (
+    SELECT ip."assetId", COUNT(*)::int AS "inspectionPointCount"
+    FROM "inspectionPoint" ip
+    GROUP BY ip."assetId"
+  ) ip_counts ON ip_counts."assetId" = a."id"
+`;
+
 /** Document counts for work-order list queries. */
 export const workOrderDocumentCountSubquery = `
   LEFT JOIN (
@@ -54,6 +63,14 @@ export const assetWorkOrderCountSubqueryOnInsert = `
   ) wo_counts ON wo_counts."assetId" = i."id"
 `;
 
+export const assetInspectionPointCountSubqueryOnInsert = `
+  LEFT JOIN (
+    SELECT ip."assetId", COUNT(*)::int AS "inspectionPointCount"
+    FROM "inspectionPoint" ip
+    GROUP BY ip."assetId"
+  ) ip_counts ON ip_counts."assetId" = i."id"
+`;
+
 export const assetDocumentCountSubqueryOnUpdate = `
   LEFT JOIN (
     SELECT dl."entityId" AS "assetId", COUNT(*)::int AS "documentCount"
@@ -69,6 +86,14 @@ export const assetWorkOrderCountSubqueryOnUpdate = `
     FROM "workOrder" wo
     GROUP BY wo."assetId"
   ) wo_counts ON wo_counts."assetId" = u."id"
+`;
+
+export const assetInspectionPointCountSubqueryOnUpdate = `
+  LEFT JOIN (
+    SELECT ip."assetId", COUNT(*)::int AS "inspectionPointCount"
+    FROM "inspectionPoint" ip
+    GROUP BY ip."assetId"
+  ) ip_counts ON ip_counts."assetId" = u."id"
 `;
 
 export const workOrderDocumentCountSubqueryOnInsert = `

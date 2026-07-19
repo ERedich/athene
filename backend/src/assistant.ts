@@ -242,6 +242,7 @@ type ParsedCreateWorkOrder = {
   classificationId: string | null;
   originalWo: string | null;
   maintenancePlanId: string | null;
+  inspectionRoundId: string | null;
 };
 
 type WorkOrderStatusCountResult = {
@@ -657,6 +658,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     classificationId,
     originalWo,
     maintenancePlanId: null,
+    inspectionRoundId: null,
   };
 }
 
@@ -3622,7 +3624,7 @@ const tools = [
     function: {
       name: "generateMaintenancePlanWorkOrder",
       description:
-        "Generate an open maintenance work order from a maintenance plan (Auftragswesen). Provide planId (UUID) or planKey. Use force=true only when the user asks to generate early despite not being due. Skips if an open WO already exists for the plan.",
+        "Generate an open maintenance work order from a maintenance plan (Auftragswesen). Provide planId (UUID) or planKey. Use force=true only when the user asks to generate early despite not being due. Skips if an open WO already exists for the plan unless the plan has ignoreOpenWorkOrders enabled.",
       parameters: {
         type: "object",
         properties: {
