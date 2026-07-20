@@ -726,14 +726,15 @@ export function MonitoringPage() {
         <span className="inline-flex items-center gap-1.5">
           <span>{row.orderNumber}</span>
           {severity ? (
-            <Timer
-              className={`h-3.5 w-3.5 shrink-0 ${
-                severity === "critical" ? "text-red-500" : "text-orange-500"
-              }`}
-              strokeWidth={2}
-              aria-label={overdueTitle}
-              title={overdueTitle}
-            />
+            <span title={overdueTitle} className="inline-flex">
+              <Timer
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  severity === "critical" ? "text-red-500" : "text-orange-500"
+                }`}
+                strokeWidth={2}
+                aria-label={overdueTitle}
+              />
+            </span>
           ) : null}
         </span>
       );
