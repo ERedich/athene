@@ -176,11 +176,14 @@ export type SparePartEmbeddingRow = {
   manufacturer: string | null;
   articleNumber: string | null;
   alternativeDesignation: string | null;
+  longText: string | null;
   stockLines: Array<{
     warehouseKey: string;
     warehouseName: string;
     storageLocation: string;
     quantity: string;
+    valuationPrice: string | null;
+    valuationCurrency: string;
   }>;
   stockPolicies: Array<{
     scopeType: string;
@@ -191,6 +194,16 @@ export type SparePartEmbeddingRow = {
     minStock: string;
     orderQuantity: string;
   }>;
+  suppliers: Array<{
+    supplierKey: string;
+    supplierName: string;
+    supplierArticleNumber: string | null;
+    supplierArticleText: string | null;
+    unitPrice: string | null;
+    currency: string;
+    isPreferred: boolean;
+    isActive: boolean;
+  }>;
   totalQuantity: string;
 };
 
@@ -200,7 +213,7 @@ export function buildSparePartText(row: SparePartEmbeddingRow): string {
       ? row.stockLines
           .map(
             (line) =>
-              `warehouse=${line.warehouseKey}/${line.warehouseName}; location=${line.storageLocation}; quantity=${line.quantity}`,
+              `warehouse=${line.warehouseKey}/${line.warehouseName}; location=${line.storageLocation}; quantity=${line.quantity}; valuationPrice=${line.valuationPrice ?? ""} ${line.valuationCurrency}`,
           )
           .join("\n")
       : null;
@@ -220,6 +233,18 @@ export function buildSparePartText(row: SparePartEmbeddingRow): string {
           })
           .join("\n")
       : null;
+  const suppliers =
+    row.suppliers.length > 0
+      ? row.suppliers
+          .map((supplier) => {
+            const price =
+              supplier.unitPrice != null
+                ? `; unitPrice=${supplier.unitPrice} ${supplier.currency}`
+                : "";
+            return `supplier=${supplier.supplierKey}/${supplier.supplierName}; article=${supplier.supplierArticleNumber ?? ""}; text=${supplier.supplierArticleText ?? ""}${price}; preferred=${supplier.isPreferred}; active=${supplier.isActive}`;
+          })
+          .join("\n")
+      : null;
   return joinLines([
     "sourceKind: sparePart",
     line("sparePartId", row.id),
@@ -234,9 +259,11 @@ export function buildSparePartText(row: SparePartEmbeddingRow): string {
     line("manufacturer", row.manufacturer),
     line("articleNumber", row.articleNumber),
     line("alternativeDesignation", row.alternativeDesignation),
+    line("longText", row.longText),
     line("totalQuantity", row.totalQuantity),
     stockLines ? `stockControlLines:\n${stockLines}` : "stockControlLines: none",
     stockPolicies ? `stockPolicies:\n${stockPolicies}` : "stockPolicies: none",
+    suppliers ? `suppliers:\n${suppliers}` : "suppliers: none",
   ]);
 }
 

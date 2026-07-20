@@ -700,6 +700,80 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/by-order-number", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const raw =
+    typeof req.query.orderNumber === "string"
+      ? req.query.orderNumber.trim()
+      : typeof req.query.orderNumber === "number"
+        ? String(req.query.orderNumber)
+        : "";
+  const orderNumber = Number.parseInt(raw, 10);
+  if (!Number.isFinite(orderNumber) || orderNumber < 1) {
+    res.status(400).json({ error: "invalid_order_number" });
+    return;
+  }
+  const siteIdRaw = typeof req.query.siteId === "string" ? req.query.siteId.trim() : "";
+  if (siteIdRaw && !isUuid(siteIdRaw)) {
+    res.status(400).json({ error: "invalid_site_id" });
+    return;
+  }
+  try {
+    const params: unknown[] = [userId, orderNumber];
+    let siteFilter = "";
+    if (siteIdRaw) {
+      params.push(siteIdRaw);
+      siteFilter = `AND w."siteId" = $3::uuid`;
+    }
+    const { rows } = await pool.query<{
+      id: string;
+      orderNumber: number;
+      name: string;
+      siteId: string;
+      assetId: string;
+      assetKey: string;
+      assetName: string;
+      costCenterId: string;
+      costCenterKey: string;
+      costCenterName: string;
+    }>(
+      `
+      SELECT
+        w."id",
+        w."orderNumber",
+        w."name",
+        w."siteId",
+        w."assetId",
+        a."key" AS "assetKey",
+        a."name" AS "assetName",
+        w."costCenterId",
+        c."key" AS "costCenterKey",
+        c."name" AS "costCenterName"
+      FROM "workOrder" w
+      JOIN "asset" a ON a."id" = w."assetId"
+      JOIN "costCenter" c ON c."id" = w."costCenterId"
+      WHERE w."orderNumber" = $2::bigint
+        AND ${siteAccessSql('w."siteId"', "$1")}
+        ${siteFilter}
+      LIMIT 1
+      `,
+      params,
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.get("/:id/planning-conflicts", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {

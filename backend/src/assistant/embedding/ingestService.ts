@@ -260,13 +260,17 @@ async function loadSparePartStockLines(sparePartId: string): Promise<SparePartEm
     warehouseName: string;
     storageLocation: string;
     quantity: string;
+    valuationPrice: string | null;
+    valuationCurrency: string;
   }>(
     `
     SELECT
       wh."key" AS "warehouseKey",
       wh."name" AS "warehouseName",
       sl."key" AS "storageLocation",
-      sc."quantity"::text AS "quantity"
+      sc."quantity"::text AS "quantity",
+      sc."valuationPrice"::text AS "valuationPrice",
+      sc."valuationCurrency"
     FROM "stockControl" sc
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
     JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
@@ -317,9 +321,42 @@ async function loadSparePartStockPolicies(
   return rows;
 }
 
+async function loadSparePartSuppliers(
+  sparePartId: string,
+): Promise<SparePartEmbeddingRow["suppliers"]> {
+  const { rows } = await pool.query<{
+    supplierKey: string;
+    supplierName: string;
+    supplierArticleNumber: string | null;
+    supplierArticleText: string | null;
+    unitPrice: string | null;
+    currency: string;
+    isPreferred: boolean;
+    isActive: boolean;
+  }>(
+    `
+    SELECT
+      su."key" AS "supplierKey",
+      su."name" AS "supplierName",
+      sps."supplierArticleNumber",
+      sps."supplierArticleText",
+      sps."unitPrice"::text AS "unitPrice",
+      sps."currency",
+      sps."isPreferred",
+      sps."isActive"
+    FROM "sparePartSupplier" sps
+    JOIN "supplier" su ON su."id" = sps."supplierId"
+    WHERE sps."sparePartId" = $1::uuid
+    ORDER BY sps."isPreferred" DESC, su."key" ASC
+    `,
+    [sparePartId],
+  );
+  return rows;
+}
+
 async function loadSparePartRow(sparePartId: string): Promise<SparePartEmbeddingRow | null> {
   const { rows } = await pool.query<
-    Omit<SparePartEmbeddingRow, "stockLines" | "stockPolicies" | "totalQuantity">
+    Omit<SparePartEmbeddingRow, "stockLines" | "stockPolicies" | "suppliers" | "totalQuantity">
   >(
     `
     ${selectSparePartsForEmbeddingSql}
@@ -332,10 +369,11 @@ async function loadSparePartRow(sparePartId: string): Promise<SparePartEmbedding
   if (!base) return null;
   const stockLines = await loadSparePartStockLines(sparePartId);
   const stockPolicies = await loadSparePartStockPolicies(sparePartId);
+  const suppliers = await loadSparePartSuppliers(sparePartId);
   const totalQuantity = stockLines
     .reduce((sum, line) => sum + Number(line.quantity || 0), 0)
     .toFixed(4);
-  return { ...base, stockLines, stockPolicies, totalQuantity };
+  return { ...base, stockLines, stockPolicies, suppliers, totalQuantity };
 }
 
 async function loadWarehouseStockLines(

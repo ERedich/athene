@@ -20,17 +20,13 @@ const typeLabelKey: Record<string, string> = {
 function typeBadgeClass(type: string): string {
   switch (type) {
     case "IN":
-      return "border-emerald-400/35 bg-emerald-500/15 text-emerald-200";
     case "EX":
-      return "border-sky-400/35 bg-sky-500/15 text-sky-200";
     case "RM":
-      return "border-amber-400/35 bg-amber-500/15 text-amber-200";
     case "RT":
-      return "border-violet-400/35 bg-violet-500/15 text-violet-200";
     case "IV":
-      return "border-rose-400/35 bg-rose-500/15 text-rose-200";
+      return `app-tx-type-badge app-tx-type-badge--${type}`;
     default:
-      return "border-white/15 bg-white/10 text-on-surface";
+      return "app-tx-type-badge app-tx-type-badge--unknown";
   }
 }
 
@@ -64,11 +60,8 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
   };
 
   const typeBody = (row: TransactionRow) => (
-    <span
-      className={`inline-flex max-w-[14rem] items-center rounded-sm border px-2 py-0.5 text-[11px] ${typeBadgeClass(row.type)}`}
-      title={t(typeLabelKey[row.type] ?? row.type)}
-    >
-      <span className="truncate">{row.type}</span>
+    <span className={typeBadgeClass(row.type)} title={t(typeLabelKey[row.type] ?? row.type)}>
+      {row.type}
     </span>
   );
 
@@ -102,7 +95,7 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
             </span>
           )}
         />
-        <Column columnKey="type" header={t("transactions.colType")} body={typeBody} className="w-36" />
+        <Column columnKey="type" header={t("transactions.colType")} body={typeBody} className="w-36 text-center" align="center" alignHeader="center" />
         <Column
           field="bookedAt"
           header={t("transactions.colBookedAt")}

@@ -135,7 +135,8 @@ export const selectSparePartsForEmbeddingSql = `
     clf."name" AS "classificationName",
     sp."manufacturer",
     sp."articleNumber",
-    sp."alternativeDesignation"
+    sp."alternativeDesignation",
+    sp."longText"
   FROM "sparePart" sp
   JOIN "site" s ON s."id" = sp."siteId"
   LEFT JOIN "classification" clf ON clf."id" = sp."classificationId"

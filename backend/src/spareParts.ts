@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { QueryResult, QueryResultRow } from "pg";
+import sharp from "sharp";
 
 import {
   getAllowChangeStockdata,
@@ -45,6 +46,8 @@ export type StockControlLineRow = {
   storageLocationId: string;
   storageLocationKey: string;
   quantity: string;
+  valuationPrice: string | null;
+  valuationCurrency: string;
 };
 
 export type StockPolicyRow = {
@@ -71,6 +74,25 @@ export type EffectiveStockPolicyRow = {
   onHandQuantity: number;
 };
 
+export type SparePartSupplierRow = {
+  id: string;
+  supplierId: string;
+  supplierKey: string;
+  supplierName: string;
+  supplierArticleNumber: string | null;
+  supplierArticleText: string | null;
+  supplierArticleLongText: string | null;
+  unitPrice: string | null;
+  currency: string;
+  priceValidFrom: string | null;
+  minOrderQuantity: string | null;
+  orderMultiple: string | null;
+  leadTimeDays: number | null;
+  isPreferred: boolean;
+  isActive: boolean;
+  remark: string | null;
+};
+
 export type SparePartRow = {
   id: string;
   key: string;
@@ -87,6 +109,7 @@ export type SparePartRow = {
   manufacturer: string | null;
   articleNumber: string | null;
   alternativeDesignation: string | null;
+  longText: string | null;
   totalQuantity: string;
   siteQuantity: string;
   hasPhoto: boolean;
@@ -94,6 +117,7 @@ export type SparePartRow = {
   stockControlLines: StockControlLineRow[];
   stockPolicies: StockPolicyRow[];
   effectivePolicies: EffectiveStockPolicyRow[];
+  suppliers: SparePartSupplierRow[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -104,6 +128,8 @@ type StockControlLineInput = {
   warehouseId: string;
   storageLocationId: string;
   quantity: number;
+  valuationPrice: number | null;
+  valuationCurrency: string;
 };
 
 type StockPolicyInput = {
@@ -113,6 +139,22 @@ type StockPolicyInput = {
   reorderLevel: number;
   minStock: number;
   orderQuantity: number;
+};
+
+type SparePartSupplierInput = {
+  supplierId: string;
+  supplierArticleNumber: string | null;
+  supplierArticleText: string | null;
+  supplierArticleLongText: string | null;
+  unitPrice: number | null;
+  currency: string;
+  priceValidFrom: string | null;
+  minOrderQuantity: number | null;
+  orderMultiple: number | null;
+  leadTimeDays: number | null;
+  isPreferred: boolean;
+  isActive: boolean;
+  remark: string | null;
 };
 
 type SparePartBody = {
@@ -125,8 +167,10 @@ type SparePartBody = {
   manufacturer: string | null;
   articleNumber: string | null;
   alternativeDesignation: string | null;
+  longText: string | null;
   stockControlLines: StockControlLineInput[];
   stockPolicies: StockPolicyInput[];
+  suppliers: SparePartSupplierInput[];
 };
 
 const router = Router();
@@ -156,6 +200,28 @@ function isImageMimeType(mimeType: string): boolean {
   return mimeType.toLowerCase().startsWith("image/");
 }
 
+const PHOTO_THUMB_MAX_EDGE_PX = 256;
+
+async function buildSparePartPhotoThumb(
+  buffer: Buffer,
+): Promise<{ mimeType: string; content: Buffer } | null> {
+  try {
+    const content = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: PHOTO_THUMB_MAX_EDGE_PX,
+        height: PHOTO_THUMB_MAX_EDGE_PX,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+    return { mimeType: "image/jpeg", content };
+  } catch {
+    return null;
+  }
+}
+
 function readTrimmedOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return null;
@@ -169,6 +235,35 @@ function parseNonNegativeNumber(value: unknown, defaultWhenMissing = 0): number 
   const n =
     typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/** Parse optional non-negative number; missing/empty → null; invalid → sentinel null via false return path. */
+function parseOptionalNonNegativeNumber(value: unknown): number | null | undefined {
+  if (value === undefined || value === null || value === "") return null;
+  const n =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return n;
+}
+
+const isoDateRe = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseOptionalIsoDate(value: unknown): string | null | undefined {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!isoDateRe.test(trimmed)) return undefined;
+  const d = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return trimmed;
+}
+
+function parseOptionalNonNegativeInt(value: unknown): number | null | undefined {
+  const n = parseOptionalNonNegativeNumber(value);
+  if (n === undefined) return undefined;
+  if (n === null) return null;
+  if (!Number.isInteger(n)) return undefined;
   return n;
 }
 
@@ -186,10 +281,21 @@ function normalizeStockControlLines(value: unknown): StockControlLineInput[] | n
     if (!isUuid(warehouseId) || !isUuid(storageLocationId)) return null;
     const quantity = parseNonNegativeNumber(o.quantity);
     if (quantity === null) return null;
+    const valuationPrice = parseOptionalNonNegativeNumber(o.valuationPrice);
+    if (valuationPrice === undefined) return null;
+    const currencyRaw =
+      typeof o.valuationCurrency === "string" ? o.valuationCurrency.trim() : "";
+    const valuationCurrency = currencyRaw || "EUR";
     const dedupeKey = storageLocationId;
     if (seen.has(dedupeKey)) return null;
     seen.add(dedupeKey);
-    result.push({ warehouseId, storageLocationId, quantity });
+    result.push({
+      warehouseId,
+      storageLocationId,
+      quantity,
+      valuationPrice,
+      valuationCurrency,
+    });
   }
   return result;
 }
@@ -254,6 +360,63 @@ function normalizeStockPolicies(value: unknown): StockPolicyInput[] | null {
   return result;
 }
 
+function normalizeSuppliers(value: unknown): SparePartSupplierInput[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  const result: SparePartSupplierInput[] = [];
+  const seen = new Set<string>();
+  let preferredCount = 0;
+  for (const entry of value) {
+    if (entry === null || typeof entry !== "object") return null;
+    const o = entry as Record<string, unknown>;
+    const supplierId = typeof o.supplierId === "string" ? o.supplierId.trim() : "";
+    if (!isUuid(supplierId)) return null;
+    if (seen.has(supplierId)) return null;
+    seen.add(supplierId);
+
+    const unitPrice = parseOptionalNonNegativeNumber(o.unitPrice);
+    const minOrderQuantity = parseOptionalNonNegativeNumber(o.minOrderQuantity);
+    const orderMultiple = parseOptionalNonNegativeNumber(o.orderMultiple);
+    const leadTimeDays = parseOptionalNonNegativeInt(o.leadTimeDays);
+    const priceValidFrom = parseOptionalIsoDate(o.priceValidFrom);
+    if (
+      unitPrice === undefined ||
+      minOrderQuantity === undefined ||
+      orderMultiple === undefined ||
+      leadTimeDays === undefined ||
+      priceValidFrom === undefined
+    ) {
+      return null;
+    }
+
+    const currencyRaw =
+      typeof o.currency === "string" && o.currency.trim() ? o.currency.trim() : "EUR";
+    if (currencyRaw.length === 0 || currencyRaw.length > 8) return null;
+
+    const isPreferred = o.isPreferred === undefined ? false : Boolean(o.isPreferred);
+    const isActive = o.isActive === undefined ? true : Boolean(o.isActive);
+    if (isPreferred) preferredCount += 1;
+    if (preferredCount > 1) return null;
+
+    result.push({
+      supplierId,
+      supplierArticleNumber: readTrimmedOptionalString(o.supplierArticleNumber),
+      supplierArticleText: readTrimmedOptionalString(o.supplierArticleText),
+      supplierArticleLongText: readTrimmedOptionalString(o.supplierArticleLongText),
+      unitPrice,
+      currency: currencyRaw,
+      priceValidFrom,
+      minOrderQuantity,
+      orderMultiple,
+      leadTimeDays,
+      isPreferred,
+      isActive,
+      remark: readTrimmedOptionalString(o.remark),
+    });
+  }
+  return result;
+}
+
 function parseBody(body: unknown): SparePartBody | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -265,15 +428,18 @@ function parseBody(body: unknown): SparePartBody | null {
   const manufacturer = readTrimmedOptionalString(o.manufacturer);
   const articleNumber = readTrimmedOptionalString(o.articleNumber);
   const alternativeDesignation = readTrimmedOptionalString(o.alternativeDesignation);
+  const longText = readTrimmedOptionalString(o.longText);
   const classificationIdRaw = readTrimmedOptionalString(o.classificationId);
   const stockControlLines = normalizeStockControlLines(o.stockControlLines);
   const stockPolicies = normalizeStockPolicies(o.stockPolicies);
+  const suppliers = normalizeSuppliers(o.suppliers);
   if (
     !key ||
     !name ||
     !isUuid(siteId) ||
     stockControlLines === null ||
-    stockPolicies === null
+    stockPolicies === null ||
+    suppliers === null
   ) {
     return null;
   }
@@ -288,8 +454,10 @@ function parseBody(body: unknown): SparePartBody | null {
     manufacturer,
     articleNumber,
     alternativeDesignation,
+    longText,
     stockControlLines,
     stockPolicies,
+    suppliers,
   };
 }
 
@@ -345,6 +513,29 @@ async function assertWarehousesForSite(
   }
 }
 
+async function assertSuppliersForSite(
+  client: SiteAccessClient,
+  userId: string,
+  siteId: string,
+  suppliers: SparePartSupplierInput[],
+): Promise<void> {
+  for (const supplier of suppliers) {
+    const { rowCount } = await client.query(
+      `
+      SELECT 1
+      FROM "supplier" su
+      WHERE su."id" = $1::uuid
+        AND su."siteId" = $2::uuid
+        AND ${siteAccessSql('su."siteId"', "$3")}
+      `,
+      [supplier.supplierId, siteId, userId],
+    );
+    if ((rowCount ?? 0) === 0) {
+      throw new Error("supplier_site_mismatch");
+    }
+  }
+}
+
 function collectWarehouseIds(
   lines: StockControlLineInput[],
   policies: StockPolicyInput[],
@@ -357,7 +548,8 @@ function collectWarehouseIds(
   return [...ids];
 }
 
-function normalizeQuantityForCompare(quantity: number | string): string {
+function normalizeQuantityForCompare(quantity: number | string | null): string {
+  if (quantity === null || quantity === undefined) return "null";
   const n = typeof quantity === "number" ? quantity : Number(quantity);
   if (!Number.isFinite(n)) return "NaN";
   return n.toFixed(4);
@@ -387,6 +579,15 @@ function assertExistingStockLinesUnchanged(
     if (normalizeQuantityForCompare(ex.quantity) !== normalizeQuantityForCompare(inc.quantity)) {
       throw new Error("stock_data_locked");
     }
+    if (
+      normalizeQuantityForCompare(ex.valuationPrice) !==
+      normalizeQuantityForCompare(inc.valuationPrice)
+    ) {
+      throw new Error("stock_data_locked");
+    }
+    if (ex.valuationCurrency !== inc.valuationCurrency) {
+      throw new Error("stock_data_locked");
+    }
   }
 }
 
@@ -398,12 +599,16 @@ async function fetchStockControlLineInputs(
     warehouseId: string;
     storageLocationId: string;
     quantity: string;
+    valuationPrice: string | null;
+    valuationCurrency: string;
   }>(
     `
     SELECT
       sc."warehouseId"::text AS "warehouseId",
       sc."storageLocationId"::text AS "storageLocationId",
-      sc."quantity"::text AS "quantity"
+      sc."quantity"::text AS "quantity",
+      sc."valuationPrice"::text AS "valuationPrice",
+      sc."valuationCurrency"
     FROM "stockControl" sc
     WHERE sc."sparePartId" = $1::uuid
     `,
@@ -413,6 +618,11 @@ async function fetchStockControlLineInputs(
     warehouseId: row.warehouseId,
     storageLocationId: row.storageLocationId,
     quantity: Number(row.quantity),
+    valuationPrice:
+      row.valuationPrice != null && row.valuationPrice !== ""
+        ? Number(row.valuationPrice)
+        : null,
+    valuationCurrency: row.valuationCurrency || "EUR",
   }));
 }
 
@@ -425,10 +635,20 @@ async function setStockControlLines(
   for (const line of lines) {
     await client.query(
       `
-      INSERT INTO "stockControl" ("sparePartId", "warehouseId", "storageLocationId", "quantity")
-      VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
+      INSERT INTO "stockControl" (
+        "sparePartId", "warehouseId", "storageLocationId", "quantity",
+        "valuationPrice", "valuationCurrency"
+      )
+      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)
       `,
-      [sparePartId, line.warehouseId, line.storageLocationId, line.quantity],
+      [
+        sparePartId,
+        line.warehouseId,
+        line.storageLocationId,
+        line.quantity,
+        line.valuationPrice,
+        line.valuationCurrency,
+      ],
     );
   }
 }
@@ -458,6 +678,57 @@ async function setStockPolicies(
         policy.reorderLevel,
         policy.minStock,
         policy.orderQuantity,
+      ],
+    );
+  }
+}
+
+async function setSparePartSuppliers(
+  client: SiteAccessClient,
+  sparePartId: string,
+  suppliers: SparePartSupplierInput[],
+): Promise<void> {
+  await client.query(`DELETE FROM "sparePartSupplier" WHERE "sparePartId" = $1::uuid`, [
+    sparePartId,
+  ]);
+  for (const supplier of suppliers) {
+    await client.query(
+      `
+      INSERT INTO "sparePartSupplier" (
+        "sparePartId",
+        "supplierId",
+        "supplierArticleNumber",
+        "supplierArticleText",
+        "supplierArticleLongText",
+        "unitPrice",
+        "currency",
+        "priceValidFrom",
+        "minOrderQuantity",
+        "orderMultiple",
+        "leadTimeDays",
+        "isPreferred",
+        "isActive",
+        "remark"
+      )
+      VALUES (
+        $1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::date, $9, $10, $11, $12, $13, $14
+      )
+      `,
+      [
+        sparePartId,
+        supplier.supplierId,
+        supplier.supplierArticleNumber,
+        supplier.supplierArticleText,
+        supplier.supplierArticleLongText,
+        supplier.unitPrice,
+        supplier.currency,
+        supplier.priceValidFrom,
+        supplier.minOrderQuantity,
+        supplier.orderMultiple,
+        supplier.leadTimeDays,
+        supplier.isPreferred,
+        supplier.isActive,
+        supplier.remark,
       ],
     );
   }
@@ -510,6 +781,7 @@ const selectSparePartsSql = `
     sp."manufacturer",
     sp."articleNumber",
     sp."alternativeDesignation",
+    sp."longText",
     COALESCE(stock_qty."totalQuantity", 0)::text AS "totalQuantity",
     COALESCE(stock_qty."siteQuantity", 0)::text AS "siteQuantity",
     (sp."photoContent" IS NOT NULL) AS "hasPhoto",
@@ -539,7 +811,7 @@ const selectSparePartsSql = `
 
 type SparePartListRow = Omit<
   SparePartRow,
-  "stockControlLines" | "stockPolicies" | "effectivePolicies"
+  "stockControlLines" | "stockPolicies" | "effectivePolicies" | "suppliers"
 >;
 
 async function fetchStockControlLines(
@@ -555,7 +827,9 @@ async function fetchStockControlLines(
       wh."name" AS "warehouseName",
       sc."storageLocationId",
       sl."key" AS "storageLocationKey",
-      sc."quantity"::text AS "quantity"
+      sc."quantity"::text AS "quantity",
+      sc."valuationPrice"::text AS "valuationPrice",
+      sc."valuationCurrency"
     FROM "stockControl" sc
     JOIN "warehouse" wh ON wh."id" = sc."warehouseId"
     JOIN "storageLocation" sl ON sl."id" = sc."storageLocationId"
@@ -600,6 +874,64 @@ async function fetchStockPolicies(
     [sparePartId],
   );
   return rows;
+}
+
+async function fetchSparePartSuppliers(
+  client: SiteAccessClient,
+  sparePartId: string,
+): Promise<SparePartSupplierRow[]> {
+  const { rows } = await client.query<{
+    id: string;
+    supplierId: string;
+    supplierKey: string;
+    supplierName: string;
+    supplierArticleNumber: string | null;
+    supplierArticleText: string | null;
+    supplierArticleLongText: string | null;
+    unitPrice: string | null;
+    currency: string;
+    priceValidFrom: Date | string | null;
+    minOrderQuantity: string | null;
+    orderMultiple: string | null;
+    leadTimeDays: number | null;
+    isPreferred: boolean;
+    isActive: boolean;
+    remark: string | null;
+  }>(
+    `
+    SELECT
+      sps."id",
+      sps."supplierId",
+      su."key" AS "supplierKey",
+      su."name" AS "supplierName",
+      sps."supplierArticleNumber",
+      sps."supplierArticleText",
+      sps."supplierArticleLongText",
+      sps."unitPrice"::text AS "unitPrice",
+      sps."currency",
+      sps."priceValidFrom",
+      sps."minOrderQuantity"::text AS "minOrderQuantity",
+      sps."orderMultiple"::text AS "orderMultiple",
+      sps."leadTimeDays",
+      sps."isPreferred",
+      sps."isActive",
+      sps."remark"
+    FROM "sparePartSupplier" sps
+    JOIN "supplier" su ON su."id" = sps."supplierId"
+    WHERE sps."sparePartId" = $1::uuid
+    ORDER BY sps."isPreferred" DESC, su."key" ASC
+    `,
+    [sparePartId],
+  );
+  return rows.map((row) => ({
+    ...row,
+    priceValidFrom:
+      row.priceValidFrom == null
+        ? null
+        : typeof row.priceValidFrom === "string"
+          ? row.priceValidFrom.slice(0, 10)
+          : row.priceValidFrom.toISOString().slice(0, 10),
+  }));
 }
 
 function buildEffectivePolicies(
@@ -685,7 +1017,8 @@ async function fetchSparePartById(
   const stockControlLines = await fetchStockControlLines(client, id);
   const stockPolicies = await fetchStockPolicies(client, id);
   const effectivePolicies = buildEffectivePolicies(stockPolicies, stockControlLines);
-  return { ...base, stockControlLines, stockPolicies, effectivePolicies };
+  const suppliers = await fetchSparePartSuppliers(client, id);
+  return { ...base, stockControlLines, stockPolicies, effectivePolicies, suppliers };
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -709,8 +1042,119 @@ router.get("/", async (req: Request, res: Response) => {
         stockControlLines: [] as StockControlLineRow[],
         stockPolicies: [] as StockPolicyRow[],
         effectivePolicies: [] as EffectiveStockPolicyRow[],
+        suppliers: [] as SparePartSupplierRow[],
       })),
     );
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.get("/by-key", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const key = typeof req.query.key === "string" ? req.query.key.trim() : "";
+  if (!key) {
+    res.status(400).json({ error: "invalid_key" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{
+      id: string;
+      key: string;
+      name: string;
+      siteId: string;
+    }>(
+      `
+      SELECT
+        sp."id",
+        sp."key",
+        sp."name",
+        sp."siteId"
+      FROM "sparePart" sp
+      WHERE sp."key" = $2
+        AND ${siteAccessSql('sp."siteId"', "$1")}
+      LIMIT 1
+      `,
+      [userId, key],
+    );
+    const row = rows[0];
+    if (!row) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.get("/suggest", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (q.length < 2) {
+    res.json([]);
+    return;
+  }
+
+  const siteIdRaw = typeof req.query.siteId === "string" ? req.query.siteId.trim() : "";
+  if (siteIdRaw && !isUuid(siteIdRaw)) {
+    res.status(400).json({ error: "invalid_site_id" });
+    return;
+  }
+
+  const limitRaw =
+    typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : Number.NaN;
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 25;
+
+  try {
+    const params: unknown[] = [userId];
+    let i = 2;
+    let siteFilter = "";
+    if (siteIdRaw) {
+      siteFilter = `AND sp."siteId" = $${i++}::uuid`;
+      params.push(siteIdRaw);
+    }
+    const keyPrefixParam = i++;
+    const nameContainsParam = i++;
+    const limitParam = i;
+    params.push(`${q}%`, `%${q}%`, limit);
+
+    const { rows } = await pool.query<{
+      id: string;
+      key: string;
+      name: string;
+      siteId: string;
+    }>(
+      `
+      SELECT
+        sp."id",
+        sp."key",
+        sp."name",
+        sp."siteId"
+      FROM "sparePart" sp
+      WHERE ${siteAccessSql('sp."siteId"', "$1")}
+        ${siteFilter}
+        AND (
+          sp."key" ILIKE $${keyPrefixParam}
+          OR sp."name" ILIKE $${nameContainsParam}
+        )
+      ORDER BY
+        CASE WHEN sp."key" ILIKE $${keyPrefixParam} THEN 0 ELSE 1 END,
+        sp."key" ASC
+      LIMIT $${limitParam}::int
+      `,
+      params,
+    );
+    res.json(rows);
   } catch (err) {
     sendPgError(res, err);
   }
@@ -744,7 +1188,8 @@ router.get("/:id", async (req: Request, res: Response) => {
     const stockControlLines = await fetchStockControlLines(pool, id);
     const stockPolicies = await fetchStockPolicies(pool, id);
     const effectivePolicies = buildEffectivePolicies(stockPolicies, stockControlLines);
-    res.json({ ...base, stockControlLines, stockPolicies, effectivePolicies });
+    const suppliers = await fetchSparePartSuppliers(pool, id);
+    res.json({ ...base, stockControlLines, stockPolicies, effectivePolicies, suppliers });
   } catch (err) {
     sendPgError(res, err);
   }
@@ -766,8 +1211,10 @@ router.post("/", async (req: Request, res: Response) => {
     manufacturer,
     articleNumber,
     alternativeDesignation,
+    longText,
     stockControlLines,
     stockPolicies,
+    suppliers,
   } = parsed;
   try {
     const meta = auditMeta(req);
@@ -789,13 +1236,15 @@ router.post("/", async (req: Request, res: Response) => {
         collectWarehouseIds(stockControlLines, stockPolicies),
       );
       await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
+      await assertSuppliersForSite(client, meta.userId, effectiveSiteId, suppliers);
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO "sparePart" (
           "key", "name", "siteId", "isActive",
-          "serialNumber", "classificationId", "manufacturer", "articleNumber", "alternativeDesignation"
+          "serialNumber", "classificationId", "manufacturer", "articleNumber", "alternativeDesignation",
+          "longText"
         )
-        VALUES ($1, $2, $3::uuid, $4, $5, $6::uuid, $7, $8, $9)
+        VALUES ($1, $2, $3::uuid, $4, $5, $6::uuid, $7, $8, $9, $10)
         RETURNING "id"
         `,
         [
@@ -808,12 +1257,14 @@ router.post("/", async (req: Request, res: Response) => {
           manufacturer,
           articleNumber,
           alternativeDesignation,
+          longText,
         ],
       );
       const sparePartId = inserted.rows[0]?.id;
       if (!sparePartId) return null;
       await setStockControlLines(client, sparePartId, stockControlLines);
       await setStockPolicies(client, sparePartId, stockPolicies);
+      await setSparePartSuppliers(client, sparePartId, suppliers);
       return await fetchSparePartById(client, sparePartId);
     });
     if (!row) {
@@ -847,6 +1298,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(409).json({ error: "storage_location_warehouse_mismatch" });
       return;
     }
+    if (message === "supplier_site_mismatch") {
+      res.status(409).json({ error: "supplier_site_mismatch" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -872,8 +1327,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     manufacturer,
     articleNumber,
     alternativeDesignation,
+    longText,
     stockControlLines,
     stockPolicies,
+    suppliers,
   } = parsed;
   try {
     const meta = auditMeta(req);
@@ -913,6 +1370,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         collectWarehouseIds(stockControlLines, stockPolicies),
       );
       await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
+      await assertSuppliersForSite(client, meta.userId, effectiveSiteId, suppliers);
       await client.query(
         `
         UPDATE "sparePart"
@@ -925,8 +1383,9 @@ router.put("/:id", async (req: Request, res: Response) => {
           "classificationId" = $6::uuid,
           "manufacturer" = $7,
           "articleNumber" = $8,
-          "alternativeDesignation" = $9
-        WHERE "id" = $10::uuid
+          "alternativeDesignation" = $9,
+          "longText" = $10
+        WHERE "id" = $11::uuid
         `,
         [
           key,
@@ -938,11 +1397,13 @@ router.put("/:id", async (req: Request, res: Response) => {
           manufacturer,
           articleNumber,
           alternativeDesignation,
+          longText,
           id,
         ],
       );
       await setStockControlLines(client, id, stockControlLines);
       await setStockPolicies(client, id, stockPolicies);
+      await setSparePartSuppliers(client, id, suppliers);
       return await fetchSparePartById(client, id);
     });
     if (!row) {
@@ -974,6 +1435,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "storage_location_warehouse_mismatch") {
       res.status(409).json({ error: "storage_location_warehouse_mismatch" });
+      return;
+    }
+    if (message === "supplier_site_mismatch") {
+      res.status(409).json({ error: "supplier_site_mismatch" });
       return;
     }
     if (message === "stock_data_locked") {
@@ -1042,13 +1507,20 @@ router.get("/:id/photo", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_id" });
     return;
   }
+  const wantThumb = String(req.query.size ?? "").trim().toLowerCase() === "thumb";
   try {
     const { rows } = await pool.query<{
       photoMimeType: string | null;
       photoContent: Buffer | null;
+      photoThumbMimeType: string | null;
+      photoThumbContent: Buffer | null;
     }>(
       `
-      SELECT sp."photoMimeType", sp."photoContent"
+      SELECT
+        sp."photoMimeType",
+        sp."photoContent",
+        sp."photoThumbMimeType",
+        sp."photoThumbContent"
       FROM "sparePart" sp
       WHERE sp."id" = $1::uuid
         AND sp."photoContent" IS NOT NULL
@@ -1061,6 +1533,44 @@ router.get("/:id/photo", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+
+    if (wantThumb) {
+      let thumbContent = row.photoThumbContent;
+      let thumbMime = row.photoThumbMimeType?.trim() || null;
+      if (!thumbContent) {
+        const built = await buildSparePartPhotoThumb(row.photoContent);
+        if (built) {
+          thumbContent = built.content;
+          thumbMime = built.mimeType;
+          try {
+            const meta = auditMeta(req);
+            await withAuditContext(meta, async (client) => {
+              await client.query(
+                `
+                UPDATE "sparePart"
+                SET "photoThumbMimeType" = $1, "photoThumbContent" = $2
+                WHERE "id" = $3::uuid
+                  AND ${siteAccessSql('"siteId"', "$4")}
+                `,
+                [built.mimeType, built.content, id, meta.userId],
+              );
+            });
+          } catch {
+            /* still serve generated thumb even if persist fails */
+          }
+        } else {
+          thumbContent = row.photoContent;
+          thumbMime = row.photoMimeType?.trim() || "application/octet-stream";
+        }
+      }
+      const mimeType = thumbMime || "image/jpeg";
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Length", String(thumbContent.length));
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.send(thumbContent);
+      return;
+    }
+
     const mimeType = row.photoMimeType?.trim() || "application/octet-stream";
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", String(row.photoContent.length));
@@ -1092,17 +1602,29 @@ router.post("/:id/photo", photoUpload.single("file"), async (req: Request, res: 
     return;
   }
   const content = req.file.buffer;
+  const thumb = await buildSparePartPhotoThumb(content);
   try {
     const meta = auditMeta(req);
     const updated = await withAuditContext(meta, async (client) => {
       const result = await client.query(
         `
         UPDATE "sparePart"
-        SET "photoMimeType" = $1, "photoContent" = $2
-        WHERE "id" = $3::uuid
-          AND ${siteAccessSql('"siteId"', "$4")}
+        SET
+          "photoMimeType" = $1,
+          "photoContent" = $2,
+          "photoThumbMimeType" = $3,
+          "photoThumbContent" = $4
+        WHERE "id" = $5::uuid
+          AND ${siteAccessSql('"siteId"', "$6")}
         `,
-        [mimeType, content, id, meta.userId],
+        [
+          mimeType,
+          content,
+          thumb?.mimeType ?? null,
+          thumb?.content ?? null,
+          id,
+          meta.userId,
+        ],
       );
       return result.rowCount ?? 0;
     });
@@ -1138,7 +1660,11 @@ router.delete("/:id/photo", async (req: Request, res: Response) => {
       const result = await client.query(
         `
         UPDATE "sparePart"
-        SET "photoMimeType" = NULL, "photoContent" = NULL
+        SET
+          "photoMimeType" = NULL,
+          "photoContent" = NULL,
+          "photoThumbMimeType" = NULL,
+          "photoThumbContent" = NULL
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
         `,
