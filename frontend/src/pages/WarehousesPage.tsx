@@ -7,7 +7,7 @@ import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
@@ -531,7 +531,7 @@ export function WarehousesPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("warehouses.editTitle") : t("warehouses.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
@@ -615,7 +615,7 @@ export function WarehousesPage() {
             </span>
           </label>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

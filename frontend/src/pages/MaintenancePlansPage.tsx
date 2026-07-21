@@ -14,7 +14,7 @@ import { Calendar } from "primereact/calendar";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
@@ -566,7 +566,7 @@ export function MaintenancePlansPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={t("maintenancePlans.rolloutTitle")}
         visible={rolloutVisible}
         style={{ width: "min(24rem, 95vw)" }}
@@ -625,7 +625,7 @@ export function MaintenancePlansPage() {
             />
           </div>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

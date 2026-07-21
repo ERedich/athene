@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 
 import type { WorkOrderOverviewRow } from "../../lib/workOrderOverviewPanel";
 import { WorkOrderDialogTitle } from "./WorkOrderDialogTitle";
@@ -14,7 +14,7 @@ export function WorkOrderOverviewOverlay({ order, onHide }: Props) {
   const { t } = useTranslation();
 
   return (
-    <Dialog
+    <AppDialog
       visible={order !== null}
       onHide={onHide}
       className="app-wo-overview-dialog"
@@ -37,6 +37,6 @@ export function WorkOrderOverviewOverlay({ order, onHide }: Props) {
       aria-label={t("workOrders.overview.panelLabel")}
     >
       {order ? <WorkOrderOverviewContent order={order} /> : null}
-    </Dialog>
+    </AppDialog>
   );
 }

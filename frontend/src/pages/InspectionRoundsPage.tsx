@@ -6,7 +6,7 @@ import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
@@ -534,7 +534,7 @@ export function InspectionRoundsPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("inspectionRounds.editTitle") : t("inspectionRounds.createTitle")}
         visible={dialogVisible}
         className="app-big-modal-window app-tabbed-modal-window"
@@ -797,7 +797,7 @@ export function InspectionRoundsPage() {
             </TabView>
           </div>
         )}
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
@@ -698,7 +698,7 @@ export function UsersPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("users.editTitle") : t("users.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(36rem, 95vw)" }}
@@ -895,7 +895,7 @@ export function UsersPage() {
             />
           </div>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

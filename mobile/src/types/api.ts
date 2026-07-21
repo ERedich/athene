@@ -8,6 +8,7 @@ export type AuthUser = {
   employeeName: string | null;
   siteIds: string[];
   workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
+  onboardingCompletedAt: string | null;
 };
 
 export type SiteRow = {

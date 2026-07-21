@@ -5,6 +5,10 @@ import { NavLink, useLocation } from "react-router-dom";
 import { Ripple } from "primereact/ripple";
 
 import {
+  ONBOARDING_EXPAND_NAV_EVENT,
+  type OnboardingExpandNavDetail,
+} from "../onboarding/onboardingDom";
+import {
   activeNavGroupIds,
   isNavGroupActive,
   navGroups,
@@ -20,6 +24,12 @@ const navBtnCollapsed = "justify-center px-0 py-2.5";
 
 const navChildBtn = "app-sidebar-nav-sublink gap-2 py-2 pr-3 pl-2";
 const navChildBtnCollapsed = "justify-center px-0 py-2";
+
+/** Spotlight targets for first-login tour (sidebar child links). */
+const ONBOARDING_ITEM_TARGETS: Record<string, string> = {
+  "/employees": "employees",
+  "/monitoring": "monitoring",
+};
 
 const activeNavBtn =
   "bg-[color-mix(in_srgb,var(--color-primary)_18%,transparent)] text-[var(--color-primary)]";
@@ -50,6 +60,22 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
     });
   }, [pathname]);
 
+  useEffect(() => {
+    const onExpand = (event: Event) => {
+      const detail = (event as CustomEvent<OnboardingExpandNavDetail>).detail;
+      const groupId = detail?.groupId;
+      if (!groupId) return;
+      setExpanded((prev) => {
+        if (prev.has(groupId)) return prev;
+        const next = new Set(prev);
+        next.add(groupId);
+        return next;
+      });
+    };
+    window.addEventListener(ONBOARDING_EXPAND_NAV_EVENT, onExpand);
+    return () => window.removeEventListener(ONBOARDING_EXPAND_NAV_EVENT, onExpand);
+  }, []);
+
   const toggleGroup = (groupId: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -71,8 +97,13 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
         const { Icon: GroupIcon } = group;
 
         if (group.items.length === 0 && group.to) {
+          const isFeedback = group.id === "feedback";
           return (
-            <div key={group.id} className="app-sidebar-nav-group">
+            <div
+              key={group.id}
+              className="app-sidebar-nav-group"
+              data-onboarding={group.id}
+            >
               <NavLink
                 to={group.to}
                 end={group.end}
@@ -81,7 +112,9 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
                 className={({ isActive }) =>
                   `${navBtnBase} ${
                     collapsed ? navBtnCollapsed : "gap-3 px-3 py-2.5"
-                  } ${isActive ? activeNavBtn : ""}`
+                  } ${isActive ? activeNavBtn : ""} ${
+                    isFeedback ? "app-sidebar-nav-link--feedback" : ""
+                  }`
                 }
               >
                 <GroupIcon
@@ -101,7 +134,11 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
         }
 
         return (
-          <div key={group.id} className="app-sidebar-nav-group">
+          <div
+            key={group.id}
+            className="app-sidebar-nav-group"
+            data-onboarding={group.id}
+          >
             <button
               type="button"
               className={`${navBtnBase} ${
@@ -154,6 +191,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
                 {group.items.map((item) => {
                   const { Icon } = item;
                   const itemLabel = t(item.labelKey);
+                  const onboardingTarget = ONBOARDING_ITEM_TARGETS[item.to];
                   return (
                     <NavLink
                       key={item.to}
@@ -162,6 +200,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
                       tabIndex={isOpen ? undefined : -1}
                       title={collapsed ? itemLabel : undefined}
                       aria-label={collapsed ? itemLabel : undefined}
+                      data-onboarding={onboardingTarget}
                       className={({ isActive }) =>
                         `${navBtnBase} ${
                           collapsed ? navChildBtnCollapsed : navChildBtn

@@ -339,6 +339,20 @@ export function WorkOrdersPage() {
     woDialog.openCreate({ onSaved: onDialogSaved });
   }, [onDialogSaved, woDialog]);
 
+  const openCopy = useCallback(
+    (row: WorkOrder) => {
+      woDialog.openCopy(row, { onSaved: onDialogSaved });
+    },
+    [onDialogSaved, woDialog],
+  );
+
+  const openFollowUpOrder = useCallback(
+    (row: WorkOrder) => {
+      woDialog.openFollowUp(row, { onSaved: onDialogSaved });
+    },
+    [onDialogSaved, woDialog],
+  );
+
   const openEdit = useCallback(
     (row: WorkOrder) => {
       woDialog.openEdit(row, { onSaved: onDialogSaved });
@@ -895,6 +909,8 @@ export function WorkOrdersPage() {
           });
         },
         onCreate: openCreate,
+        onCopy: openCopy,
+        onFollowUpOrder: openFollowUpOrder,
         onEdit: openEdit,
         onDelete: confirmDelete,
         onStart: (row) => void startOrder(row),
@@ -911,8 +927,10 @@ export function WorkOrdersPage() {
       confirmCloseWorkOrder,
       confirmDelete,
       openCreate,
+      openCopy,
       openEdit,
       openFeedbackTab,
+      openFollowUpOrder,
       openPlanningTab,
       selectedOrder,
       startOrder,

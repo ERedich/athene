@@ -9,7 +9,7 @@ import { ColorPicker } from "primereact/colorpicker";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -674,7 +674,7 @@ export function ShiftsPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("shifts.editTitle") : t("shifts.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
@@ -904,7 +904,7 @@ export function ShiftsPage() {
             </span>
           </label>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

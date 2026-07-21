@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Athene — Auftrag anlegen (Ist-Referenz)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+    <style>
+      :root {
+        --bg: #12161b;
+        --surface: #1a1f26;
+        --surface-high: #20262e;
+        --surface-highest: #252b32;
+        --on: #ffffff;
+        --on-var: #cad7dd;
+        --outline: #a5b3b8;
+        --outline-v: rgba(255, 255, 255, 0.12);
+        --primary: #f97316;
+        --primary-c: #ea580c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Manrope, system-ui, sans-serif;
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        color: var(--on);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .modal {
+        width: min(80vw, 1280px);
+        height: min(90vh, 900px);
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border: 1px solid var(--outline-v);
+        border-radius: 6px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--outline-v);
+        background: var(--surface-high);
+      }
+      .title {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--outline-v);
+        background: var(--surface);
+        overflow-x: auto;
+      }
+      .tab {
+        position: relative;
+        padding: 12px 14px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--on-var);
+        white-space: nowrap;
+        opacity: 1;
+      }
+      .tab.active { color: var(--on); }
+      .tab.active::after {
+        content: "";
+        position: absolute;
+        left: 10px; right: 10px; bottom: 0;
+        height: 2px;
+        background: var(--primary);
+      }
+      .tab.disabled { opacity: 0.38; }
+      .body {
+        flex: 1;
+        overflow: auto;
+        padding: 20px;
+        background: var(--bg);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 14px 16px;
+      }
+      .field { display: flex; flex-direction: column; gap: 6px; }
+      .field.span2 { grid-column: span 2; }
+      .field.span3 { grid-column: span 3; }
+      .field.span6 { grid-column: span 6; }
+      .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--outline);
+      }
+      .req::after { content: " *"; color: var(--primary); }
+      .input, .textarea, .select {
+        height: 36px;
+        padding: 0 10px;
+        border: 1px solid var(--outline-v);
+        border-radius: 4px;
+        background: var(--surface-highest);
+        color: var(--on);
+        font: inherit;
+        font-size: 0.875rem;
+      }
+      .input:disabled, .select:disabled { opacity: 0.55; }
+      .textarea {
+        height: 88px;
+        padding: 8px 10px;
+        resize: none;
+      }
+      .hint {
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--on-var);
+      }
+      .footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 12px 20px;
+        border-top: 1px solid var(--outline-v);
+        background: var(--surface-high);
+      }
+      .btn {
+        height: 36px;
+        padding: 0 16px;
+        border-radius: 4px;
+        border: 1px solid var(--outline-v);
+        background: var(--surface-highest);
+        color: var(--on);
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 0.8125rem;
+        letter-spacing: 0.04em;
+        cursor: default;
+      }
+      .btn.primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, var(--primary), var(--primary-c));
+        color: #fff;
+      }
+      .badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 6px;
+        border-radius: 2px;
+        background: color-mix(in srgb, var(--primary) 22%, transparent);
+        color: var(--primary);
+        font-size: 10px;
+      }
+      .page-label {
+        position: fixed;
+        top: 12px;
+        left: 16px;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--outline);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-label">Ist-Referenz · Auftragserstellung Create Modal (Dark)</div>
+    <div class="modal" data-name="WorkOrderCreateModal">
+      <div class="header">
+        <h1 class="title">Auftrag anlegen</h1>
+      </div>
+      <div class="tabs" role="tablist">
+        <div class="tab active">Allgemein</div>
+        <div class="tab">Planung</div>
+        <div class="tab">Dokumente<span class="badge">0</span></div>
+        <div class="tab disabled">Inspektionspunkte</div>
+        <div class="tab disabled">Rückmeldung</div>
+        <div class="tab disabled">Transaktionen</div>
+        <div class="tab disabled">Mitteilungen</div>
+      </div>
+      <div class="body">
+        <div class="grid">
+          <div class="field span2">
+            <span class="label">Auftragsnr.</span>
+            <input class="input" disabled value="wird vergeben…" />
+          </div>
+          <div class="field span2">
+            <span class="label">Status</span>
+            <input class="input" disabled value="Offen" />
+          </div>
+          <div class="field span2">
+            <span class="label req">Auftragstyp</span>
+            <select class="select"><option>Wartung</option></select>
+          </div>
+          <div class="field span2">
+            <span class="label">Originalauftrag</span>
+            <input class="input" disabled value="" />
+          </div>
+          <div class="field span4">
+            <span class="label req">Kurzbezeichnung</span>
+            <input class="input" value="" placeholder="Kurzbezeichnung" />
+          </div>
+          <div class="field span6">
+            <span class="label">Beschreibung</span>
+            <textarea class="textarea" placeholder="Beschreibung"></textarea>
+            <p class="hint">0 / 2000 Zeichen</p>
+          </div>
+          <div class="field span3">
+            <span class="label req">Asset</span>
+            <input class="input" placeholder="Asset suchen…" />
+          </div>
+          <div class="field span3">
+            <span class="label req">Kostenstelle</span>
+            <select class="select" disabled><option>Kostenstelle auswählen</option></select>
+          </div>
+          <div class="field span2">
+            <span class="label">Klassifizierung</span>
+            <select class="select" disabled><option>Klassifizierung auswählen</option></select>
+          </div>
+          <div class="field span2">
+            <span class="label">Inspektionsrunde</span>
+            <select class="select" disabled><option>Inspektionsrunde auswählen</option></select>
+          </div>
+          <div class="field span2">
+            <span class="label req">Fachgruppe</span>
+            <select class="select" disabled><option>Fachgruppe auswählen</option></select>
+          </div>
+          <div class="field span6">
+            <span class="label req">Verantwortlich</span>
+            <select class="select" disabled><option>Mitarbeiter auswählen</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn" type="button">Abbrechen</button>
+        <button class="btn primary" type="button">Speichern</button>
+      </div>
+    </div>
+  </body>
+</html>

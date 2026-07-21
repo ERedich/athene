@@ -53,6 +53,11 @@ export function SidebarBuildMeta({ collapsed }: Props) {
       >
         {collapsed ? `v${appVersion}` : compactLine}
       </p>
+      {!collapsed ? (
+        <p className="font-mono text-[10px] leading-snug text-on-surface-variant/80 truncate">
+          {commitTimestamp}
+        </p>
+      ) : null}
     </div>
   );
 }

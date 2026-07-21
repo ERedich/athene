@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Bell, BellOff, CheckCircle, CircleX, Pencil, Plus, Send, Star, Trash2, UserPlus } from "lucide-react";
+import { Bell, BellOff, CheckCircle, CircleX, Copy, Pencil, Plus, Send, Star, Trash2, UserPlus } from "lucide-react";
 
 import type { BigMenuItem, BigMenuSection } from "../components/contextMenu/bigMenuTypes";
 import {
@@ -16,6 +16,8 @@ export type WorkOrderBigMenuHandlers = {
   onAskAthene: (row: WorkOrder) => void;
   atheneBusy: boolean;
   onCreate: () => void;
+  onCopy: (row: WorkOrder) => void;
+  onFollowUpOrder: (row: WorkOrder) => void;
   onEdit: (row: WorkOrder) => void;
   onDelete: (row: WorkOrder) => void;
   onStart: (row: WorkOrder) => void;
@@ -60,6 +62,7 @@ export function buildWorkOrderBigMenuModel(
     hasRow && row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
   const canAssign =
     hasRow && row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
+  const canCopyOrFollowUp = hasRow && Boolean(row.workgroupId);
   const isSubscribed = hasRow && handlers.subscription ? handlers.subscription.isSubscribed(row.id) : false;
 
   const cornerAction: BigMenuItem = {
@@ -127,10 +130,13 @@ export function buildWorkOrderBigMenuModel(
     variant: "primary",
     items: [
       {
-        id: "new",
-        label: t("workOrders.new"),
-        icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        onSelect: () => handlers.onCreate(),
+        id: "follow-up",
+        label: t("workOrders.contextMenuFollowUpOrder"),
+        icon: <Copy className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+        disabled: !canCopyOrFollowUp,
+        onSelect: () => {
+          if (row?.workgroupId) handlers.onFollowUpOrder(row);
+        },
       },
       {
         id: "edit",
@@ -161,6 +167,29 @@ export function buildWorkOrderBigMenuModel(
         disabled: !hasRow || !handlers.subscription,
         onSelect: () => {
           if (row && handlers.subscription) handlers.subscription.onToggle(row);
+        },
+      },
+    ],
+  };
+
+  const editSection: BigMenuSection = {
+    id: "edit-actions",
+    title: t("workOrders.bigMenu.sectionEdit"),
+    variant: "column",
+    items: [
+      {
+        id: "new",
+        label: t("workOrders.new"),
+        icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+        onSelect: () => handlers.onCreate(),
+      },
+      {
+        id: "copy",
+        label: t("workOrders.contextMenuCopyOrder"),
+        icon: <Copy className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+        disabled: !canCopyOrFollowUp,
+        onSelect: () => {
+          if (row?.workgroupId) handlers.onCopy(row);
         },
       },
     ],
@@ -206,6 +235,6 @@ export function buildWorkOrderBigMenuModel(
   return {
     header: hasRow ? `#${row.orderNumber} · ${row.name}` : null,
     cornerAction,
-    sections: [row1, row2, statusSection],
+    sections: [row1, row2, statusSection, editSection],
   };
 }

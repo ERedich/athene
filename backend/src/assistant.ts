@@ -692,6 +692,33 @@ function containsDeleteIntent(message: string): boolean {
   return /\b(delete|remove|erase|destroy|drop)\b/i.test(message) || /\b(lösch|loesch|entfern)\w*/i.test(message);
 }
 
+const PBREGINSKI_PERSON_ANSWER =
+  "Du bist Peter Breginski, alias der beste Sales / Consultant der Welt - gleich nach Erwin Redich ;-)";
+
+function isPbreginskiUser(profile: UserProfile): boolean {
+  return profile.loginName.trim().toLowerCase() === "pbreginski";
+}
+
+/** Questions about the logged-in user's own person / identity (not about Athene). */
+function containsPersonalIdentityQuestion(message: string): boolean {
+  const text = message.trim().toLowerCase();
+  if (!text) return false;
+  return (
+    /\bwer\s+bin\s+ich\b/.test(text) ||
+    /\bwho\s+am\s+i\b/.test(text) ||
+    /\bwer\s+ist\s+ich\b/.test(text) ||
+    /\b(über|ueber)\s+(mich|meine\s+person)\b/.test(text) ||
+    /\babout\s+me\b/.test(text) ||
+    /\bmy\s+(person|identity|profile)\b/.test(text) ||
+    /\bwas\s+wei(ss|ß)t\s+du\s+(über|ueber)\s+mich\b/.test(text) ||
+    /\bwhat\s+do\s+you\s+know\s+about\s+me\b/.test(text) ||
+    /\berzähl\w*\s+(mir\s+)?(etwas|was)\s+(über|ueber)\s+mich\b/.test(text) ||
+    /\btell\s+me\s+about\s+(myself|me)\b/.test(text) ||
+    /\bmeine\s+person\b/.test(text) ||
+    /\bwer\s+bin\s+ich\s+denn\b/.test(text)
+  );
+}
+
 type FeedbackContextData = {
   intent?: string;
   draftRemark?: string;
@@ -974,6 +1001,7 @@ function systemPrompt(locale: string, profile: UserProfile): string {
     "You must never access, reveal, or change passwords, password hashes, session secrets, API keys, or similar sensitive data.",
     "You must not add, change, or delete records for master-data apps: sites, users, employees, workgroups, cost centers, warehouses, storage locations (Lagerplatz), spare parts, classifications, app parameters, translations, table viewer, or maintenance plans (Wartungspläne).",
     "Exception: You may create work-order search configurations (Suchkonfiguration / Auftragskonfig) for the current user via createWorkOrderSearchPreset. You must not update, delete, or share search presets.",
+    "Program logic: When UI context data.intent is modalHelp and data.fields lists form controls from the open dialog (label, kind such as text/dropdown/checkbox/calendar, optional name), answer questions about what those fields, dropdowns, and checkboxes mean in the Athene CMMS UI. Use the provided labels; explain purpose and typical values; do not invent hidden fields that are not listed. Do not write or change master data while explaining fields.",
     "You may create work orders only through createWorkOrder, createWorkOrderFromOrder, or generateMaintenancePlanWorkOrder. When the user wants a copy of an existing order (same asset, cost center, workgroup, dates, etc.), prefer createWorkOrderFromOrder with templateOrderNumber and the new name — do not re-type reference UUIDs.",
     "Program logic: Search presets — only set filter fields the user explicitly requests; leave every other advanced field empty/default. Never run a field-by-field questionnaire (no Negativkatalog).",
     "Program logic: Search presets — if the user did not give a preset name, ask once how the Suchkonfiguration should be named, then call createWorkOrderSearchPreset. Do not invent a name unless the user asked you to choose one.",
@@ -4326,6 +4354,18 @@ router.post("/", async (req: Request, res: Response) => {
     if (containsDeleteIntent(message)) {
       const fixed = deletionAnswer(locale);
       const assistantMessage = await insertMessage(conversationId, "assistant", fixed, locale, clientContext);
+      res.json({ conversationId, userMessage, assistantMessage });
+      return;
+    }
+
+    if (isPbreginskiUser(profile) && containsPersonalIdentityQuestion(message)) {
+      const assistantMessage = await insertMessage(
+        conversationId,
+        "assistant",
+        PBREGINSKI_PERSON_ANSWER,
+        locale,
+        clientContext,
+      );
       res.json({ conversationId, userMessage, assistantMessage });
       return;
     }

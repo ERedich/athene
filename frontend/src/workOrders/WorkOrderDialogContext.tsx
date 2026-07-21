@@ -43,6 +43,8 @@ type WorkOrderDialogContextValue = {
   ) => void;
   openCreate: (options?: OpenWorkOrderOptions) => void;
   openCopy: (row: WorkOrderFormSource, options?: OpenWorkOrderOptions) => void;
+  /** Prefill create EP as follow-up (no name dialog); sets originalWo and default Kurztext. */
+  openFollowUp: (row: WorkOrderFormSource, options?: OpenWorkOrderOptions) => void;
   close: () => void;
   dialogVisible: boolean;
   editingId: string | null;
@@ -202,6 +204,17 @@ export function WorkOrderDialogProvider({ children, atheneSource, onRefresh }: P
     [dialog.copyWorkOrder],
   );
 
+  const openFollowUp = useCallback(
+    (row: WorkOrderFormSource, options?: OpenWorkOrderOptions) => {
+      openOptionsRef.current = options ?? null;
+      dialog.openCopyAsNew(row, t("workOrders.followUpDefaultName", { name: row.name }));
+      if (options?.tab != null) {
+        dialog.setActiveTabIndex(options.tab);
+      }
+    },
+    [dialog, t],
+  );
+
   const close = useCallback(() => {
     dialog.closeDialog();
   }, [dialog]);
@@ -298,6 +311,7 @@ export function WorkOrderDialogProvider({ children, atheneSource, onRefresh }: P
     openEdit,
     openCreate,
     openCopy,
+    openFollowUp,
     close,
     dialogVisible: dialog.dialogVisible,
     editingId: dialog.editingId,

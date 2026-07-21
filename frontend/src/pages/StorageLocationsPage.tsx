@@ -7,7 +7,7 @@ import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -463,7 +463,7 @@ export function StorageLocationsPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("storageLocations.editTitle") : t("storageLocations.createTitle")}
         visible={dialogVisible}
         className="app-big-modal-window"
@@ -592,7 +592,7 @@ export function StorageLocationsPage() {
             </label>
           </div>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

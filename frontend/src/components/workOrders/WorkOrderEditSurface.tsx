@@ -1,15 +1,15 @@
 import { useMemo, type ReactNode } from "react";
-import { Check, Pencil, Star, Trash2, Upload, UserPlus, X } from "lucide-react";
+import { Check, Pencil, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { Button } from "primereact/button";
-import { Badge } from "primereact/badge";
 import { Calendar } from "primereact/calendar";
-import { Dialog } from "primereact/dialog";
 import { Dropdown } from "primereact/dropdown";
+import { AppDialog } from "../AppDialog";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
 import { TabPanel, TabView } from "primereact/tabview";
 
+import { DocumentMimeIcon } from "../documents/DocumentMimeIcon";
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
 import { AssetSelItem } from "../selItem/AssetSelItem";
 import { WorkOrderFeedbackTabContent } from "./WorkOrderFeedbackTabContent";
@@ -21,10 +21,10 @@ import {
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
 } from "../../constants/assetDocumentCategory";
+import { useDocumentImageHoverPreview } from "../../hooks/useDocumentImageHoverPreview";
 import type { useWorkOrderEditDialogState } from "../../hooks/useWorkOrderEditDialogState";
 import {
   addHours,
-  documentTypeMimeIcon,
   PENDING_AUTO_UPLOAD_MS,
 } from "../../hooks/useWorkOrderEditDialogState";
 import {
@@ -34,6 +34,7 @@ import {
   LucideSpinner,
   lucidePrimeBtnIcon,
 } from "../../icons/lucide";
+import { isImageDocument } from "../../lib/isImageDocument";
 import { orderDialogTabs } from "../../lib/workOrderDialog";
 import type { WorkOrderType } from "../../lib/workOrderForm";
 import { formatOriginalWoOrderNumber } from "../../lib/workOrderTypes";
@@ -42,6 +43,16 @@ import { overlayAppendTo } from "../../lib/overlayAppendTo";
 
 export type WorkOrderEditDialogProps = ReturnType<typeof useWorkOrderEditDialogState>;
 
+function WoTabHeader({ label, count }: { label: string; count?: number | string | null }) {
+  const showBadge = count != null && count !== "" && count !== 0 && count !== "0";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span>{label}</span>
+      {showBadge ? <span className="app-wo-tab-badge">{count}</span> : null}
+    </span>
+  );
+}
+
 function formatHoursForDurationInput(hours: number): string {
   if (!Number.isFinite(hours) || hours < 0) return "";
   const rounded = Math.round(hours * 100) / 100;
@@ -49,15 +60,7 @@ function formatHoursForDurationInput(hours: number): string {
 }
 
 export function useWorkOrderEditHeaderIcons(props: WorkOrderEditDialogProps): ReactNode {
-  const {
-    t,
-    editingId,
-    activeTabIndex,
-    atheneBusy,
-    openFeedbackAthene,
-    openFeedbackTab,
-    startOrder,
-  } = props;
+  const { t, editingId, openFeedbackTab, startOrder } = props;
 
   return useMemo(() => {
     if (!editingId || !props.editingRow) return null;
@@ -102,41 +105,8 @@ export function useWorkOrderEditHeaderIcons(props: WorkOrderEditDialogProps): Re
         </>
       );
     }
-    if (activeTabIndex !== orderDialogTabs.Feedback) {
-      return actionIcons ? <div className="mr-1 flex items-center gap-1">{actionIcons}</div> : null;
-    }
-    return (
-      <div className="mr-1 flex items-center gap-1">
-        <Button
-          type="button"
-          text
-          rounded
-          className="!h-8 !min-h-8 !w-8 !min-w-8 !p-0 text-[var(--color-primary)]"
-          icon={
-            atheneBusy ? (
-              <LucideSpinner className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-            ) : (
-              <Star className={lucidePrimeBtnIcon} strokeWidth={1.75} />
-            )
-          }
-          title={t("workOrders.feedbackAskAthene")}
-          aria-label={t("workOrders.feedbackAskAthene")}
-          disabled={atheneBusy}
-          onClick={openFeedbackAthene}
-        />
-        {actionIcons}
-      </div>
-    );
-  }, [
-    activeTabIndex,
-    atheneBusy,
-    editingId,
-    openFeedbackAthene,
-    openFeedbackTab,
-    props.editingRow,
-    startOrder,
-    t,
-  ]);
+    return actionIcons ? <div className="mr-1 flex items-center gap-1">{actionIcons}</div> : null;
+  }, [editingId, openFeedbackTab, props.editingRow, startOrder, t]);
 }
 
 type WorkOrderEditFooterProps = {
@@ -158,9 +128,10 @@ export function WorkOrderEditFooter({ props, cancelLabel }: WorkOrderEditFooterP
   } = props;
 
   return (
-    <div className="flex justify-end gap-2">
+    <div className="app-wo-edit-footer flex justify-end gap-2">
       <Button
         type="button"
+        className="app-wo-cancel-button"
         label={cancelLabel ?? t("workOrders.cancel")}
         severity="secondary"
         outlined
@@ -169,6 +140,7 @@ export function WorkOrderEditFooter({ props, cancelLabel }: WorkOrderEditFooterP
       />
       <Button
         type="button"
+        className="app-wo-save-button"
         label={isFeedbackTab ? t("workOrders.reportBackAndSave") : t("workOrders.save")}
         icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         loading={isFeedbackTab ? feedbackSaving : saving}
@@ -267,9 +239,11 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
   const assignmentsLocked =
     editingMeta?.status === "ended" || editingMeta?.status === "done" || editingMeta?.status === "cancelled";
   const inspectionPointsTabEnabled = Boolean(editingId && form.inspectionRoundId);
+  const { showPreview, clearPreview, previewPortal } = useDocumentImageHoverPreview();
 
   return (
     <div ref={tabHostRef} className="app-tabview-with-ink app-wo-edit-tab-host">
+      {previewPortal}
       <TabView
         className="app-sticky-tabs"
         activeIndex={activeTabIndex}
@@ -291,7 +265,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           }
         }}
       >
-        <TabPanel header={t("workOrders.tabGeneral")}>
+        <TabPanel header={<WoTabHeader label={t("workOrders.tabGeneral")} />}>
           <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6" style={{ margin: 0, display: "grid" }}>
             <div className="space-y-2 md:col-span-2">
               <label htmlFor="order-number" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
@@ -502,12 +476,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           </div>
         </TabPanel>
         <TabPanel
-          header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabPlandaten")}</span>
-              {assignmentsTabCount > 0 ? <Badge value={assignmentsTabCount} /> : null}
-            </span>
-          }
+          header={<WoTabHeader label={t("workOrders.tabPlandaten")} count={assignmentsTabCount} />}
         >
           <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2" style={{ margin: 0, display: "grid" }}>
             <div
@@ -670,14 +639,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
             </div>
           </div>
         </TabPanel>
-        <TabPanel
-          header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabDocuments")}</span>
-              {documentsTabCount > 0 ? <Badge value={documentsTabCount} /> : null}
-            </span>
-          }
-        >
+        <TabPanel header={<WoTabHeader label={t("workOrders.tabDocuments")} count={documentsTabCount} />}>
           <div className="space-y-4 pt-1">
             <div className="grid grid-cols-[8fr_2fr] items-stretch gap-2">
               <Button
@@ -709,23 +671,31 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               <div className="space-y-2">
                 <div className="text-sm text-on-surface-variant">{t("workOrders.documentsPending")}</div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {filteredPendingFiles.map((doc, index) => (
+                  {filteredPendingFiles.map((doc, index) => {
+                    const mime = doc.file.type || "application/octet-stream";
+                    const imageDoc = isImageDocument(mime, doc.file.name);
+                    return (
                     <div
                       key={doc.localId}
                       className="app-card-cascade flex items-center gap-3 rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2"
                       style={{ ["--app-cascade-index" as string]: index }}
+                      title={imageDoc ? t("documentsUi.imagePreviewHint") : undefined}
+                      onMouseEnter={(e) => {
+                        if (!imageDoc) return;
+                        showPreview({
+                          cacheKey: `pending:${doc.localId}`,
+                          title: doc.displayName || doc.file.name,
+                          mimeType: mime,
+                          fileName: doc.file.name,
+                          anchor: e.currentTarget.getBoundingClientRect(),
+                          file: doc.file,
+                        });
+                      }}
+                      onMouseLeave={() => {
+                        if (imageDoc) clearPreview();
+                      }}
                     >
-                      {(() => {
-                        const spec = documentTypeMimeIcon(doc.file.type || "application/octet-stream", doc.file.name);
-                        const MimeIco = spec.Icon;
-                        return (
-                          <MimeIco
-                            className={`${spec.className} h-5 w-5 shrink-0`}
-                            strokeWidth={1.75}
-                            aria-hidden
-                          />
-                        );
-                      })()}
+                      <DocumentMimeIcon mimeType={mime} fileName={doc.file.name} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm">{doc.displayName}</div>
                         <div className="text-xs text-on-surface-variant">
@@ -735,7 +705,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                             {t(`workOrders.documentCategories.${doc.category}`)}
                           </span>
                           <span className="text-on-surface-variant"> · </span>
-                          {(doc.file.type || "application/octet-stream").split(";")[0]} · {formatFileSize(doc.file.size)}
+                          {mime.split(";")[0]} · {formatFileSize(doc.file.size)}
                         </div>
                       </div>
                       <Button type="button" text disabled className="!h-9 !min-h-9 !w-9 !min-w-9 !p-0 opacity-100">
@@ -763,7 +733,8 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                         onClick={() => removePendingFileByLocalId(doc.localId)}
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -780,24 +751,38 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                   <div className="text-sm text-on-surface-variant">{t("workOrders.documentsEmpty")}</div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {filteredDocuments.map((doc, index) => (
+                    {filteredDocuments.map((doc, index) => {
+                      const mime = doc.mimeType ?? "application/octet-stream";
+                      const imageDoc = isImageDocument(mime, doc.fileName);
+                      const contentUrl =
+                        doc.source === "asset" && doc.assetId
+                          ? `/api/assets/${doc.assetId}/documents/${doc.id}/content`
+                          : doc.workOrderId
+                            ? `/api/work-orders/${doc.workOrderId}/documents/${doc.id}/content`
+                            : null;
+                      return (
                       <div
                         key={doc.id}
                         className="app-card-cascade flex cursor-pointer items-center gap-3 rounded-sm border border-solid app-wo-detail-outline-border px-3 py-2"
                         style={{ ["--app-cascade-index" as string]: index }}
+                        title={imageDoc ? t("documentsUi.imagePreviewHint") : undefined}
                         onClick={() => void openDocumentContent(doc)}
+                        onMouseEnter={(e) => {
+                          if (!imageDoc || !contentUrl) return;
+                          showPreview({
+                            cacheKey: `${doc.source}:${doc.id}`,
+                            title: doc.displayName || doc.fileName,
+                            mimeType: mime,
+                            fileName: doc.fileName,
+                            anchor: e.currentTarget.getBoundingClientRect(),
+                            fetchUrl: contentUrl,
+                          });
+                        }}
+                        onMouseLeave={() => {
+                          if (imageDoc) clearPreview();
+                        }}
                       >
-                        {(() => {
-                          const spec = documentTypeMimeIcon(doc.mimeType, doc.fileName);
-                          const MimeIco = spec.Icon;
-                          return (
-                            <MimeIco
-                              className={`${spec.className} h-5 w-5 shrink-0`}
-                              strokeWidth={1.75}
-                              aria-hidden
-                            />
-                          );
-                        })()}
+                        <DocumentMimeIcon mimeType={mime} fileName={doc.fileName} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm">{doc.displayName || doc.fileName}</div>
                           <div className="text-xs text-on-surface-variant">
@@ -815,7 +800,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                               {t(`workOrders.documentsSource.${doc.source}`)}
                             </span>
                             <span className="text-on-surface-variant"> · </span>
-                            {(doc.mimeType ?? "application/octet-stream").split(";")[0]} · {formatFileSize(doc.fileSize)}
+                            {mime.split(";")[0]} · {formatFileSize(doc.fileSize)}
                           </div>
                           <div className="text-xs text-on-surface-variant">
                             {t("workOrders.documentsUploadedBy")}: {doc.createdBy} · {t("workOrders.documentsUploadedAt")}:{" "}
@@ -848,7 +833,8 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                           />
                         ) : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -861,14 +847,14 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
         </TabPanel>
         <TabPanel
           header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabInspectionPoints")}</span>
-              {inspectionPoints.length > 0 ? (
-                <Badge
-                  value={`${inspectionPoints.filter((p) => p.checked).length}/${inspectionPoints.length}`}
-                />
-              ) : null}
-            </span>
+            <WoTabHeader
+              label={t("workOrders.tabInspectionPoints")}
+              count={
+                inspectionPoints.length > 0
+                  ? `${inspectionPoints.filter((p) => p.checked).length}/${inspectionPoints.length}`
+                  : null
+              }
+            />
           }
           disabled={!inspectionPointsTabEnabled}
         >
@@ -887,12 +873,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           />
         </TabPanel>
         <TabPanel
-          header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabFeedback")}</span>
-              {feedbackTabCount > 0 ? <Badge value={feedbackTabCount} /> : null}
-            </span>
-          }
+          header={<WoTabHeader label={t("workOrders.tabFeedback")} count={feedbackTabCount} />}
           disabled={!editingId || !workOrderStatusAllowsFeedbackTab(editingMeta?.status)}
         >
           <WorkOrderFeedbackTabContent
@@ -915,12 +896,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           />
         </TabPanel>
         <TabPanel
-          header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabTransactions")}</span>
-              {transactionsTabCount > 0 ? <Badge value={transactionsTabCount} /> : null}
-            </span>
-          }
+          header={<WoTabHeader label={t("workOrders.tabTransactions")} count={transactionsTabCount} />}
           disabled={!editingId}
         >
           <div className="pt-1">
@@ -928,12 +904,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           </div>
         </TabPanel>
         <TabPanel
-          header={
-            <span className="inline-flex items-center gap-2">
-              <span>{t("workOrders.tabMessages")}</span>
-              {messagesTabCount > 0 ? <Badge value={messagesTabCount} /> : null}
-            </span>
-          }
+          header={<WoTabHeader label={t("workOrders.tabMessages")} count={messagesTabCount} />}
           disabled={!editingId}
         >
           <div className="app-wo-messages-tab">
@@ -965,7 +936,7 @@ export function WorkOrderEditDocumentDialog(props: WorkOrderEditDialogProps) {
   } = props;
 
   return (
-    <Dialog
+    <AppDialog
       header={t("workOrders.documentsEditTitle")}
       visible={documentEdit !== null}
       className="app-modal-window"
@@ -1033,6 +1004,6 @@ export function WorkOrderEditDocumentDialog(props: WorkOrderEditDialogProps) {
           />
         </div>
       </div>
-    </Dialog>
+    </AppDialog>
   );
 }

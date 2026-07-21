@@ -107,10 +107,33 @@
     "displayAria": "Anzeige",
     "keypadAria": "Tastenfeld"
   },
+  "feedback": {
+    "appName": "Feedback",
+    "navFeedback": "Feedback",
+    "new": "Neu",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "createTitle": "Neues Feedback",
+    "searchPlaceholder": "Feedback durchsuchen …",
+    "colNumber": "Nr.",
+    "colBody": "Feedback",
+    "colUser": "Benutzer",
+    "colCreatedAt": "Datum",
+    "empty": "Keine Feedback-Einträge.",
+    "loadError": "Feedback konnte nicht geladen werden.",
+    "saveError": "Feedback konnte nicht gespeichert werden.",
+    "created": "Feedback gespeichert.",
+    "validationRequired": "Bitte einen Text eingeben.",
+    "validationTooLong": "Der Text ist zu lang (max. 4000 Zeichen)."
+  },
   "orderCreation": {
     "appName": "Auftragserstellung",
     "navOrderCreation": "Auftragserstellung",
     "hint": "Öffnet das Dialogfenster zum Anlegen eines neuen Auftrags — wie unter Aufträge und Monitoring."
+  },
+  "documentsUi": {
+    "imagePreview": "Vorschau: {{name}}",
+    "imagePreviewHint": "Vorschau beim Hovern · Klicken zum Öffnen"
   },
   "shell": {
     "product": "Athene CMMS",
@@ -139,6 +162,8 @@
     "open": "Athene KI Assistent öffnen",
     "close": "Athene schließen",
     "askAthene": "Athene fragen",
+    "modalHelpFallbackTitle": "Formularhilfe",
+    "contextModal": "Modal",
     "contextWorkOrder": "Auftrag",
     "contextAsset": "Asset",
     "contextMonitoring": "Monitor",
@@ -165,6 +190,7 @@
     "voiceTranscribeFailed": "Sprache konnte nicht erkannt werden. OPENAI_API_KEY prüfen oder erneut versuchen.",
     "feedbackSuggestSimilar": "Gab es ähnliche Probleme an diesem Asset?",
     "feedbackSuggestCorrect": "Korrigiere meinen Rückmeldetext",
+
     "applyCorrectedText": "Text übernehmen",
     "applyReschedule": "Termin übernehmen",
     "applyRescheduleBatch": "Alle {{count}} Termine übernehmen",
@@ -175,6 +201,29 @@
     "rescheduleSuccess": "Planungstermin wurde übernommen.",
     "rescheduleError": "Termin konnte nicht übernommen werden.",
     "contextCalendar": "Kalendar"
+  },
+  "onboarding": {
+    "stepOf": "{{current}} / {{total}}",
+    "next": "Weiter",
+    "back": "Zurück",
+    "skip": "Überspringen",
+    "finish": "Los geht’s",
+    "introTitle": "Hallo — ich bin Athene",
+    "introBody": "Ich bin deine intelligente Instandhaltungssoftware. Ich helfe dir bei Aufträgen, Anlagen und Fragen rund um die Instandhaltung.\n\nGerade schaust du die Web-Anwendung an. Sie ist auch auf dem Smartphone nutzbar — zusätzlich gibt es eine eigene, dedizierte Mobile-App für den Einsatz vor Ort.\n\nDas hier ist die Alpha-Version {{version}} — ich stecke noch in den Anfängen. Manches kann unfertig wirken; gemeinsam wachsen wir weiter.\n\nÜber den Stern in der Seitenleiste erreichst du mich jederzeit. Lass uns kurz die wichtigsten Bereiche ansehen.",
+    "stammdatenTitle": "Stammdaten",
+    "stammdatenBody": "Hier lebt die Basis deines Werks: Anlagen (Assets), die Baumstruktur, Mitarbeiter, Kostenstellen, Klassifikationen, Arbeitsgruppen, Lieferanten und Wartungspläne.\n\nOhne saubere Stammdaten läuft kaum etwas — starte hier, wenn du das System aufbaust.",
+    "peopleTitle": "Mitarbeiter & Benutzer",
+    "peopleBody": "Mitarbeiter sind die Personen in der Instandhaltung — sie werden Aufträgen zugewiesen, erscheinen im Schichtplaner und in Arbeitsgruppen.\n\nBenutzer sind die Login-Konten für die Anmeldung. Ein Benutzer kann mit genau einem Mitarbeiter verknüpft werden. Dann weiß Athene, wer du bist: Zuweisungen, Fachgruppen und persönliche Ansichten greifen zusammen.\n\nBenutzer verwaltest du unter Administration; Mitarbeiter findest du hier in den Stammdaten.",
+    "auftragswesenTitle": "Auftragswesen",
+    "auftragswesenBody": "Das Herz der Instandhaltung: Aufträge anlegen und bearbeiten, im Kalender planen, buchen und in der Mitteilungszentrale auf dem Laufenden bleiben.\n\nVon der Auftragserstellung bis zur Erledigung — alles läuft hier zusammen.",
+    "monitoringTitle": "Monitoring",
+    "monitoringBody": "Das Monitoring ist dein zentrales Steuerungstool für offene und laufende Aufträge. Hier siehst du den Überblick in Echtzeit: Status, Termine, Engpässe — und kannst gezielt eingreifen.\n\nWenn du wissen willst, was gerade im Werk läuft, ist das Monitoring oft der beste Einstieg.",
+    "ersatzteileTitle": "Ersatzteile & Lager",
+    "ersatzteileBody": "Lager, Lagerorte und Ersatzteile steuern deine Materialversorgung. Bestände, Bezüge und Stammdaten der Teile findest du unter Lagerhaltung.\n\nSo weißt du, was verfügbar ist, wenn ein Auftrag Material braucht.",
+    "schichtenTitle": "Schichten",
+    "schichtenBody": "Schichtdefinitionen und der Schichtplaner organisieren, wer wann im Einsatz ist. Plane Wochen, weise Mitarbeiter zu und halte die Besetzung im Blick.",
+    "finishTitle": "Hilfe — deine App-Tour",
+    "finishBody": "Zum Abschluss: Über den Button „Hilfe“ im Kopfbereich startest du eine geführte Tour durch die aktuelle App.\n\nHilfe ist noch nicht überall verfügbar, wird aber für nahezu alle Apps ausgerollt. Im Monitoring ist sie schon da — probiere sie aus oder beende die Einführung."
   },
   "assets": {
     "appName": "Assets",
@@ -423,13 +472,15 @@
     "delete": "Löschen",
     "contextMenuAssignEmployees": "Mitarbeiter zuweisen",
     "contextMenuCreateFeedback": "Rückmeldung erstellen",
-    "contextMenuCopyOrder": "Auftrag kopieren",
+    "contextMenuCopyOrder": "Kopieren",
+    "contextMenuFollowUpOrder": "Folgeauftrag",
     "contextMenuCancelOrder": "Auftrag stornieren",
     "bigMenu": {
       "sectionOrder": "Auftrag",
       "sectionCollab": "Zusammenarbeit",
       "sectionAbort": "Abbruch",
       "sectionStatus": "Status",
+      "sectionEdit": "Bearbeiten",
       "assign": "Zuweisung",
       "feedback": "Rückmelden",
       "stopPause": "Stop / Pause",
@@ -438,11 +489,12 @@
       "subscribe": "Abonnieren",
       "unsubscribe": "Abo beenden"
     },
-    "copyOrderDialogTitle": "Auftrag kopieren",
+    "copyOrderDialogTitle": "Kopieren",
     "copyOrderDialogSource": "Vorlage: Auftrag {{orderNumber}} — {{name}}",
     "copyOrderNameLabel": "Bezeichnung des neuen Auftrags",
     "copyOrderDefaultName": "{{name}} (Kopie)",
     "copyOrderSourceHint": "Kopie von Auftrag {{orderNumber}}",
+    "followUpDefaultName": "Folgeauftrag: {{name}}",
     "originalWo": "Originalauftrag",
     "maintenancePlan": "Wartungsplan",
     "invalidOriginalWo": "Die Kopier-Vorlage ist ungültig oder nicht zugänglich.",
@@ -1544,7 +1596,33 @@
     "appName": "Auftragsmonitor",
     "navMonitoring": "Monitoring",
     "overdue1To7Days": "1–7 Tage über dem geplanten Ende",
-    "overdueMoreThan7Days": "Mehr als 7 Tage über dem geplanten Ende"
+    "overdueMoreThan7Days": "Mehr als 7 Tage über dem geplanten Ende",
+    "help": "Hilfe",
+    "helpTour": {
+      "stepOf": "{{current}} / {{total}}",
+      "next": "Weiter",
+      "back": "Zurück",
+      "skip": "Beenden",
+      "finish": "Fertig",
+      "tableEditTitle": "Tabelle & Edit-Panel",
+      "tableEditBody": "Die Tabelle zeigt deine Aufträge im Überblick. Eine Zeile auswählen und „Bearbeiten“ öffnet das Edit-Panel — je nach Einstellung als Dialog oder als Vollbildansicht. Doppelklick auf eine Zeile öffnet den Auftrag ebenfalls zum Bearbeiten.\n\nDie Tabelle ist stateful: Spaltenbreite, Reihenfolge, Sortierung und ähnliche Layout-Einstellungen bleiben in diesem Browser gespeichert. Wenn du die Ansicht anpasst, findest du sie beim nächsten Besuch wieder — ohne sie neu einzurichten.",
+      "contextMenuTitle": "Rechtsklickmenü",
+      "contextMenuBody": "Rechtsklick auf eine Zeile öffnet das große Kontextmenü: Bearbeiten, Statusaktionen, Abonnieren, Athene fragen und weitere Werkzeuge — ohne den Umweg über die Kopfzeile.",
+      "statusTitle": "Auftragsstatus",
+      "statusBody": "In der Status-Spalte siehst du den aktuellen Zustand jedes Auftrags — farblich gekennzeichnet. Hier die Übersicht aller Status mit Farbcode:",
+      "startStopTitle": "Start, Stop & Pause",
+      "startStopBody": "Über die Spalte Start/Stop steuerst du die Ausführung: Auftrag starten, pausieren oder beenden. Dieselben Aktionen findest du auch im Rechtsklickmenü.",
+      "referencesTitle": "Referenzen",
+      "referencesBody": "Unter Referenzen erkennst du Dokumente und Mitarbeiterzuweisungen auf einen Blick. Die Badges öffnen die passenden Bereiche im Auftragsdialog.",
+      "createTitle": "Auftragserstellung",
+      "createBody": "Mit „Neu“ legst du direkt aus dem Monitoring einen neuen Auftrag an. Nach dem Speichern erscheint er in der Liste — oft schon live über die Verbindung.",
+      "filterTitle": "Filter & Suche",
+      "filterBody": "Über „Suche“ öffnest du das Filterpanel: Status, Asset, Fachgruppe, Termine und vieles mehr. So schränkst du die Monitor-Liste auf genau die Aufträge ein, die dich gerade interessieren.\n\nDie Kurzsuche rechts filtert zusätzlich nach Freitext in der Liste.",
+      "presetsTitle": "Gespeicherte Abfragen",
+      "presetsBody": "Gespeicherte Abfragen merken sich deine Filter- und Suchkombinationen. Ein Klick genügt, und die Liste zeigt wieder genau deine Sicht — ideal für Schichtwechsel oder wiederkehrende Kontrollen.\n\nUnd ich, Athene, kann dir hier helfen: Frag mich, wenn du eine Abfrage formulieren, anpassen oder verstehen willst.",
+      "liveTitle": "Live-View (WebSockets)",
+      "liveBody": "Das Monitoring bleibt über WebSockets mit dem Server verbunden. Neue, geänderte und gelöschte Aufträge aktualisieren die Tabelle in Echtzeit und werden kurz hervorgehoben — grün für neu, blau für geändert, rot für gelöscht — ohne manuelles Neuladen."
+    }
   },
   "mitteilungszentrale": {
     "appName": "Mitteilungszentrale",
@@ -1571,7 +1649,10 @@
     "filterChat": "Auftragschat",
     "kindSubscription": "Abonnement",
     "kindChat": "Auftragschat",
-    "reply": "Antwort"
+    "reply": "Antwort",
+    "toastSubscriptionSummary": "Abonnement-Änderung · {{order}}",
+    "toastChatSummary": "Auftragschat · {{order}}",
+    "toastOpenHint": "Klicken zum Öffnen des Auftrags"
   },
   "abonnements": {
     "appName": "Abonnements",

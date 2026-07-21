@@ -7,7 +7,7 @@ import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
 import { Toast } from "primereact/toast";
@@ -492,7 +492,7 @@ export function SearchPresetsPage() {
         <Column header={t("suchkonfig.columnActions")} body={actionsBody} style={{ width: "20rem" }} />
       </DataTable>
 
-      <Dialog
+      <AppDialog
         visible={shareDialogVisible}
         onHide={closeShareDialog}
         header={dialogPreset ? t("suchkonfig.dialogTitle", { name: dialogPreset.name }) : ""}
@@ -515,9 +515,9 @@ export function SearchPresetsPage() {
             placeholder={t("workOrders.searchPanel.selectPlaceholder")}
           />
         </div>
-      </Dialog>
+      </AppDialog>
 
-      <Dialog
+      <AppDialog
         visible={editVisible}
         onHide={() => !editSaving && closeEdit()}
         header={editPreset ? t("suchkonfig.editTitle", { name: editPreset.name }) : ""}
@@ -567,7 +567,7 @@ export function SearchPresetsPage() {
             />
           </div>
         )}
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

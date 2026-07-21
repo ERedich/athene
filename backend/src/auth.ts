@@ -22,6 +22,7 @@ export type AuthUserRow = {
   employeeName: string | null;
   siteIds: string[];
   workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
+  onboardingCompletedAt: string | null;
 };
 
 const router = Router();
@@ -36,7 +37,8 @@ const authUserSelect = `
     emp."key" AS "employeeKey",
     emp."name" AS "employeeName",
     COALESCE(site_access."siteIds", ARRAY[]::uuid[])::text[] AS "siteIds",
-    COALESCE(workgroups."workgroups", '[]'::json) AS "workgroups"
+    COALESCE(workgroups."workgroups", '[]'::json) AS "workgroups",
+    u."onboardingCompletedAt"::text AS "onboardingCompletedAt"
   FROM "users" u
   LEFT JOIN "employee" emp ON emp."id" = u."employeeId"
   LEFT JOIN LATERAL (
@@ -172,6 +174,41 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/onboarding/complete", async (req: Request, res: Response) => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await pool.query(
+      `
+      UPDATE "users"
+      SET "onboardingCompletedAt" = COALESCE("onboardingCompletedAt", now())
+      WHERE "id" = $1::uuid
+      `,
+      [userId],
+    );
+    const { rows } = await pool.query<AuthUserRow>(
+      `
+      ${authUserSelect}
+      WHERE u."id" = $1::uuid
+      LIMIT 1
+      `,
+      [userId],
+    );
+    const user = rows[0];
+    if (!user) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    res.json({ user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });

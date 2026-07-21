@@ -15,7 +15,7 @@ import { Calendar } from "primereact/calendar";
 import { Card } from "primereact/card";
 import { Checkbox } from "primereact/checkbox";
 import { ColorPicker } from "primereact/colorpicker";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -708,7 +708,7 @@ export function AppParametersPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
       <Toast ref={toastRef} position="top-right" />
-      <Dialog
+      <AppDialog
         header={t("appParameters.assetTypesDialogTitle")}
         visible={assetTypesDialogOpen}
         style={{ width: "min(40rem, 95vw)" }}
@@ -780,7 +780,7 @@ export function AppParametersPage() {
             </div>
           ))}
         </div>
-      </Dialog>
+      </AppDialog>
       <div className="app-tabbed-page-shell min-h-0 flex flex-1 flex-col">
         <div ref={tabHostRef} className="app-tabview-with-ink">
           <TabView className="app-sticky-tabs" activeIndex={activeTab} onTabChange={handleTabChange}>

@@ -1,5 +1,5 @@
 import { Button } from "primereact/button";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 import { InputText } from "primereact/inputtext";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,7 +39,7 @@ export function WorkOrderCopyDialog({ visible, template, onHide, onConfirm }: Wo
   );
 
   return (
-    <Dialog
+    <AppDialog
       visible={visible}
       header={t("workOrders.copyOrderDialogTitle")}
       footer={footer}
@@ -76,6 +76,6 @@ export function WorkOrderCopyDialog({ visible, template, onHide, onConfirm }: Wo
           </div>
         </div>
       ) : null}
-    </Dialog>
+    </AppDialog>
   );
 }

@@ -6,6 +6,7 @@ import type { QueryResult } from "pg";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, type SiteAccessClient, siteAccessSql } from "./siteAccess.js";
+import { ensureMyOpenWorkOrdersPreset } from "./workOrderSearchPresets.js";
 
 export type UserRow = {
   id: string;
@@ -355,6 +356,8 @@ router.post("/", async (req: Request, res: Response) => {
           [userId, ...siteIds],
         );
       }
+
+      await ensureMyOpenWorkOrdersPreset(client, userId);
 
       const { rows } = await client.query<UserRow>(
         `

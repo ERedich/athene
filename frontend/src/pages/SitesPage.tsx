@@ -8,7 +8,7 @@ import { ColorPicker } from "primereact/colorpicker";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
@@ -439,7 +439,7 @@ export function SitesPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("sites.editTitle") : t("sites.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
@@ -521,7 +521,7 @@ export function SitesPage() {
             </span>
           </label>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

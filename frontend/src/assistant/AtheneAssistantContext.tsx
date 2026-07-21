@@ -96,6 +96,12 @@ export type OpenForCalendarParams = {
   onRescheduleApplied?: () => void;
 };
 
+export type OpenForModalHelpParams = {
+  title: string;
+  fields: Array<{ label: string; kind: string; name?: string }>;
+  entity?: { type?: AtheneUiContext["type"]; id?: string; label?: string; data?: unknown };
+};
+
 type AtheneAssistantContextValue = {
   busy: boolean;
   open: () => void;
@@ -103,6 +109,7 @@ type AtheneAssistantContextValue = {
   openWithContext: (context: AtheneUiContext) => void;
   openForFeedback: (params: OpenForFeedbackParams) => void;
   openForCalendar: (params: OpenForCalendarParams) => void;
+  openForModalHelp: (params: OpenForModalHelpParams) => void;
 };
 
 function isFeedbackUiContext(context: AtheneUiContext | null): boolean {
@@ -343,6 +350,29 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     [loadConversation],
   );
 
+  const openForModalHelp = useCallback(
+    (params: OpenForModalHelpParams) => {
+      onApplyTextRef.current = undefined;
+      onRescheduleAppliedRef.current = undefined;
+      setUiContext({
+        type: params.entity?.type ?? "app",
+        id: params.entity?.id,
+        label: params.entity?.label ?? params.title,
+        data: {
+          intent: "modalHelp",
+          modalTitle: params.title,
+          fields: params.fields,
+          ...(params.entity?.data && typeof params.entity.data === "object"
+            ? (params.entity.data as Record<string, unknown>)
+            : {}),
+        },
+      });
+      setVisible(true);
+      void loadConversation();
+    },
+    [loadConversation],
+  );
+
   const openForFeedback = useCallback(
     (params: OpenForFeedbackParams) => {
       onApplyTextRef.current = params.onApplyText;
@@ -534,24 +564,39 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
   const feedbackMode = isFeedbackUiContext(uiContext);
 
   const value = useMemo<AtheneAssistantContextValue>(
-    () => ({ busy, open, close, openWithContext, openForFeedback, openForCalendar }),
-    [busy, close, open, openForCalendar, openForFeedback, openWithContext],
+    () => ({
+      busy,
+      open,
+      close,
+      openWithContext,
+      openForFeedback,
+      openForCalendar,
+      openForModalHelp,
+    }),
+    [busy, close, open, openForCalendar, openForFeedback, openForModalHelp, openWithContext],
   );
 
+  const isModalHelpContext =
+    !!uiContext?.data &&
+    typeof uiContext.data === "object" &&
+    (uiContext.data as { intent?: string }).intent === "modalHelp";
+
   const uiContextKindLabel =
-    uiContext?.type === "workOrder"
-      ? t("assistant.contextWorkOrder")
-      : uiContext?.type === "asset"
-        ? t("assistant.contextAsset")
-        : uiContext?.type === "monitoring"
-          ? t("assistant.contextMonitoring")
-          : uiContext?.type === "sparePart"
-            ? t("assistant.contextSparePart")
-            : uiContext?.type === "warehouse"
-              ? t("assistant.contextWarehouse")
-              : uiContext?.type === "calendar"
-                ? t("assistant.contextCalendar")
-                : null;
+    isModalHelpContext
+      ? t("assistant.contextModal")
+      : uiContext?.type === "workOrder"
+        ? t("assistant.contextWorkOrder")
+        : uiContext?.type === "asset"
+          ? t("assistant.contextAsset")
+          : uiContext?.type === "monitoring"
+            ? t("assistant.contextMonitoring")
+            : uiContext?.type === "sparePart"
+              ? t("assistant.contextSparePart")
+              : uiContext?.type === "warehouse"
+                ? t("assistant.contextWarehouse")
+                : uiContext?.type === "calendar"
+                  ? t("assistant.contextCalendar")
+                  : null;
 
   const formatMessageTimestamp = (value: string) => {
     const date = new Date(value);
@@ -566,7 +611,7 @@ export function AtheneAssistantProvider({ children }: { children: ReactNode }) {
     <AtheneAssistantContext.Provider value={value}>
       {children}
       {panelMounted ? (
-        <div className="fixed inset-0 z-[1000] flex justify-end" role="presentation">
+        <div className="fixed inset-0 z-[2100] flex justify-end" role="presentation">
           <div
             className={`absolute inset-0 bg-black/35 transition-opacity ease-out ${
               panelIn ? "opacity-100" : "opacity-0"

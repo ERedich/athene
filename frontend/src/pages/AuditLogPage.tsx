@@ -5,7 +5,7 @@ import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
@@ -336,7 +336,7 @@ export function AuditLogPage() {
         />
       </div>
 
-      <Dialog
+      <AppDialog
         header={t("auditLog.detailTitle")}
         visible={detail !== null}
         className="app-big-modal-window"
@@ -395,7 +395,7 @@ export function AuditLogPage() {
             </div>
           </div>
         ) : null}
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

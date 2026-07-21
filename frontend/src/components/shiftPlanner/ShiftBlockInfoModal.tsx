@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 
 import { formatShiftTimeRange } from "../../lib/shiftPlanner/shiftCalendarExpand";
 import type { ShiftCalendarBlock } from "../../lib/shiftPlanner/shiftCalendarTypes";
@@ -94,7 +94,7 @@ export function ShiftBlockInfoModal({ block, onHide }: Props) {
   ) : undefined;
 
   return (
-    <Dialog
+    <AppDialog
       visible={block !== null}
       onHide={onHide}
       className="app-shift-planner-info-modal"
@@ -108,6 +108,6 @@ export function ShiftBlockInfoModal({ block, onHide }: Props) {
       {block ? (
         <ShiftBlockInfoPanel loading={loading} error={error} kpis={kpis} />
       ) : null}
-    </Dialog>
+    </AppDialog>
   );
 }

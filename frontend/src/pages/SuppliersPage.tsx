@@ -7,7 +7,7 @@ import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
@@ -534,7 +534,7 @@ export function SuppliersPage() {
         </DataTable>
       </div>
 
-      <Dialog
+      <AppDialog
         header={editingId ? t("suppliers.editTitle") : t("suppliers.createTitle")}
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
@@ -678,7 +678,7 @@ export function SuppliersPage() {
             </span>
           </label>
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

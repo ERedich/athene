@@ -6,7 +6,7 @@ import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -843,7 +843,7 @@ export function TransactionsPage() {
         />
       </div>
 
-      <Dialog
+      <AppDialog
         header={t("transactions.detailTitle")}
         visible={detail !== null}
         className="app-big-modal-window"
@@ -884,9 +884,9 @@ export function TransactionsPage() {
             </dl>
           </div>
         ) : null}
-      </Dialog>
+      </AppDialog>
 
-      <Dialog
+      <AppDialog
         header={t("transactions.createTitle")}
         visible={createVisible}
         className="app-big-modal-window"
@@ -1076,7 +1076,7 @@ export function TransactionsPage() {
             </div>
           )}
         </div>
-      </Dialog>
+      </AppDialog>
     </div>
   );
 }

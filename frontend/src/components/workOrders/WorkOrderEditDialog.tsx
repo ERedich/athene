@@ -1,5 +1,5 @@
-import { Dialog } from "primereact/dialog";
-
+import { AppDialog } from "../AppDialog";
+import { orderDialogTabs } from "../../lib/workOrderDialog";
 import { WorkOrderDialogTitle } from "./WorkOrderDialogTitle";
 import {
   WorkOrderEditDocumentDialog,
@@ -19,13 +19,15 @@ export function WorkOrderEditDialog(props: WorkOrderEditDialogProps) {
     orderNumberForTitle,
     orderStatusForUi,
     updateTabInk,
+    activeTabIndex,
+    openFeedbackAthene,
   } = props;
 
   const headerIcons = useWorkOrderEditHeaderIcons(props);
 
   return (
     <>
-      <Dialog
+      <AppDialog
         header={
           <WorkOrderDialogTitle
             orderNumber={orderNumberForTitle}
@@ -34,8 +36,11 @@ export function WorkOrderEditDialog(props: WorkOrderEditDialogProps) {
           />
         }
         icons={headerIcons}
+        onAskAthene={
+          activeTabIndex === orderDialogTabs.Feedback ? openFeedbackAthene : undefined
+        }
         visible={dialogVisible}
-        className="app-big-modal-window app-tabbed-modal-window"
+        className={`app-big-modal-window app-tabbed-modal-window${!editingId ? " app-wo-create-surface" : ""}`}
         onHide={closeDialog}
         onShow={updateTabInk}
         footer={<WorkOrderEditFooter props={props} />}
@@ -45,7 +50,7 @@ export function WorkOrderEditDialog(props: WorkOrderEditDialogProps) {
         resizable={false}
       >
         <WorkOrderEditTabContent {...props} />
-      </Dialog>
+      </AppDialog>
       <WorkOrderEditDocumentDialog {...props} />
     </>
   );

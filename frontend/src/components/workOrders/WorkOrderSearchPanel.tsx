@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
@@ -812,7 +812,7 @@ export function WorkOrderSearchPanel({
         </div>
       </form>
     </Sidebar>
-    <Dialog
+    <AppDialog
       header={t("workOrders.searchPresets.saveTitle")}
       visible={saveDialogVisible}
       style={{ width: "min(28rem, 95vw)" }}
@@ -839,7 +839,7 @@ export function WorkOrderSearchPanel({
         />
         {saveError ? <p className="m-0 text-sm text-red-500">{saveError}</p> : null}
       </div>
-    </Dialog>
+    </AppDialog>
     </>
   );
 }

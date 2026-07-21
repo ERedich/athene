@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
@@ -69,7 +69,7 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
   );
 
   return (
-    <Dialog
+    <AppDialog
       header={editingId ? t("maintenancePlans.editTitle") : t("maintenancePlans.createTitle")}
       visible={dialogVisible}
       className="app-big-modal-window app-tabbed-modal-window"
@@ -470,6 +470,6 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
           </TabPanel>
         </TabView>
       </div>
-    </Dialog>
+    </AppDialog>
   );
 }

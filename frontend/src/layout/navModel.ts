@@ -229,6 +229,13 @@ export const navGroups: NavGroup[] = [
       },
     ],
   },
+  {
+    id: "feedback",
+    labelKey: "feedback.navFeedback",
+    Icon: MessageSquare,
+    items: [],
+    to: "/feedback",
+  },
 ];
 
 export function isNavRouteActive(

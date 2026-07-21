@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Navigate, Outlet } from "react-router-dom";
 import { AtheneAssistantProvider } from "../assistant/AtheneAssistantContext";
 import { MaintenancePlanDialogProvider } from "../maintenancePlans/MaintenancePlanDialogContext";
+import { OnboardingProvider } from "../onboarding/OnboardingProvider";
+import { NotificationToastBridge } from "../notifications/NotificationToastBridge";
 import { WorkOrderDialogProvider } from "../workOrders/WorkOrderDialogContext";
 import { WorkOrderSubscriptionProvider } from "../workOrders/WorkOrderSubscriptionContext";
 import { apiFetch } from "../lib/api";
@@ -38,11 +40,15 @@ type SessionBase = {
 
 type ShellEnterPhase = "none" | "initial" | "animate";
 
+/** Matches `.app-shell-login-enter-active` transition (~540ms) plus a short settle. */
+const SHELL_ENTER_READY_MS = 620;
+
 export function RequireAuth() {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<"loading" | "bad" | "ok">("loading");
   const [sessionBase, setSessionBase] = useState<SessionBase | null>(null);
   const [shellEnter, setShellEnter] = useState<ShellEnterPhase>("none");
+  const [shellReady, setShellReady] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await apiFetch("/api/auth/me");
@@ -102,6 +108,7 @@ export function RequireAuth() {
   useLayoutEffect(() => {
     if (phase !== "ok") {
       setShellEnter("none");
+      setShellReady(false);
       return;
     }
     let pending = false;
@@ -112,10 +119,12 @@ export function RequireAuth() {
     }
     if (!pending) {
       setShellEnter("none");
+      setShellReady(true);
       return;
     }
 
     setShellEnter("initial");
+    setShellReady(false);
     let innerRaf = 0;
     const outerRaf = requestAnimationFrame(() => {
       innerRaf = requestAnimationFrame(() => {
@@ -132,6 +141,17 @@ export function RequireAuth() {
       cancelAnimationFrame(innerRaf);
     };
   }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "ok") return;
+    if (shellEnter === "none") {
+      setShellReady(true);
+      return;
+    }
+    if (shellEnter !== "animate") return;
+    const id = window.setTimeout(() => setShellReady(true), SHELL_ENTER_READY_MS);
+    return () => window.clearTimeout(id);
+  }, [phase, shellEnter]);
 
   if (phase === "loading") {
     return (
@@ -168,10 +188,13 @@ export function RequireAuth() {
       <AtheneAssistantProvider>
         <WorkOrderSubscriptionProvider>
           <WorkOrderDialogProvider>
+            <NotificationToastBridge />
             <MaintenancePlanDialogProvider>
-              <div className={`min-h-screen w-full ${shellEnterClass}`}>
-                <Outlet />
-              </div>
+              <OnboardingProvider shellReady={shellReady}>
+                <div className={`min-h-screen w-full ${shellEnterClass}`}>
+                  <Outlet />
+                </div>
+              </OnboardingProvider>
             </MaintenancePlanDialogProvider>
           </WorkOrderDialogProvider>
         </WorkOrderSubscriptionProvider>

@@ -1,13 +1,13 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type PointerEvent,
 } from "react";
 import {
+  CircleHelp,
   File,
   Pencil,
   Plus,
@@ -41,6 +41,8 @@ import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPag
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
 import { useWorkOrderOverviewPanel } from "../hooks/useWorkOrderOverviewPanel";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
+import { MONITORING_HELP_STEPS } from "../onboarding/monitoringHelpSteps";
+import { useAtheneTour } from "../onboarding/useAtheneTour";
 import { orderDialogTabs, type FeedbackEntryMode } from "../lib/workOrderDialog";
 import { mergeWorkOrderIntoAdvancedSearch } from "../lib/workOrderCleverSearch";
 import {
@@ -59,9 +61,8 @@ import {
   isSamePresetId,
 } from "../lib/workOrderSearchPresetApi";
 import {
-  isValidMonitoringTablePersistedState,
+  clearLegacyMonitoringTableStateStorage,
   MONITORING_TABLE_STATE_STORAGE_KEY,
-  repairMonitoringTableStateStorage,
 } from "../lib/monitoringTableState";
 import { workOrderStatusAllowsFeedbackTab } from "../lib/workOrderStatus";
 import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
@@ -124,6 +125,16 @@ export function MonitoringPage() {
   const subscriptions = useWorkOrderSubscriptions();
   const refData = useWorkOrderSearchReferenceData();
   const [searchParams, setSearchParams] = useSearchParams();
+  const helpTour = useAtheneTour({
+    steps: MONITORING_HELP_STEPS,
+    labels: {
+      stepOfKey: "monitoring.helpTour.stepOf",
+      skipKey: "monitoring.helpTour.skip",
+      backKey: "monitoring.helpTour.back",
+      nextKey: "monitoring.helpTour.next",
+      finishKey: "monitoring.helpTour.finish",
+    },
+  });
 
   /** Deeplink filters (e.g. dashboard KPI links) captured once on mount; takes precedence over the default preset. */
   const initialDeeplinkRef = useRef<ReturnType<typeof parseWorkOrderDeeplinkParams> | undefined>(undefined);
@@ -134,6 +145,7 @@ export function MonitoringPage() {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [newlyCreatedOrderIds, setNewlyCreatedOrderIds] = useState<Record<string, number>>({});
   const [updatedOrderIds, setUpdatedOrderIds] = useState<Record<string, number>>({});
+  const [deletedOrderIds, setDeletedOrderIds] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -417,9 +429,45 @@ export function MonitoringPage() {
         }
         return changed ? next : current;
       });
+      setDeletedOrderIds((current) => {
+        let changed = false;
+        const next: Record<string, number> = {};
+        for (const [orderId, deletedAt] of Object.entries(current)) {
+          if (now - deletedAt <= totalHighlightMs) {
+            next[orderId] = deletedAt;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : current;
+      });
     }, 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  const liveDemoRanRef = useRef(false);
+
+  /** Help tour live step: demo create/update/delete row flashes on the first four visible rows. */
+  useEffect(() => {
+    if (!helpTour.active || helpTour.currentStepId !== "live") {
+      liveDemoRanRef.current = false;
+      return;
+    }
+    if (liveDemoRanRef.current) return;
+    const ids = orders.slice(0, 4).map((row) => row.id);
+    if (ids.length === 0) return;
+    liveDemoRanRef.current = true;
+    const now = Date.now();
+    // create (green), update (blue), delete (red), update (blue)
+    setNewlyCreatedOrderIds((current) => (ids[0] ? { ...current, [ids[0]]: now } : current));
+    setUpdatedOrderIds((current) => {
+      const next = { ...current };
+      if (ids[1]) next[ids[1]] = now;
+      if (ids[3]) next[ids[3]] = now;
+      return next;
+    });
+    setDeletedOrderIds((current) => (ids[2] ? { ...current, [ids[2]]: now } : current));
+  }, [helpTour.active, helpTour.currentStepId, orders]);
 
   useEffect(
     () =>
@@ -455,6 +503,20 @@ export function MonitoringPage() {
   const openCreate = useCallback(() => {
     woDialog.openCreate({ onSaved: onDialogSaved });
   }, [onDialogSaved, woDialog]);
+
+  const openCopy = useCallback(
+    (row: WorkOrder) => {
+      woDialog.openCopy(row, { onSaved: onDialogSaved });
+    },
+    [onDialogSaved, woDialog],
+  );
+
+  const openFollowUpOrder = useCallback(
+    (row: WorkOrder) => {
+      woDialog.openFollowUp(row, { onSaved: onDialogSaved });
+    },
+    [onDialogSaved, woDialog],
+  );
 
   const openEdit = useCallback(
     (row: WorkOrder) => {
@@ -530,7 +592,12 @@ export function MonitoringPage() {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
+          <button
+            type="button"
+            data-onboarding="mon-create"
+            className={createActionNavItem}
+            onClick={openCreate}
+          >
             <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.new")}</span>
           </button>
@@ -568,6 +635,7 @@ export function MonitoringPage() {
         <li>
           <button
             type="button"
+            data-onboarding="mon-filter"
             className={primaryActionNavItem}
             onClick={() => {
               setPanelDraft(appliedAdvanced);
@@ -578,7 +646,18 @@ export function MonitoringPage() {
             <span>{t("workOrders.searchPanel.open")}</span>
           </button>
         </li>
-        <li className="ml-auto flex items-center gap-2">
+        <li>
+          <button
+            type="button"
+            data-onboarding="monitoring-help"
+            className={primaryActionNavItem}
+            onClick={helpTour.start}
+          >
+            <CircleHelp className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("monitoring.help")}</span>
+          </button>
+        </li>
+        <li className="ml-auto flex items-center gap-2" data-onboarding="mon-presets">
           {searchPresets.length > 0 ? (
             <Dropdown
               aria-label={t("workOrders.searchPresets.headerLabel")}
@@ -615,6 +694,7 @@ export function MonitoringPage() {
     confirmDelete,
     headerPresetDropdownOptions,
     headerPresetSelectionId,
+    helpTour.start,
     openCreate,
     openEdit,
     searchPresets.length,
@@ -872,7 +952,9 @@ export function MonitoringPage() {
             },
           });
         },
+        onFollowUpOrder: openFollowUpOrder,
         onCreate: openCreate,
+        onCopy: openCopy,
         onEdit: openEdit,
         onDelete: confirmDelete,
         onStart: (row) => void startOrder(row),
@@ -909,8 +991,10 @@ export function MonitoringPage() {
       confirmCloseWorkOrder,
       confirmDelete,
       openCreate,
+      openCopy,
       openEdit,
       openFeedbackTab,
+      openFollowUpOrder,
       openPlanningTab,
       selectedOrder,
       startOrder,
@@ -971,20 +1055,8 @@ export function MonitoringPage() {
     [openFeedbackTab, startOrder, t],
   );
 
-  const [monitoringTableMountEpoch, setMonitoringTableMountEpoch] = useState(0);
-
-  useLayoutEffect(() => {
-    const before = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
-    repairMonitoringTableStateStorage();
-    const after = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
-    if (before !== after) {
-      setMonitoringTableMountEpoch((epoch) => epoch + 1);
-    }
-  }, []);
-
-  const handleMonitoringTableStateSave = useCallback((state: Record<string, unknown>) => {
-    if (!isValidMonitoringTablePersistedState(state)) return;
-    window.localStorage.setItem(MONITORING_TABLE_STATE_STORAGE_KEY, JSON.stringify(state));
+  useEffect(() => {
+    clearLegacyMonitoringTableStateStorage();
   }, []);
 
   if (!woDialog.useModalPresentation && woDialog.dialogVisible && woDialog.editDialogState) {
@@ -993,6 +1065,7 @@ export function MonitoringPage() {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+      {helpTour.coachmark}
       <Toast ref={toastRef} position="top-right" />
       <WorkOrderSearchPanel
         visible={searchPanelVisible}
@@ -1038,11 +1111,11 @@ export function MonitoringPage() {
 
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        data-onboarding="mon-table"
         onPointerDownCapture={handleTablePointerDownCapture}
         {...(!isPreloadMode ? tableCtx.wrapperProps : {})}
       >
         <DataTable
-          key={`stateful-monitoring-${monitoringTableMountEpoch}`}
           className="app-data-table app-work-orders-data-grid w-full"
           value={tableRows}
           loading={loading}
@@ -1074,27 +1147,17 @@ export function MonitoringPage() {
           columnResizeMode="expand"
           scrollHeight="flex"
           tableStyle={{ minWidth: "94rem" }}
-          stateStorage="custom"
-          customSaveState={handleMonitoringTableStateSave}
-          customRestoreState={() => {
-            try {
-              const raw = window.localStorage.getItem(MONITORING_TABLE_STATE_STORAGE_KEY);
-              if (!raw) return {};
-              const parsed = JSON.parse(raw) as Record<string, unknown>;
-              return isValidMonitoringTablePersistedState(parsed) ? parsed : {};
-            } catch {
-              return {};
-            }
-          }}
+          stateStorage="local"
+          stateKey={MONITORING_TABLE_STATE_STORAGE_KEY}
           virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={t("workOrders.empty")}
-          rowClassName={(row) =>
-            newlyCreatedOrderIds[(row as WorkOrder).id]
-              ? "app-monitoring-new-row"
-              : updatedOrderIds[(row as WorkOrder).id]
-                ? "app-monitoring-updated-row"
-                : ""
-          }
+          rowClassName={(row) => {
+            const id = (row as WorkOrder).id;
+            if (deletedOrderIds[id]) return "app-monitoring-deleted-row";
+            if (newlyCreatedOrderIds[id]) return "app-monitoring-new-row";
+            if (updatedOrderIds[id]) return "app-monitoring-updated-row";
+            return "";
+          }}
         >
           <Column
             field="orderNumber"
@@ -1129,7 +1192,7 @@ export function MonitoringPage() {
           />
           <Column
             field="status"
-            header={t("workOrders.status")}
+            header={<span data-onboarding="mon-status">{t("workOrders.status")}</span>}
             sortable={!isPreloadMode}
             body={statusBody}
             bodyClassName={statusCellClassName}
@@ -1164,7 +1227,7 @@ export function MonitoringPage() {
           />
           <Column
             field="documentCount"
-            header={t("workOrders.references")}
+            header={<span data-onboarding="mon-references">{t("workOrders.references")}</span>}
             body={referencesBody}
             sortable={!isPreloadMode}
             style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
@@ -1196,7 +1259,7 @@ export function MonitoringPage() {
           />
           <Column
             columnKey="startStop"
-            header={t("workOrders.startStop")}
+            header={<span data-onboarding="mon-start-stop">{t("workOrders.startStop")}</span>}
             body={startStopBody}
             style={{ width: "7.5rem", minWidth: "7.5rem" }}
           />

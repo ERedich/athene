@@ -13,6 +13,8 @@ export type AuthUser = {
   employeeName: string | null;
   siteIds: string[];
   workgroups: Array<{ id: string; key: string; name: string; siteId: string }>;
+  /** ISO timestamp when first-login tour finished; null = show onboarding. */
+  onboardingCompletedAt: string | null;
 };
 
 export type AuthSession = {

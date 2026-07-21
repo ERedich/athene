@@ -15,6 +15,7 @@ import { StorageLocationsPage } from "./pages/StorageLocationsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { FeedbackPage } from "./pages/FeedbackPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { KalendarPage } from "./pages/KalendarPage";
@@ -43,6 +44,7 @@ export default function App() {
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
+          <Route path="feedback" element={<FeedbackPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="baumstruktur" element={<BaumstrukturPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />

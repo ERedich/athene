@@ -17,6 +17,7 @@ import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
 import { SidebarSweepTimer } from "../components/SidebarSweepTimer";
 import { apiFetch } from "../lib/api";
+import { ONBOARDING_ENSURE_SIDEBAR_EVENT } from "../onboarding/onboardingDom";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
@@ -36,6 +37,7 @@ function headerTitleKey(pathname: string): string {
   const map: Record<string, string> = {
     dashboard: "dashboard.appName",
     calculator: "calculator.appName",
+    feedback: "feedback.appName",
     assets: "assets.appName",
     baumstruktur: "baumstruktur.appName",
     workorders: "workOrders.appName",
@@ -97,6 +99,22 @@ export function AppShellLayout() {
   const [collapsed, setCollapsed] = useState<boolean>(() =>
     readInitialCollapsed(),
   );
+
+  useEffect(() => {
+    const onEnsure = () => {
+      setCollapsed((prev) => {
+        if (!prev) return prev;
+        try {
+          window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "0");
+        } catch {
+          /* ignore */
+        }
+        return false;
+      });
+    };
+    window.addEventListener(ONBOARDING_ENSURE_SIDEBAR_EVENT, onEnsure);
+    return () => window.removeEventListener(ONBOARDING_ENSURE_SIDEBAR_EVENT, onEnsure);
+  }, []);
 
   useEffect(() => {
     setHeaderRowCount(null);
@@ -245,6 +263,7 @@ export function AppShellLayout() {
             </button>
             <button
               type="button"
+              data-onboarding="athene"
               className={`${toggleBtn} font-semibold`}
               aria-label={t("assistant.open")}
               title={t("assistant.open")}

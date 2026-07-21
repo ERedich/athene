@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../AppDialog";
 
 import { PlanningConflictWarning } from "../PlanningConflictWarning";
 import type { PendingCalendarMove } from "../../lib/calendar/calendarMove";
@@ -48,7 +48,7 @@ export function CalendarMoveConfirmPanel({
   ) : null;
 
   return (
-    <Dialog
+    <AppDialog
       visible={visible}
       header={t("kalendar.moveTitle")}
       footer={footer}
@@ -82,6 +82,6 @@ export function CalendarMoveConfirmPanel({
           ) : null}
         </div>
       ) : null}
-    </Dialog>
+    </AppDialog>
   );
 }

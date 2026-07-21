@@ -48,7 +48,10 @@ export function OrderCreationPage() {
   }, [openCreate, setHeaderActions, t]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+    <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5 bg-[var(--color-background)] p-6 text-center">
+      <p className="m-0 font-['Space_Grotesk'] text-[11px] uppercase tracking-[0.12em] text-[var(--color-outline)]">
+        {t("orderCreation.appName")}
+      </p>
       <p className="m-0 max-w-md text-sm text-[color-mix(in_srgb,var(--color-on-surface)_72%,transparent)]">
         {t("orderCreation.hint")}
       </p>

@@ -9,7 +9,7 @@ import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
-import { Dialog } from "primereact/dialog";
+import { AppDialog } from "../components/AppDialog";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -1831,16 +1831,16 @@ export function SparePartsPage() {
           activeTabIndex={activeTabIndex}
           extraDialogs={
             <>
-              <Dialog header={t("spareParts.documentsMetaDialogTitle")} visible={uploadMetaVisible} className="app-modal-window" onHide={() => { setUploadMetaVisible(false); setUploadDrafts([]); }} modal dismissableMask draggable={false} resizable={false}>
+              <AppDialog header={t("spareParts.documentsMetaDialogTitle")} visible={uploadMetaVisible} className="app-modal-window" onHide={() => { setUploadMetaVisible(false); setUploadDrafts([]); }} modal dismissableMask draggable={false} resizable={false}>
                 <div className="space-y-3">
                   <div className="text-sm text-on-surface-variant">{t("spareParts.documentsMetaDialogHint")}</div>
                   {uploadDrafts.map((draft, index) => <div key={`${draft.file.name}-${index}`} className="grid grid-cols-1 gap-3 rounded-sm border border-outline-variant p-3 md:grid-cols-2"><InputText value={draft.displayName} onChange={(e) => setUploadDrafts((drafts) => drafts.map((item, i) => i === index ? { ...item, displayName: e.target.value } : item))} /><Dropdown value={draft.category} options={documentCategoryOptions} optionLabel="label" optionValue="value" onChange={(e) => setUploadDrafts((drafts) => drafts.map((item, i) => i === index ? { ...item, category: e.value as AssetDocumentCategory } : item))} appendTo={overlayAppendTo} /></div>)}
                   <div className="flex justify-end gap-2"><Button type="button" label={t("spareParts.cancel")} severity="secondary" outlined onClick={() => setUploadMetaVisible(false)} /><Button type="button" label={t("spareParts.documentsMetaApply")} icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />} onClick={() => void confirmUploadDrafts()} /></div>
                 </div>
-              </Dialog>
-              <Dialog header={t("spareParts.documentsEditTitle")} visible={documentEdit !== null} className="app-modal-window" onHide={() => !documentEditSaving && setDocumentEdit(null)} modal dismissableMask={!documentEditSaving} draggable={false} resizable={false}>
+              </AppDialog>
+              <AppDialog header={t("spareParts.documentsEditTitle")} visible={documentEdit !== null} className="app-modal-window" onHide={() => !documentEditSaving && setDocumentEdit(null)} modal dismissableMask={!documentEditSaving} draggable={false} resizable={false}>
                 <div className="space-y-3"><InputText value={documentEditDisplayName} onChange={(e) => setDocumentEditDisplayName(e.target.value)} className="w-full" /><Dropdown value={documentEditCategory} options={documentCategoryOptions} optionLabel="label" optionValue="value" onChange={(e) => setDocumentEditCategory(e.value as AssetDocumentCategory)} className="w-full" appendTo={overlayAppendTo} /><div className="flex justify-end gap-2"><Button type="button" label={t("spareParts.cancel")} severity="secondary" outlined disabled={documentEditSaving} onClick={() => setDocumentEdit(null)} /><Button type="button" label={t("spareParts.save")} loading={documentEditSaving} onClick={() => void saveDocumentEdit()} /></div></div>
-              </Dialog>
+              </AppDialog>
             </>
           }
         >

@@ -197,6 +197,64 @@ export function emptyWorkOrderSearchPresetPayload(): WorkOrderSearchPresetPayloa
   };
 }
 
+/** Built-in preset name provisioned for every user account. */
+export const MY_OPEN_WORK_ORDERS_PRESET_NAME = "Meine offenen Aufträge";
+
+const MY_OPEN_WORK_ORDERS_STATUSES = [
+  "open",
+  "assigned",
+  "started",
+  "paused",
+  "continued",
+] as const;
+
+export function myOpenWorkOrdersPresetPayload(): WorkOrderSearchPresetPayloadV1 {
+  const payload = emptyWorkOrderSearchPresetPayload();
+  payload.advanced.status = [...MY_OPEN_WORK_ORDERS_STATUSES];
+  payload.advanced.employeeId = [EMPLOYEE_PSEUDO_ME];
+  return payload;
+}
+
+/**
+ * Idempotently create the standard “Meine offenen Aufträge” preset for a user.
+ * Accepts pool or transaction client so it can run inside user-create.
+ */
+export async function ensureMyOpenWorkOrdersPreset(
+  client: Pick<Pool, "query">,
+  userId: string,
+): Promise<{ id: string; created: boolean } | null> {
+  const payload = myOpenWorkOrdersPresetPayload();
+  const { rows } = await client.query<{ id: string }>(
+    `
+    INSERT INTO "workOrderSearchPreset" ("name", "createdBy", "payload")
+    SELECT $1, $2::uuid, $3::jsonb
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM "workOrderSearchPreset" p
+      WHERE p."createdBy" = $2::uuid
+        AND p."name" = $1
+    )
+    RETURNING "id"
+    `,
+    [MY_OPEN_WORK_ORDERS_PRESET_NAME, userId, JSON.stringify(payload)],
+  );
+  if (rows[0]?.id) {
+    return { id: rows[0].id, created: true };
+  }
+  const existing = await client.query<{ id: string }>(
+    `
+    SELECT p."id"
+    FROM "workOrderSearchPreset" p
+    WHERE p."createdBy" = $1::uuid
+      AND p."name" = $2
+    LIMIT 1
+    `,
+    [userId, MY_OPEN_WORK_ORDERS_PRESET_NAME],
+  );
+  const id = existing.rows[0]?.id;
+  return id ? { id, created: false } : null;
+}
+
 /** Merge sparse advanced filters onto empty defaults, then validate. */
 export function buildPresetPayloadFromPartial(input: {
   quickSearch?: unknown;

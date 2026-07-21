@@ -8,7 +8,6 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
   CheckSquare,
@@ -35,9 +34,11 @@ import { TreeTable } from "primereact/treetable";
 import type { TreeNode } from "primereact/treenode";
 
 import { useAuth } from "../auth/AuthContext";
+import { DocumentMimeIcon } from "../components/documents/DocumentMimeIcon";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 import { documentCategoryBadgeClass } from "../constants/assetDocumentCategory";
+import { useDocumentImageHoverPreview } from "../hooks/useDocumentImageHoverPreview";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { APP_PARAM_KEY_COLORED_ASSET_TREE } from "../lib/appParameterKeys";
@@ -55,9 +56,9 @@ import {
   type AssetTreeType,
   type RefButtonAppearance,
 } from "../lib/assetTree";
+import { isImageDocument } from "../lib/isImageDocument";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import type { WorkOrder, WorkOrderStatus } from "../lib/workOrderTypes";
-import { documentTypeMimeIcon } from "../hooks/useWorkOrderEditDialogState";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 
 type AssetDocumentRow = {
@@ -84,31 +85,6 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-function isImageDocument(doc: AssetDocumentRow): boolean {
-  const mt = (doc.mimeType ?? "").toLowerCase().split(";")[0]?.trim() ?? "";
-  if (mt.startsWith("image/")) return true;
-  const i = doc.fileName.lastIndexOf(".");
-  const ext = i >= 0 ? doc.fileName.slice(i + 1).toLowerCase() : "";
-  return (
-    ext === "png" ||
-    ext === "jpg" ||
-    ext === "jpeg" ||
-    ext === "gif" ||
-    ext === "webp" ||
-    ext === "bmp" ||
-    ext === "svg"
-  );
-}
-
-type ImageHoverPreview = {
-  docId: string;
-  title: string;
-  url: string | null;
-  loading: boolean;
-  top: number;
-  left: number;
-};
 
 function parseDocumentRow(raw: unknown): AssetDocumentRow | null {
   if (!raw || typeof raw !== "object") return null;
@@ -300,10 +276,7 @@ export function BaumstrukturPage() {
   const [ipLoading, setIpLoading] = useState(false);
   const [ipRows, setIpRows] = useState<InspectionPointRow[]>([]);
   const [ipLoadedAssetId, setIpLoadedAssetId] = useState<string | null>(null);
-  const [imageHoverPreview, setImageHoverPreview] = useState<ImageHoverPreview | null>(null);
-  const imagePreviewCacheRef = useRef<Map<string, string>>(new Map());
-  const imagePreviewHoverTimerRef = useRef<number | null>(null);
-  const imagePreviewReqSeqRef = useRef(0);
+  const { showPreview, clearPreview, previewPortal } = useDocumentImageHoverPreview();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -492,109 +465,19 @@ export function BaumstrukturPage() {
   );
 
   const closeRefsDrawer = useCallback(() => {
-    if (imagePreviewHoverTimerRef.current != null) {
-      window.clearTimeout(imagePreviewHoverTimerRef.current);
-      imagePreviewHoverTimerRef.current = null;
-    }
-    setImageHoverPreview(null);
+    clearPreview();
     setRefsAsset(null);
-  }, []);
-
-  const clearImageHoverPreview = useCallback(() => {
-    if (imagePreviewHoverTimerRef.current != null) {
-      window.clearTimeout(imagePreviewHoverTimerRef.current);
-      imagePreviewHoverTimerRef.current = null;
-    }
-    imagePreviewReqSeqRef.current += 1;
-    setImageHoverPreview(null);
-  }, []);
-
-  const showImageHoverPreview = useCallback(
-    (assetId: string, doc: AssetDocumentRow, anchor: DOMRect) => {
-      if (!isImageDocument(doc)) return;
-      if (imagePreviewHoverTimerRef.current != null) {
-        window.clearTimeout(imagePreviewHoverTimerRef.current);
-      }
-      const title = doc.displayName?.trim() || doc.fileName;
-      const previewW = 280;
-      const previewH = 220;
-      const gap = 12;
-      const left = Math.max(8, Math.min(anchor.left - previewW - gap, window.innerWidth - previewW - 8));
-      const top = Math.max(8, Math.min(anchor.top, window.innerHeight - previewH - 8));
-      const cacheKey = `${assetId}:${doc.id}`;
-      const cached = imagePreviewCacheRef.current.get(cacheKey);
-
-      imagePreviewHoverTimerRef.current = window.setTimeout(() => {
-        imagePreviewHoverTimerRef.current = null;
-        if (cached) {
-          setImageHoverPreview({
-            docId: doc.id,
-            title,
-            url: cached,
-            loading: false,
-            top,
-            left,
-          });
-          return;
-        }
-        const seq = ++imagePreviewReqSeqRef.current;
-        setImageHoverPreview({
-          docId: doc.id,
-          title,
-          url: null,
-          loading: true,
-          top,
-          left,
-        });
-        void (async () => {
-          try {
-            const res = await apiFetch(`/api/assets/${assetId}/documents/${doc.id}/content`);
-            if (!res.ok) throw new Error("preview");
-            const blob = await res.blob();
-            if (imagePreviewReqSeqRef.current !== seq) return;
-            const blobUrl = URL.createObjectURL(blob);
-            const prev = imagePreviewCacheRef.current.get(cacheKey);
-            if (prev) URL.revokeObjectURL(prev);
-            imagePreviewCacheRef.current.set(cacheKey, blobUrl);
-            setImageHoverPreview({
-              docId: doc.id,
-              title,
-              url: blobUrl,
-              loading: false,
-              top,
-              left,
-            });
-          } catch {
-            if (imagePreviewReqSeqRef.current !== seq) return;
-            setImageHoverPreview(null);
-          }
-        })();
-      }, 220);
-    },
-    [],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (imagePreviewHoverTimerRef.current != null) {
-        window.clearTimeout(imagePreviewHoverTimerRef.current);
-      }
-      for (const url of imagePreviewCacheRef.current.values()) {
-        URL.revokeObjectURL(url);
-      }
-      imagePreviewCacheRef.current.clear();
-    };
-  }, []);
+  }, [clearPreview]);
 
   useEffect(() => {
     if (refsAsset != null) return;
-    clearImageHoverPreview();
-  }, [clearImageHoverPreview, refsAsset]);
+    clearPreview();
+  }, [clearPreview, refsAsset]);
 
   useEffect(() => {
     if (refsTab === 0) return;
-    clearImageHoverPreview();
-  }, [clearImageHoverPreview, refsTab]);
+    clearPreview();
+  }, [clearPreview, refsTab]);
 
   const onRefsTabChange = useCallback(
     (index: number) => {
@@ -1032,10 +915,9 @@ export function BaumstrukturPage() {
                   ) : (
                     <div className="grid grid-cols-1 gap-2">
                       {filteredDocsRows.map((doc, index) => {
-                        const spec = documentTypeMimeIcon(doc.mimeType ?? "application/octet-stream", doc.fileName);
-                        const MimeIco = spec.Icon;
                         const title = doc.displayName?.trim() || doc.fileName;
-                        const imageDoc = isImageDocument(doc);
+                        const mime = doc.mimeType ?? "application/octet-stream";
+                        const imageDoc = isImageDocument(mime, doc.fileName);
                         return (
                           <div
                             key={doc.id}
@@ -1045,21 +927,24 @@ export function BaumstrukturPage() {
                             style={{ ["--app-cascade-index" as string]: index }}
                             title={
                               imageDoc
-                                ? t("baumstruktur.documentsImagePreviewHint")
+                                ? t("documentsUi.imagePreviewHint")
                                 : t("assets.documentsOpen")
                             }
                             onClick={() => void openDocumentContent(refsAsset.id, doc.id)}
                             onMouseEnter={(e) => {
                               if (!imageDoc) return;
-                              showImageHoverPreview(
-                                refsAsset.id,
-                                doc,
-                                e.currentTarget.getBoundingClientRect(),
-                              );
+                              showPreview({
+                                cacheKey: `asset:${refsAsset.id}:${doc.id}`,
+                                title,
+                                mimeType: mime,
+                                fileName: doc.fileName,
+                                anchor: e.currentTarget.getBoundingClientRect(),
+                                fetchUrl: `/api/assets/${refsAsset.id}/documents/${doc.id}/content`,
+                              });
                             }}
                             onMouseLeave={() => {
                               if (!imageDoc) return;
-                              clearImageHoverPreview();
+                              clearPreview();
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
@@ -1068,14 +953,7 @@ export function BaumstrukturPage() {
                               }
                             }}
                           >
-                            <span className="app-asset-refs-doc-icon" aria-hidden>
-                              <MimeIco
-                                className={spec.className}
-                                width={20}
-                                height={20}
-                                strokeWidth={1.75}
-                              />
-                            </span>
+                            <DocumentMimeIcon mimeType={mime} fileName={doc.fileName} />
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-sm font-medium text-on-surface" title={title}>
                                 {title}
@@ -1095,7 +973,7 @@ export function BaumstrukturPage() {
                                   })}
                                 </span>
                                 <span className="min-w-0 truncate">
-                                  {(doc.mimeType ?? "application/octet-stream").split(";")[0]}
+                                  {mime.split(";")[0]}
                                 </span>
                                 <span className="shrink-0 tabular-nums">{formatFileSize(doc.fileSize)}</span>
                               </div>
@@ -1209,31 +1087,7 @@ export function BaumstrukturPage() {
         ) : null}
       </Sidebar>
 
-      {imageHoverPreview && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="app-asset-refs-image-preview"
-              style={{ top: imageHoverPreview.top, left: imageHoverPreview.left }}
-              role="img"
-              aria-label={t("baumstruktur.documentsImagePreview", {
-                name: imageHoverPreview.title,
-              })}
-            >
-              {imageHoverPreview.loading || !imageHoverPreview.url ? (
-                <div className="app-asset-refs-image-preview__loading">
-                  <LucideSpinner className="h-5 w-5" strokeWidth={1.75} />
-                </div>
-              ) : (
-                <img
-                  src={imageHoverPreview.url}
-                  alt={imageHoverPreview.title}
-                  className="app-asset-refs-image-preview__img"
-                />
-              )}
-            </div>,
-            document.body,
-          )
-        : null}
+      {previewPortal}
     </div>
   );
 }

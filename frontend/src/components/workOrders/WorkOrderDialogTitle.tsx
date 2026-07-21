@@ -20,7 +20,11 @@ export function WorkOrderDialogTitle({ orderNumber, status, isCreate }: Props) {
   const { t } = useTranslation();
 
   if (isCreate || orderNumber == null) {
-    return <span>{t("workOrders.createTitle")}</span>;
+    return (
+      <span className="font-['Space_Grotesk'] text-[1.125rem] font-bold tracking-[0.02em]">
+        {t("workOrders.createTitle")}
+      </span>
+    );
   }
 
   const statusCode = status ?? "open";
