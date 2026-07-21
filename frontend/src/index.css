@@ -3377,7 +3377,7 @@ html.theme-crossfade-fallback #root {
   background-image: var(--greeting-bg-image);
   background-size: cover;
   background-position: center;
-  opacity: 1;
+  opacity: 0.5;
   pointer-events: none;
 }
 
