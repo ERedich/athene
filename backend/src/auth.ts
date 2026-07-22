@@ -9,6 +9,7 @@ import {
   getShowAssetKeyPath,
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
+import { isDbUnavailableError } from "./dbAvailability.js";
 import { pool } from "./db.js";
 import { clearSessionCookie, createSessionToken, writeSessionCookie } from "./sessionToken.js";
 
@@ -99,6 +100,10 @@ router.post("/login", async (req: Request, res: Response) => {
     }
     res.json({ user });
   } catch (err) {
+    if (isDbUnavailableError(err)) {
+      res.status(503).json({ error: "service_unavailable" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }
@@ -175,6 +180,10 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterAssetKeyPathSeparator,
     });
   } catch (err) {
+    if (isDbUnavailableError(err)) {
+      res.status(503).json({ error: "service_unavailable" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }
@@ -210,6 +219,10 @@ router.post("/onboarding/complete", async (req: Request, res: Response) => {
     }
     res.json({ user });
   } catch (err) {
+    if (isDbUnavailableError(err)) {
+      res.status(503).json({ error: "service_unavailable" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }

@@ -27,6 +27,7 @@ import {
   syncWorkOrderInspectionPointsSnapshot,
 } from "./inspectionRoundSnapshot.js";
 import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
+import { isDbUnavailableError } from "./dbAvailability.js";
 import { assertWorkOrderPcr, parseOptionalPcrUuid } from "./pcrAssert.js";
 import {
   DOCUMENT_MAX_BYTES,
@@ -374,6 +375,10 @@ function parseBody(body: unknown): ParsedBody | null {
 
 function sendPgError(res: Response, err: unknown) {
   const e = err as { code?: string; detail?: string; message?: string };
+  if (isDbUnavailableError(err)) {
+    res.status(503).json({ error: "service_unavailable" });
+    return;
+  }
   if (e.code === "23505") {
     res.status(409).json({ error: "duplicate_key", message: e.detail ?? e.message });
     return;

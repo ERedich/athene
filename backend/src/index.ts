@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 
 import { auditLogRouter } from "./auditLog.js";
 import { assistantRouter } from "./assistant.js";
-import { configuredSessionSecret, sessionSecret } from "./authSessionConfig.js";
+import { sessionSecret } from "./authSessionConfig.js";
 import { appFeedbackRouter } from "./appFeedback.js";
 import { appParametersRouter } from "./appParameters.js";
 import { assetsRouter } from "./assets.js";
@@ -25,6 +25,7 @@ import { employeesRouter } from "./employees.js";
 import { dbMetaRouter } from "./dbMeta.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { readSessionUserId } from "./sessionToken.js";
+import { pool } from "./db.js";
 import { sitesRouter } from "./sites.js";
 import { transactionsRouter } from "./transactions.js";
 import { translationsRouter } from "./translations.js";
@@ -43,16 +44,11 @@ import { problemsRouter } from "./problems.js";
 import { causesRouter } from "./causes.js";
 import { remediesRouter } from "./remedies.js";
 import { startMaintenancePlanDailyGenerate } from "./maintenancePlanGenerate.js";
+import { isDbUnavailableError } from "./dbAvailability.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 const listenHost = process.env.LISTEN_HOST ?? "0.0.0.0";
-
-if (!configuredSessionSecret || configuredSessionSecret.length < 16) {
-  console.warn(
-    "[athene-backend] SESSION_SECRET is missing or short; set a strong secret in production.",
-  );
-}
 
 app.set("trust proxy", 1);
 app.use(cors({ origin: true, credentials: true }));
@@ -77,6 +73,28 @@ app.use((req, _res, next) => {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "athene-backend" });
+});
+
+app.get("/health/db", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true, service: "athene-backend", database: "ok" });
+  } catch (err) {
+    if (isDbUnavailableError(err)) {
+      res.status(503).json({
+        ok: false,
+        service: "athene-backend",
+        database: "unavailable",
+      });
+      return;
+    }
+    console.error(err);
+    res.status(500).json({
+      ok: false,
+      service: "athene-backend",
+      database: "error",
+    });
+  }
 });
 
 app.use("/api/auth", authRouter);
