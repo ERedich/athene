@@ -47,6 +47,28 @@ npm run dev:mobile
 
 - **Local:** `EXPO_PUBLIC_API_BASE_URL=http://localhost:3001` in `mobile/.env`
 - **Cross-origin:** Backend already uses `cors({ origin: true, credentials: true })`. Browser session cookies work for `localhost` → `localhost` (different ports, same site).
+- **Hosted:** set `EXPO_PUBLIC_API_BASE_URL` to your deployed backend origin (HTTPS), e.g. `https://your-backend.vercel.app`. Production cookies use `SameSite=None; Secure`, so the API must be HTTPS.
+
+## Deploy on Vercel (phone browser)
+
+Expo Web is a normal browser app (`react-native-web`). You can host the static export on Vercel and open the URL in Chrome or Firefox on your phone.
+
+1. Create a **new Vercel project** pointed at this repo (or link an existing one).
+2. Set **Root Directory** to `mobile`.
+3. Framework preset: **Other** (covered by [`vercel.json`](./vercel.json)).
+4. Add environment variable for Production (and Preview if needed):
+   - `EXPO_PUBLIC_API_BASE_URL` = `https://<your-backend-host>`
+5. Deploy. Open the Vercel URL on your phone — no Expo Go required.
+
+Local production export (optional):
+
+```bash
+cd mobile
+npm run build
+npx serve dist
+```
+
+[`vercel.json`](./vercel.json) installs from the monorepo root, runs `expo export -p web`, publishes `dist`, and rewrites SPA routes to `/`.
 
 ## Design notes
 
