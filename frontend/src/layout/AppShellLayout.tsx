@@ -38,6 +38,7 @@ function headerTitleKey(pathname: string): string {
     dashboard: "dashboard.appName",
     calculator: "calculator.appName",
     feedback: "feedback.appName",
+    "stammdaten-manager": "stammdatenManager.appName",
     assets: "assets.appName",
     baumstruktur: "baumstruktur.appName",
     workorders: "workOrders.appName",

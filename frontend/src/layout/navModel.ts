@@ -110,6 +110,11 @@ export const navGroups: NavGroup[] = [
     labelKey: "shell.navStammdaten",
     Icon: Tags,
     items: [
+      {
+        to: "/stammdaten-manager",
+        Icon: LayoutGrid,
+        labelKey: "stammdatenManager.navStammdatenManager",
+      },
       { to: "/assets", Icon: Package, labelKey: "assets.navAssets" },
       {
         to: "/baumstruktur",

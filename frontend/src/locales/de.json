@@ -96,6 +96,12 @@
     "retry": "Erneut versuchen",
     "noEmployee": "Ihrem Benutzer ist kein Mitarbeiter zugeordnet."
   },
+  "stammdatenManager": {
+    "appName": "Stammdaten-Manager",
+    "navStammdatenManager": "Stammdaten-Manager",
+    "loadError": "Stammdaten-Kennzahlen konnten nicht geladen werden.",
+    "retry": "Erneut versuchen"
+  },
   "calculator": {
     "appName": "Taschenrechner",
     "navCalculator": "Taschenrechner",

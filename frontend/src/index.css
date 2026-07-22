@@ -3422,6 +3422,105 @@ html.theme-crossfade-fallback #root {
   animation: app-feedback-voice-pulse 1.6s ease-in-out infinite;
 }
 
+/* Stammdaten-Manager — KPI launcher grid */
+.app-stammdaten-manager-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.app-stammdaten-manager-page--message {
+  overflow: auto;
+}
+
+.app-stammdaten-manager-grid {
+  --stammdaten-tile-border: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .app-stammdaten-manager-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .app-stammdaten-manager-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .app-stammdaten-manager-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.app-stammdaten-manager-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 8.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--stammdaten-tile-border);
+  border-radius: 0.5rem;
+  background: var(--surface-overlay);
+  color: var(--color-on-surface);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.app-stammdaten-manager-tile:hover,
+.app-stammdaten-manager-tile:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--stammdaten-tile-border));
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--surface-overlay));
+  outline: none;
+}
+
+.app-stammdaten-manager-tile:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.app-stammdaten-manager-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+
+.app-stammdaten-manager-tile:hover .app-stammdaten-manager-tile-icon,
+.app-stammdaten-manager-tile:focus-visible .app-stammdaten-manager-tile-icon {
+  color: var(--color-primary);
+}
+
+.app-stammdaten-manager-tile-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-on-surface);
+}
+
+.app-stammdaten-manager-tile-value {
+  margin-top: auto;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-on-surface);
+}
+
 /* Dashboard KPI grid — full viewport, shared borders, equal cells */
 .app-dashboard-page {
   display: flex;

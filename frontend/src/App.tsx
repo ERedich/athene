@@ -35,6 +35,7 @@ import { AbonnementsPage } from "./pages/AbonnementsPage";
 import { KpiBuilderPage } from "./pages/KpiBuilderPage";
 import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
 import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
+import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
+          <Route path="stammdaten-manager" element={<StammdatenManagerPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="baumstruktur" element={<BaumstrukturPage />} />
           <Route path="workorders" element={<WorkOrdersPage />} />

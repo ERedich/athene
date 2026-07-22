@@ -96,6 +96,12 @@
     "retry": "Retry",
     "noEmployee": "No employee linked to your user account."
   },
+  "stammdatenManager": {
+    "appName": "Master Data Manager",
+    "navStammdatenManager": "Master Data Manager",
+    "loadError": "Could not load master data counts.",
+    "retry": "Retry"
+  },
   "calculator": {
     "appName": "Calculator",
     "navCalculator": "Calculator",
