@@ -12,7 +12,6 @@ const uuidRe =
 const WORKGROUP_PSEUDO_MY = "__MY_WORKGROUPS__";
 const EMPLOYEE_PSEUDO_ME = "__ME__";
 
-const ALLOWED_ORDER_TYPES = new Set(["maintenance", "repair", "breakdown"]);
 const ALLOWED_STATUSES = new Set([
   "open",
   "assigned",
@@ -72,8 +71,22 @@ function parseEnumStringArray(raw: unknown, allowed: Set<string>, maxItems: numb
   for (const x of raw) {
     if (typeof x !== "string") return null;
     const t = x.trim();
-    if (!allowed.has(t)) return null;
+    if (!t || !allowed.has(t)) return null;
     out.push(t);
+  }
+  return out;
+}
+
+function parseFreeStringArray(raw: unknown, maxItems: number, maxLen = 100): string[] | null {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) return null;
+  if (raw.length > maxItems) return null;
+  const out: string[] = [];
+  for (const x of raw) {
+    if (typeof x !== "string") return null;
+    const t = x.trim();
+    if (!t || t.length > maxLen) return null;
+    out.push(t === "repair" ? "plannedRepair" : t);
   }
   return out;
 }
@@ -402,7 +415,7 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
   const createdAtTo = str("createdAtTo", 80) ?? "";
   const updatedAtFrom = str("updatedAtFrom", 80) ?? "";
   const updatedAtTo = str("updatedAtTo", 80) ?? "";
-  const orderType = parseEnumStringArray(adv.orderType, ALLOWED_ORDER_TYPES, 20);
+  const orderType = parseFreeStringArray(adv.orderType, 20);
   const status = parseEnumStringArray(adv.status, ALLOWED_STATUSES, 30);
   if (orderType === null || status === null) return null;
   const siteId = uuidArr("siteId");

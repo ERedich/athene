@@ -1,2 +1,12 @@
-export const loginBgImage =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuC0i0T8sIEvIzKz8dFPeAlMHxWT24XV4kldoWPunTjmWB1jUzO8-WivyXhRgGeD4IbLiUsRjRNfRXyt7mwucZdRp1fk_JN4TT5O-BiyFvsBZHJftpR4gwAsDRFZnKl3d7ZmfcqWkkkd7-N3V63py8f90An50Xx2L7Hsachce_ob-pfodFaRyBG2CMJ6etjBmJJbyiakAFB2IdXP55ZQtYBdOGzAPcpU6HL3l_I_iHgf0LGmiTkxOVlh5ZQCxMaq0qP_0rHdmPi2QmZU";
+export const loginBgImagesLight = [
+  "/login/bg/light-factory-floor.jpg",
+  "/login/bg/light-maintenance.jpg",
+] as const;
+
+export const loginBgImagesDark = [
+  "/login/bg/dark-night-plant.jpg",
+  "/login/bg/dark-control-room.jpg",
+] as const;
+
+/** Static chrome background (AppShell); login uses theme slideshows above. */
+export const loginBgImage = loginBgImagesDark[0];

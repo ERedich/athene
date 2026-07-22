@@ -25,8 +25,10 @@ export function chartColorForWorkOrderStatus(status: string): string {
 /** Bar fills for work-order type breakdown on the dashboard. */
 export const WORK_ORDER_TYPE_CHART_COLORS: Record<string, string> = {
   maintenance: "rgba(59, 130, 246, 0.9)",
+  plannedRepair: "rgba(245, 158, 11, 0.9)",
   repair: "rgba(245, 158, 11, 0.9)",
   breakdown: "rgba(248, 113, 113, 0.9)",
+  inspection: "rgba(16, 185, 129, 0.9)",
 };
 
 export function chartColorForWorkOrderType(orderType: string): string {

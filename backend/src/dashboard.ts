@@ -29,7 +29,7 @@ type StatusCount = { status: string; count: number };
 type DayCount = { date: string; count: number };
 type OrderTypeCount = { orderType: string; count: number };
 
-const ORDER_TYPE_ORDER = ["maintenance", "repair", "breakdown"] as const;
+const ORDER_TYPE_ORDER = ["plannedRepair", "breakdown", "maintenance", "inspection"] as const;
 
 /** Matches resolveScheduleAdherence tolerance (~3 minutes). */
 const DELAY_TOLERANCE_HOURS = 0.05;
@@ -103,10 +103,15 @@ function sortOrderTypeCounts(rows: OrderTypeCount[]): OrderTypeCount[] {
 
 function zeroFillOrderTypes(rows: OrderTypeCount[]): OrderTypeCount[] {
   const map = new Map(rows.map((r) => [r.orderType, r.count]));
-  return ORDER_TYPE_ORDER.map((orderType) => ({
+  const filled = ORDER_TYPE_ORDER.map((orderType) => ({
     orderType,
     count: map.get(orderType) ?? 0,
   }));
+  const known = new Set<string>(ORDER_TYPE_ORDER);
+  const extras = rows
+    .filter((r) => !known.has(r.orderType))
+    .sort((a, b) => a.orderType.localeCompare(b.orderType));
+  return [...filled, ...extras];
 }
 
 /** CTE: work orders with resolved actual end (ended, else done) for delay KPIs. */

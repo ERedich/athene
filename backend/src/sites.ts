@@ -6,6 +6,8 @@ import type { QueryResult } from "pg";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
+import { ensureDefaultWorkOrderTypes } from "./workOrderTypes.js";
+import { ensureDefaultSiteAppParameters } from "./siteAppParameters.js";
 
 export type SiteRow = {
   id: string;
@@ -166,7 +168,12 @@ router.post("/", async (req: Request, res: Response) => {
         `,
         [key, name, isPlant, colorHex, meta.userId],
       );
-      return rows[0];
+      const created = rows[0];
+      if (created) {
+        await ensureDefaultWorkOrderTypes(client, created.id, meta.userId);
+        await ensureDefaultSiteAppParameters(client, created.id, meta.userId);
+      }
+      return created;
     });
     if (!row) {
       res.status(500).json({ error: "no_row" });

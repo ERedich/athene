@@ -489,9 +489,11 @@ export default function WorkOrdersListScreen() {
             ? t("workOrders.cannotFeedbackFromStatus")
             : code === "pause_remark_required"
               ? t("workOrders.pauseRemarkRequired")
-              : code === "invalid_body"
-                ? t("workOrders.feedbackInvalidBody")
-                : t("workOrders.feedbackSaveError");
+              : code === "pcr_required"
+                ? t("workOrders.pcrRequired")
+                : code === "invalid_body"
+                  ? t("workOrders.feedbackInvalidBody")
+                  : t("workOrders.feedbackSaveError");
         Alert.alert("", msg);
         return false;
       } finally {
@@ -746,7 +748,7 @@ export default function WorkOrdersListScreen() {
         entryMode={feedbackEntryMode}
         segmentStartedAt={selectedOrder?.currentSegmentStartedAt ?? null}
         reportingEmployeeLabel={
-          [user.employeeKey, user.employeeName]
+          [user?.employeeKey, user?.employeeName]
             .map((x) => (typeof x === "string" ? x.trim() : ""))
             .filter(Boolean)
             .join(" — ") || t("workOrders.feedbackReportingEmployeeEmpty")
@@ -763,6 +765,11 @@ export default function WorkOrdersListScreen() {
                 assetId: selectedOrder.assetId,
                 assetKey: selectedOrder.assetKey,
                 assetName: selectedOrder.assetName,
+                assetClassificationId: selectedOrder.assetClassificationId ?? null,
+                orderType: selectedOrder.orderType,
+                problemId: selectedOrder.problemId ?? null,
+                causeId: selectedOrder.causeId ?? null,
+                remedyId: selectedOrder.remedyId ?? null,
               }
             : null
         }

@@ -48,6 +48,14 @@ import type {
 } from "../lib/workOrderTypes";
 import { fetchWorkOrderMessages, sendWorkOrderMessage, type WorkOrderMessage } from "../lib/notificationCenter";
 import { workOrderToEditMeta } from "../lib/workOrderTypes";
+import {
+  fetchPcrCauses,
+  fetchPcrProblems,
+  fetchPcrRemedies,
+  fetchSitePcrOrderTypeKeys,
+  isPcrEnabledForOrderType,
+  type PcrSelectOption,
+} from "../lib/workOrderPcr";
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
 import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
 
@@ -196,10 +204,9 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     classifications,
     employees,
     workgroups,
+    workOrderTypes,
     loaded: refDataLoaded,
     calendarDateFormat,
-    typeOrder,
-    typeLabel,
     statusLabel: refStatusLabel,
   } = refData;
 
@@ -232,6 +239,14 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [feedbackEntryMode, setFeedbackEntryMode] = useState<FeedbackEntryMode>("create");
   const [feedbackAdditionalHours, setFeedbackAdditionalHours] = useState<FeedbackAdditionalHoursRow[]>([]);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [pcrOrderTypeKeys, setPcrOrderTypeKeys] = useState<string[]>([]);
+  const [pcrProblemId, setPcrProblemId] = useState("");
+  const [pcrCauseId, setPcrCauseId] = useState("");
+  const [pcrRemedyId, setPcrRemedyId] = useState("");
+  const [pcrProblemOptions, setPcrProblemOptions] = useState<PcrSelectOption[]>([]);
+  const [pcrCauseOptions, setPcrCauseOptions] = useState<PcrSelectOption[]>([]);
+  const [pcrRemedyOptions, setPcrRemedyOptions] = useState<PcrSelectOption[]>([]);
+  const [pcrLoading, setPcrLoading] = useState(false);
   const [feedbackTransactions, setFeedbackTransactions] = useState<TransactionRow[]>([]);
   const [feedbackTransactionsLoading, setFeedbackTransactionsLoading] = useState(false);
   const [feedbackTransactionsLoadedOrderId, setFeedbackTransactionsLoadedOrderId] = useState<string | null>(null);
@@ -486,10 +501,31 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     [assignments, employeeOptions],
   );
 
-  const orderTypeOptions = useMemo(
-    () => typeOrder.map((type) => ({ label: typeLabel(type), value: type })),
-    [typeLabel, typeOrder],
-  );
+  // User's Hauptbuchungskreis is the default site for new records.
+  // Once an asset (or existing WO site) is known, Stammdaten follow that site.
+  const orderTypeSiteId = selectedAsset?.siteId ?? editingMeta?.siteId ?? user.workingSiteId;
+
+  const orderTypeOptions = useMemo(() => {
+    if (!orderTypeSiteId) return [] as Array<{ label: string; value: string }>;
+    return workOrderTypes
+      .filter((row) => row.siteId === orderTypeSiteId)
+      .filter((row) => row.isActive || row.key === form.orderType)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+      .map((row) => ({
+        label: row.isActive ? row.name : `${row.name} (${t("auftragstypen.inactive")})`,
+        value: row.key,
+      }));
+  }, [form.orderType, orderTypeSiteId, t, workOrderTypes]);
+
+  useEffect(() => {
+    if (!orderTypeSiteId || orderTypeOptions.length === 0) return;
+    const stillAllowed = orderTypeOptions.some((opt) => opt.value === form.orderType);
+    if (stillAllowed) return;
+    const preferred =
+      orderTypeOptions.find((opt) => opt.value === "maintenance")?.value ?? orderTypeOptions[0]?.value;
+    if (!preferred) return;
+    setForm((cur) => ({ ...cur, orderType: preferred }));
+  }, [form.orderType, orderTypeOptions, orderTypeSiteId]);
 
   const statusLabel = useCallback(
     (status: WorkOrder["status"]) => refStatusLabel(status),
@@ -1129,6 +1165,13 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     setWorkOrderMessages([]);
     setWorkOrderMessagesLoadedOrderId(null);
     setEditingMeta(null);
+    setPcrOrderTypeKeys([]);
+    setPcrProblemId("");
+    setPcrCauseId("");
+    setPcrRemedyId("");
+    setPcrProblemOptions([]);
+    setPcrCauseOptions([]);
+    setPcrRemedyOptions([]);
   }, []);
 
   const openCreate = useCallback(() => {
@@ -1218,6 +1261,15 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       setFeedbackTransactions([]);
       setWorkOrderMessages([]);
       setWorkOrderMessagesLoadedOrderId(null);
+      setPcrProblemId(
+        "problemId" in row && typeof row.problemId === "string" ? row.problemId : meta.problemId ?? "",
+      );
+      setPcrCauseId("causeId" in row && typeof row.causeId === "string" ? row.causeId : meta.causeId ?? "");
+      setPcrRemedyId(
+        "remedyId" in row && typeof row.remedyId === "string" ? row.remedyId : meta.remedyId ?? "",
+      );
+      setPcrCauseOptions([]);
+      setPcrRemedyOptions([]);
       setActiveTabIndex(orderDialogTabs.General);
       if (session !== openSessionRef.current) return;
       setDialogVisible(true);
@@ -1569,6 +1621,120 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     [editingId, onOrderUpdated, refreshExternal, t, toastRef],
   );
 
+  const editingOrderType = editingMeta?.orderType ?? form.orderType;
+  const pcrEnabled = isPcrEnabledForOrderType(pcrOrderTypeKeys, editingOrderType);
+  const pcrRequired = pcrEnabled && feedbackStatusAction === "end";
+
+  useEffect(() => {
+    const siteId = editingMeta?.siteId;
+    if (!dialogVisible || !editingId || !siteId) {
+      setPcrOrderTypeKeys([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const keys = await fetchSitePcrOrderTypeKeys(siteId);
+        if (!cancelled) setPcrOrderTypeKeys(keys);
+      } catch {
+        if (!cancelled) setPcrOrderTypeKeys(["breakdown"]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dialogVisible, editingId, editingMeta?.siteId]);
+
+  useEffect(() => {
+    const siteId = editingMeta?.siteId;
+    if (!dialogVisible || !editingId || !siteId || !pcrEnabled) {
+      setPcrProblemOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setPcrLoading(true);
+    void (async () => {
+      try {
+        const opts = await fetchPcrProblems({
+          siteId,
+          classificationId: editingMeta?.assetClassificationId ?? null,
+        });
+        if (!cancelled) setPcrProblemOptions(opts);
+      } catch {
+        if (!cancelled) {
+          setPcrProblemOptions([]);
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("workOrders.pcrLoadError"),
+            life: 6000,
+          });
+        }
+      } finally {
+        if (!cancelled) setPcrLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dialogVisible,
+    editingId,
+    editingMeta?.assetClassificationId,
+    editingMeta?.siteId,
+    pcrEnabled,
+    t,
+    toastRef,
+  ]);
+
+  useEffect(() => {
+    if (!pcrProblemId) {
+      setPcrCauseOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrCauses(pcrProblemId);
+        if (!cancelled) setPcrCauseOptions(opts);
+      } catch {
+        if (!cancelled) setPcrCauseOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pcrProblemId]);
+
+  useEffect(() => {
+    if (!pcrCauseId) {
+      setPcrRemedyOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrRemedies(pcrCauseId);
+        if (!cancelled) setPcrRemedyOptions(opts);
+      } catch {
+        if (!cancelled) setPcrRemedyOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pcrCauseId]);
+
+  const setPcrProblemIdCascaded = useCallback((value: string) => {
+    setPcrProblemId(value);
+    setPcrCauseId("");
+    setPcrRemedyId("");
+  }, []);
+
+  const setPcrCauseIdCascaded = useCallback((value: string) => {
+    setPcrCauseId(value);
+    setPcrRemedyId("");
+  }, []);
+
   const saveFeedback = useCallback(async () => {
     if (!editingId) return;
     const hoursRaw = feedbackHours.trim().replace(",", ".");
@@ -1584,6 +1750,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     }
     if (feedbackStatusAction === "pause" && !feedbackPauseRemark.trim()) {
       toastRef.current?.show({ severity: "warn", summary: t("workOrders.feedbackPauseRemarkRequired"), life: 4000 });
+      return;
+    }
+    if (pcrRequired && (!pcrProblemId || !pcrCauseId || !pcrRemedyId)) {
+      toastRef.current?.show({ severity: "warn", summary: t("workOrders.pcrRequired"), life: 4000 });
       return;
     }
     const additionalHours: { employeeId: string; hours: number }[] = [];
@@ -1608,6 +1778,9 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
           statusAction: feedbackStatusAction,
           pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
           additionalHours,
+          problemId: pcrEnabled ? pcrProblemId || null : undefined,
+          causeId: pcrEnabled ? pcrCauseId || null : undefined,
+          remedyId: pcrEnabled ? pcrRemedyId || null : undefined,
         }),
       });
       if (!res.ok) {
@@ -1626,9 +1799,11 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
                 ? t("workOrders.duplicateFeedbackEmployee")
                 : code === "invalid_additional_hours"
                   ? t("workOrders.invalidAdditionalHours")
-                  : code === "invalid_body"
-                    ? t("workOrders.feedbackInvalidBody")
-                    : t("workOrders.feedbackSaveError");
+                  : code === "pcr_required" || code === "pcr_incomplete"
+                    ? t("workOrders.pcrRequired")
+                    : code === "invalid_body"
+                      ? t("workOrders.feedbackInvalidBody")
+                      : t("workOrders.feedbackSaveError");
         toastRef.current?.show({ severity: "error", summary: msg, life: 6000 });
         return;
       }
@@ -1657,6 +1832,11 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     feedbackRemark,
     feedbackStatusAction,
     onOrderUpdated,
+    pcrCauseId,
+    pcrEnabled,
+    pcrProblemId,
+    pcrRemedyId,
+    pcrRequired,
     refreshExternal,
     t,
     toastRef,
@@ -1843,6 +2023,18 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     saveDocumentEdit,
     feedbackHours,
     setFeedbackHours,
+    pcrEnabled,
+    pcrRequired,
+    pcrProblemId,
+    pcrCauseId,
+    pcrRemedyId,
+    setPcrProblemId: setPcrProblemIdCascaded,
+    setPcrCauseId: setPcrCauseIdCascaded,
+    setPcrRemedyId,
+    pcrProblemOptions,
+    pcrCauseOptions,
+    pcrRemedyOptions,
+    pcrLoading,
     feedbackRemark,
     setFeedbackRemark,
     feedbackPauseRemark,

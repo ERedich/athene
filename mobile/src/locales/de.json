@@ -302,6 +302,14 @@
     "feedbackSaved": "Rückmeldung gespeichert.",
     "feedbackHoursInvalid": "Bitte eine gültige Stundenanzahl größer 0 eingeben.",
     "feedbackRemarkTooLong": "Bemerkung darf maximal 2000 Zeichen enthalten.",
+    "pcrSection": "PCR",
+    "pcrProblem": "Problem",
+    "pcrCause": "Ursache",
+    "pcrRemedy": "Maßnahme",
+    "pcrProblemPlaceholder": "Problem auswählen",
+    "pcrCausePlaceholder": "Ursache auswählen",
+    "pcrRemedyPlaceholder": "Maßnahme auswählen",
+    "pcrRequired": "Beim Beenden sind Problem, Ursache und Maßnahme Pflichtfelder.",
     "feedbackSaveError": "Rückmeldung konnte nicht gespeichert werden.",
     "feedbackInvalidBody": "Eingaben für die Rückmeldung sind ungültig.",
     "cannotFeedbackFromStatus": "Rückmeldung ist für diesen Auftragsstatus nicht zulässig.",
@@ -371,8 +379,10 @@
     },
     "typeValues": {
       "maintenance": "Wartung",
+      "plannedRepair": "Geplante Instandsetzung",
       "repair": "Instandsetzung",
-      "breakdown": "Breakdown"
+      "breakdown": "Störung",
+      "inspection": "Inspektion"
     },
     "statusValues": {
       "open": "Offen",

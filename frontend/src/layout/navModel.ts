@@ -5,6 +5,7 @@ import {
   Calculator,
   CalendarDays,
   CalendarClock,
+  CircleAlert,
   ClipboardCheck,
   Clock,
   FilePlus,
@@ -130,6 +131,26 @@ export const navGroups: NavGroup[] = [
         to: "/cost-centers",
         Icon: Briefcase,
         labelKey: "costCenters.navCostCenters",
+      },
+      {
+        to: "/auftragstypen",
+        Icon: ClipboardCheck,
+        labelKey: "auftragstypen.navAuftragstypen",
+      },
+      {
+        to: "/probleme",
+        Icon: CircleAlert,
+        labelKey: "probleme.navProbleme",
+      },
+      {
+        to: "/ursachen",
+        Icon: Wrench,
+        labelKey: "ursachen.navUrsachen",
+      },
+      {
+        to: "/massnahmen",
+        Icon: ClipboardCheck,
+        labelKey: "massnahmen.navMassnahmen",
       },
       {
         to: "/classifications",

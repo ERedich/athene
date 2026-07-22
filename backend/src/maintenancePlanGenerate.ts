@@ -29,6 +29,7 @@ export type MaintenancePlanGenerateRow = {
   classificationId: string | null;
   inspectionRoundId: string | null;
   plannedDurationMinutes: number | null;
+  orderType: string;
   intervalUnit: MaintenanceIntervalUnit;
   intervalValue: number;
   nextDueAt: string;
@@ -140,6 +141,7 @@ async function loadPlanForGenerate(
       p."classificationId",
       p."inspectionRoundId",
       p."plannedDurationMinutes",
+      p."orderType",
       p."intervalUnit",
       p."intervalValue",
       p."nextDueAt",
@@ -235,7 +237,7 @@ export async function generateWorkOrderForPlan(params: {
         plannedStart,
         plannedEnd: null,
         plannedDurationMinutes: plan.plannedDurationMinutes,
-        orderType: "maintenance",
+        orderType: plan.orderType,
         responsibleEmployeeIds: plan.responsibleEmployeeIds,
         workgroupId: plan.workgroupId,
         classificationId: plan.classificationId,

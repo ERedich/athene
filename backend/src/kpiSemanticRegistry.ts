@@ -63,7 +63,6 @@ const WORK_ORDER_STATUSES = [
   "cancelled",
 ] as const;
 
-const WORK_ORDER_TYPES = ["maintenance", "repair", "breakdown"] as const;
 const TRANSACTION_TYPES = ["IN", "EX", "RM", "RT", "IV"] as const;
 const ASSET_TYPES = ["site", "structure", "line", "maintenanceObject"] as const;
 
@@ -75,7 +74,7 @@ export const KPI_ENTITY_DEFS: Record<KpiEntity, KpiEntityDef> = {
     defaultCategory: "workOrders",
     fields: [
       { id: "status", sql: 'e."status"', type: "enum", filterable: true, groupable: true, measurable: false, timeable: false, enumValues: WORK_ORDER_STATUSES },
-      { id: "orderType", sql: 'e."orderType"', type: "enum", filterable: true, groupable: true, measurable: false, timeable: false, enumValues: WORK_ORDER_TYPES },
+      { id: "orderType", sql: 'e."orderType"', type: "text", filterable: true, groupable: true, measurable: false, timeable: false },
       { id: "plannedDurationMinutes", sql: 'e."plannedDurationMinutes"', type: "number", filterable: true, groupable: false, measurable: true, timeable: false },
       { id: "createdAt", sql: 'e."createdAt"', type: "timestamp", filterable: true, groupable: false, measurable: false, timeable: true },
       { id: "plannedStart", sql: 'e."plannedStart"', type: "timestamp", filterable: true, groupable: false, measurable: false, timeable: true },

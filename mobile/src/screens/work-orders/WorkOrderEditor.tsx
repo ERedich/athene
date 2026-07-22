@@ -35,6 +35,7 @@ import { useAtheneAssistant } from "../../assistant/AtheneAssistantContext";
 import { FeedbackRemarkInput } from "../../components/FeedbackRemarkInput";
 import { HapticPressable } from "../../components/HapticPressable";
 import { MultiSelectModal } from "../../components/MultiSelectModal";
+import { PcrOptionPicker } from "../../components/PcrOptionPicker";
 import { SelectModal, type SelectItem } from "../../components/SelectModal";
 import { WorkOrderChatFab } from "../../components/WorkOrderChatFab";
 import { WorkOrderChatSheet } from "../../components/WorkOrderChatSheet";
@@ -53,6 +54,7 @@ import {
   useAssetsQuery,
   useClassificationsQuery,
   useCostCentersQuery,
+  useWorkOrderTypesQuery,
   useWorkOrderDocumentsQuery,
   useWorkOrderAssignmentsQuery,
   useWorkOrderFeedbackQuery,
@@ -70,6 +72,14 @@ import {
   type FeedbackEntryMode,
   type FeedbackStatusAction,
 } from "../../lib/workOrderFeedback";
+import {
+  fetchPcrCauses,
+  fetchPcrProblems,
+  fetchPcrRemedies,
+  fetchSitePcrOrderTypeKeys,
+  isPcrEnabledForOrderType,
+  type PcrSelectOption,
+} from "../../lib/workOrderPcr";
 import {
   androidRippleProps,
   pressedOpacity,
@@ -112,7 +122,6 @@ type FormState = {
 };
 
 const PENDING_AUTO_UPLOAD_MS = 5000;
-const ORDER_TYPES: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const DOC_CATEGORIES: WorkOrderDocumentCategory[] = [
   "general",
   "protocols",
@@ -168,6 +177,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const { data: orders = [], isLoading: ordersLoading } = useWorkOrdersQuery();
   const { data: assets = [], isLoading: assetsLoading } = useAssetsQuery();
   const { data: costCenters = [], isLoading: ccLoading } = useCostCentersQuery();
+  const { data: workOrderTypes = [] } = useWorkOrderTypesQuery();
   const { data: classifications = [], isLoading: clfLoading } = useClassificationsQuery();
   const { data: workgroups = [], isLoading: wgLoading } = useWorkgroupsQuery();
   const { data: employees = [] } = useEmployeesQuery();
@@ -197,6 +207,13 @@ export function WorkOrderEditor({ orderId }: Props) {
   const [feedbackStatusAction, setFeedbackStatusAction] = useState<FeedbackStatusAction>("none");
   const [feedbackEntryMode, setFeedbackEntryMode] = useState<FeedbackEntryMode>("create");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [pcrOrderTypeKeys, setPcrOrderTypeKeys] = useState<string[]>([]);
+  const [pcrProblemId, setPcrProblemId] = useState<string | null>(null);
+  const [pcrCauseId, setPcrCauseId] = useState<string | null>(null);
+  const [pcrRemedyId, setPcrRemedyId] = useState<string | null>(null);
+  const [pcrProblemOptions, setPcrProblemOptions] = useState<PcrSelectOption[]>([]);
+  const [pcrCauseOptions, setPcrCauseOptions] = useState<PcrSelectOption[]>([]);
+  const [pcrRemedyOptions, setPcrRemedyOptions] = useState<PcrSelectOption[]>([]);
   const [showRequiredHints, setShowRequiredHints] = useState(false);
   const [chatVisible, setChatVisible] = useState(false);
   const [imagePreviewUri, setImagePreviewUri] = useState<string | null>(null);
@@ -209,6 +226,98 @@ export function WorkOrderEditor({ orderId }: Props) {
     () => (effectiveOrderId ? orders.find((o) => o.id === effectiveOrderId) ?? null : null),
     [effectiveOrderId, orders],
   );
+
+  const pcrEnabled = currentOrder
+    ? isPcrEnabledForOrderType(pcrOrderTypeKeys, currentOrder.orderType)
+    : false;
+  const pcrRequired = pcrEnabled && feedbackStatusAction === "end";
+
+  useEffect(() => {
+    if (!currentOrder?.siteId) {
+      setPcrOrderTypeKeys([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const keys = await fetchSitePcrOrderTypeKeys(currentOrder.siteId);
+        if (!cancelled) setPcrOrderTypeKeys(keys);
+      } catch {
+        if (!cancelled) setPcrOrderTypeKeys(["breakdown"]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrder?.siteId]);
+
+  useEffect(() => {
+    if (!currentOrder) return;
+    setPcrProblemId(currentOrder.problemId ?? null);
+    setPcrCauseId(currentOrder.causeId ?? null);
+    setPcrRemedyId(currentOrder.remedyId ?? null);
+  }, [currentOrder?.id, currentOrder?.problemId, currentOrder?.causeId, currentOrder?.remedyId]);
+
+  useEffect(() => {
+    if (!currentOrder?.siteId || !pcrEnabled) {
+      setPcrProblemOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrProblems({
+          siteId: currentOrder.siteId,
+          classificationId: currentOrder.assetClassificationId ?? null,
+        });
+        if (!cancelled) setPcrProblemOptions(opts);
+      } catch {
+        if (!cancelled) setPcrProblemOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOrder?.siteId, currentOrder?.assetClassificationId, pcrEnabled]);
+
+  useEffect(() => {
+    if (!pcrProblemId) {
+      setPcrCauseOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrCauses(pcrProblemId);
+        if (!cancelled) setPcrCauseOptions(opts);
+      } catch {
+        if (!cancelled) setPcrCauseOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pcrProblemId]);
+
+  useEffect(() => {
+    if (!pcrCauseId) {
+      setPcrRemedyOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrRemedies(pcrCauseId);
+        if (!cancelled) setPcrRemedyOptions(opts);
+      } catch {
+        if (!cancelled) setPcrRemedyOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pcrCauseId]);
+
   const documentsTabCount = documents.length + pendingFiles.length;
   const assignmentsTabCount = assignments.length;
   const feedbackTabCount = Number(
@@ -282,9 +391,11 @@ export function WorkOrderEditor({ orderId }: Props) {
         const msg =
           code === "cannot_feedback_from_status"
             ? t("workOrders.cannotFeedbackFromStatus")
-            : code === "invalid_body"
-              ? t("workOrders.feedbackInvalidBody")
-              : t("workOrders.feedbackSaveError");
+            : code === "pcr_required"
+              ? t("workOrders.pcrRequired")
+              : code === "invalid_body"
+                ? t("workOrders.feedbackInvalidBody")
+                : t("workOrders.feedbackSaveError");
         Alert.alert("", msg);
         return false;
       } finally {
@@ -591,14 +702,28 @@ export function WorkOrderEditor({ orderId }: Props) {
     timersRef.current.clear();
   }, []);
 
-  const typeItems: SelectItem[] = useMemo(
-    () =>
-      ORDER_TYPES.map((tp) => ({
-        id: tp,
-        label: t(`workOrders.typeValues.${tp}`),
-      })),
-    [t],
-  );
+  const typeItems: SelectItem[] = useMemo(() => {
+    // User's Hauptbuchungskreis is the default site for new records.
+    const siteId = selectedAsset?.siteId ?? user?.workingSiteId;
+    if (!siteId) return [];
+    return workOrderTypes
+      .filter((row) => row.siteId === siteId)
+      .filter((row) => row.isActive || row.key === form.orderType)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+      .map((row) => ({
+        id: row.key,
+        label: row.isActive ? row.name : `${row.name} (${t("costCenters.inactive")})`,
+      }));
+  }, [form.orderType, selectedAsset?.siteId, t, user?.workingSiteId, workOrderTypes]);
+
+  useEffect(() => {
+    if (typeItems.length === 0) return;
+    if (typeItems.some((item) => item.id === form.orderType)) return;
+    const preferred =
+      typeItems.find((item) => item.id === "maintenance")?.id ?? typeItems[0]?.id;
+    if (!preferred) return;
+    setForm((cur) => ({ ...cur, orderType: preferred }));
+  }, [form.orderType, typeItems]);
 
   const filteredDocs = useMemo(() => {
     const q = docSearchTerm.trim().toLowerCase();
@@ -1051,18 +1176,41 @@ export function WorkOrderEditor({ orderId }: Props) {
       Alert.alert("", t("workOrders.feedbackPauseRemarkRequired"));
       return;
     }
+    if (pcrRequired && (!pcrProblemId || !pcrCauseId || !pcrRemedyId)) {
+      Alert.alert("", t("workOrders.pcrRequired"));
+      return;
+    }
     const ok = await submitFeedback({
       hours,
       remark: feedbackRemark.trim() ? feedbackRemark.trim() : null,
       statusAction: feedbackStatusAction,
       pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
+      ...(pcrEnabled
+        ? {
+            problemId: pcrProblemId ?? null,
+            causeId: pcrCauseId ?? null,
+            remedyId: pcrRemedyId ?? null,
+          }
+        : {}),
     });
     if (!ok) return;
     setFeedbackHours("");
     setFeedbackRemark("");
     setFeedbackPauseRemark("");
     setFeedbackStatusAction("none");
-  }, [feedbackHours, feedbackPauseRemark, feedbackRemark, feedbackStatusAction, submitFeedback, t]);
+  }, [
+    feedbackHours,
+    feedbackPauseRemark,
+    feedbackRemark,
+    feedbackStatusAction,
+    pcrCauseId,
+    pcrEnabled,
+    pcrProblemId,
+    pcrRemedyId,
+    pcrRequired,
+    submitFeedback,
+    t,
+  ]);
 
   const renderTabBar = useCallback(
     (props: SceneRendererProps & { navigationState: { index: number; routes: TabRoute[] } }) => (
@@ -1126,7 +1274,10 @@ export function WorkOrderEditor({ orderId }: Props) {
             ]}
             onPress={() => setTypeModal(true)}
           >
-            <Text style={{ color: colors.onSurface }}>{t(`workOrders.typeValues.${form.orderType}`)}</Text>
+            <Text style={{ color: colors.onSurface }}>
+              {typeItems.find((item) => item.id === form.orderType)?.label ??
+                t(`workOrders.typeValues.${form.orderType}`, { defaultValue: form.orderType })}
+            </Text>
           </HapticPressable>
           <SelectModal
             visible={typeModal}
@@ -1451,7 +1602,7 @@ export function WorkOrderEditor({ orderId }: Props) {
                   <Text style={styles.label}>{t("workOrders.feedbackReportingEmployee")}</Text>
                   <View style={[styles.input, { justifyContent: "center" }]}>
                     <Text style={{ color: colors.onSurfaceVariant }}>
-                      {[user.employeeKey, user.employeeName]
+                      {[user?.employeeKey, user?.employeeName]
                         .map((x) => (typeof x === "string" ? x.trim() : ""))
                         .filter(Boolean)
                         .join(" — ") || t("workOrders.feedbackReportingEmployeeEmpty")}
@@ -1482,6 +1633,49 @@ export function WorkOrderEditor({ orderId }: Props) {
                     disabled={feedbackSaving}
                     placeholder={t("workOrders.feedbackRemark")}
                   />
+                  {pcrEnabled ? (
+                    <View
+                      style={{
+                        borderTopWidth: StyleSheet.hairlineWidth,
+                        borderTopColor: colors.border,
+                        paddingTop: 10,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={styles.label}>{t("workOrders.pcrSection")}</Text>
+                      <PcrOptionPicker
+                        label={t("workOrders.pcrProblem")}
+                        placeholder={t("workOrders.pcrProblemPlaceholder")}
+                        value={pcrProblemId}
+                        options={pcrProblemOptions}
+                        disabled={feedbackSaving}
+                        onChange={(id) => {
+                          setPcrProblemId(id);
+                          setPcrCauseId(null);
+                          setPcrRemedyId(null);
+                        }}
+                      />
+                      <PcrOptionPicker
+                        label={t("workOrders.pcrCause")}
+                        placeholder={t("workOrders.pcrCausePlaceholder")}
+                        value={pcrCauseId}
+                        options={pcrCauseOptions}
+                        disabled={feedbackSaving || !pcrProblemId}
+                        onChange={(id) => {
+                          setPcrCauseId(id);
+                          setPcrRemedyId(null);
+                        }}
+                      />
+                      <PcrOptionPicker
+                        label={t("workOrders.pcrRemedy")}
+                        placeholder={t("workOrders.pcrRemedyPlaceholder")}
+                        value={pcrRemedyId}
+                        options={pcrRemedyOptions}
+                        disabled={feedbackSaving || !pcrCauseId}
+                        onChange={setPcrRemedyId}
+                      />
+                    </View>
+                  ) : null}
                   <Text style={styles.label}>{t("workOrders.feedbackStatusActionLegend")}</Text>
                   {(["none", "pause", "end"] as const).map((value) => (
                     <HapticPressable

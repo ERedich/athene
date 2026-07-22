@@ -7,8 +7,8 @@ import { Checkbox } from "primereact/checkbox";
 import { InputText } from "primereact/inputtext";
 import { Password } from "primereact/password";
 
-import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
+import { LoginBackground } from "../components/LoginBackground";
 import { navigateFromLoginToApp } from "../auth/loginNavigation";
 import { apiFetch } from "../lib/api";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
@@ -53,11 +53,7 @@ export function LoginPage() {
       }`}
     >
       <div className="fixed inset-0 z-[-2] overflow-hidden bg-surface">
-        <img
-          alt=""
-          className="w-full h-full object-cover heavy-blur animate-slow-zoom opacity-60"
-          src={loginBgImage}
-        />
+        <LoginBackground dark={dark} />
         <div className="absolute top-[20%] right-[10%] w-[40%] h-[40%] orange-glow animate-pulse-slow" />
         <div
           className="absolute bottom-[20%] left-[10%] w-[30%] h-[40%] orange-glow animate-pulse-slow"

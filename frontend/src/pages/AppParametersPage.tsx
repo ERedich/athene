@@ -20,6 +20,7 @@ import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
+import { MultiSelect } from "primereact/multiselect";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
@@ -35,6 +36,7 @@ import {
   APP_PARAM_KEY_DEFAULT_SHIFT_HOURS,
   APP_PARAM_KEY_GENERATE_WO_FROM_MP,
   APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
+  SITE_APP_PARAM_KEY_WO_PCR,
   type AppParameterAssetKeyMode,
 } from "../lib/appParameterKeys";
 import {
@@ -71,6 +73,18 @@ type WorkgroupListRow = {
   name: string;
   siteId: string;
   isActive: boolean;
+};
+
+type SiteOption = { id: string; key: string; name: string };
+
+type WorkOrderTypeOption = { id: string; key: string; name: string; siteId: string; isActive: boolean };
+
+type SiteAppParameterRow = {
+  id: string;
+  siteId: string;
+  key: string;
+  valueType: string;
+  jsonValue: unknown | null;
 };
 
 const CATEGORIES = ["GN", "WO", "SH", "MT", "PO", "SV"] as const;
@@ -152,6 +166,13 @@ export function AppParametersPage() {
     ...DEFAULT_ASSET_TYPE_DISPLAY_CONFIG,
   }));
   const [workgroupsForSite, setWorkgroupsForSite] = useState<WorkgroupListRow[]>([]);
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [siteParamSiteId, setSiteParamSiteId] = useState("");
+  const [woPcrOrderTypeKeys, setWoPcrOrderTypeKeys] = useState<string[]>([]);
+  const [woPcrPersistedKeys, setWoPcrPersistedKeys] = useState<string[]>([]);
+  const [siteWorkOrderTypes, setSiteWorkOrderTypes] = useState<WorkOrderTypeOption[]>([]);
+  const [siteParamsLoading, setSiteParamsLoading] = useState(false);
+  const [siteParamsSaving, setSiteParamsSaving] = useState(false);
 
   const langDe = i18n.language?.toLowerCase().startsWith("de");
 
@@ -241,6 +262,121 @@ export function AppParametersPage() {
       cancelled = true;
     };
   }, [user.workingSiteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/sites");
+        if (!res.ok || cancelled) return;
+        const raw = (await res.json()) as SiteOption[];
+        if (!Array.isArray(raw) || cancelled) return;
+        setSites(raw);
+        setSiteParamSiteId((cur) => {
+          if (cur && raw.some((s) => s.id === cur)) return cur;
+          if (user.workingSiteId && raw.some((s) => s.id === user.workingSiteId)) return user.workingSiteId;
+          return raw[0]?.id ?? "";
+        });
+      } catch {
+        if (!cancelled) setSites([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.workingSiteId]);
+
+  useEffect(() => {
+    if (!siteParamSiteId) {
+      setWoPcrOrderTypeKeys([]);
+      setWoPcrPersistedKeys([]);
+      setSiteWorkOrderTypes([]);
+      return;
+    }
+    let cancelled = false;
+    setSiteParamsLoading(true);
+    void (async () => {
+      try {
+        const [paramsRes, typesRes] = await Promise.all([
+          apiFetch(`/api/site-app-parameters?siteId=${encodeURIComponent(siteParamSiteId)}`),
+          apiFetch("/api/work-order-types"),
+        ]);
+        if (!paramsRes.ok || !typesRes.ok || cancelled) throw new Error("load");
+        const params = (await paramsRes.json()) as SiteAppParameterRow[];
+        const types = (await typesRes.json()) as WorkOrderTypeOption[];
+        if (cancelled) return;
+        const siteTypes = types.filter((t) => t.siteId === siteParamSiteId && t.isActive);
+        setSiteWorkOrderTypes(siteTypes);
+        const woPcr = params.find((p) => p.key === SITE_APP_PARAM_KEY_WO_PCR);
+        const keys = Array.isArray(woPcr?.jsonValue)
+          ? (woPcr.jsonValue as unknown[]).filter((k): k is string => typeof k === "string")
+          : ["breakdown"];
+        setWoPcrOrderTypeKeys(keys);
+        setWoPcrPersistedKeys(keys);
+      } catch {
+        if (!cancelled) {
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("appParameters.woPcrLoadError"),
+            life: 6000,
+          });
+          setWoPcrOrderTypeKeys([]);
+          setWoPcrPersistedKeys([]);
+          setSiteWorkOrderTypes([]);
+        }
+      } finally {
+        if (!cancelled) setSiteParamsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [siteParamSiteId, t]);
+
+  const woPcrDirty = useMemo(
+    () => JSON.stringify([...woPcrOrderTypeKeys].sort()) !== JSON.stringify([...woPcrPersistedKeys].sort()),
+    [woPcrOrderTypeKeys, woPcrPersistedKeys],
+  );
+
+  const woPcrTypeOptions = useMemo(
+    () => siteWorkOrderTypes.map((ot) => ({ label: `${ot.key} — ${ot.name}`, value: ot.key })),
+    [siteWorkOrderTypes],
+  );
+
+  const siteDropdownOptions = useMemo(
+    () => sites.map((s) => ({ label: `${s.key} - ${s.name}`, value: s.id })),
+    [sites],
+  );
+
+  const saveWoPcr = useCallback(async () => {
+    if (!siteParamSiteId) return;
+    setSiteParamsSaving(true);
+    try {
+      const res = await apiFetch(
+        `/api/site-app-parameters/${encodeURIComponent(siteParamSiteId)}/${SITE_APP_PARAM_KEY_WO_PCR}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonValue: woPcrOrderTypeKeys }),
+        },
+      );
+      if (!res.ok) throw new Error("save");
+      setWoPcrPersistedKeys([...woPcrOrderTypeKeys]);
+      toastRef.current?.show({
+        severity: "success",
+        summary: t("appParameters.woPcrSaved"),
+        life: 3000,
+      });
+    } catch {
+      toastRef.current?.show({
+        severity: "error",
+        summary: t("appParameters.woPcrSaveError"),
+        life: 6000,
+      });
+    } finally {
+      setSiteParamsSaving(false);
+    }
+  }, [siteParamSiteId, t, woPcrOrderTypeKeys]);
 
   const filteredRows = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -670,20 +806,91 @@ export function AppParametersPage() {
         return (
           <TabPanel key={cat} header={t(tabKey[cat])}>
             <div className="app-parameters-tab-panel-inner">
+              {cat === "WO" ? (
+                <Card className="mb-4 shadow-none border border-outline-variant">
+                  <div className="flex flex-col gap-3">
+                    <div className="text-sm font-medium text-on-surface">{t("appParameters.siteScopedSection")}</div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-outline uppercase tracking-wide">
+                          {t("appParameters.siteScopedSite")}
+                        </label>
+                        <Dropdown
+                          value={siteParamSiteId || null}
+                          options={siteDropdownOptions}
+                          optionLabel="label"
+                          optionValue="value"
+                          placeholder={t("appParameters.siteScopedSitePlaceholder")}
+                          className="w-full"
+                          appendTo={overlayAppendTo}
+                          disabled={siteParamsLoading || siteParamsSaving}
+                          onChange={(e) => setSiteParamSiteId(String(e.value ?? ""))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-outline uppercase tracking-wide">
+                          {t("appParameters.woPcrLabel")}
+                        </label>
+                        <MultiSelect
+                          value={woPcrOrderTypeKeys}
+                          options={woPcrTypeOptions}
+                          optionLabel="label"
+                          optionValue="value"
+                          placeholder={t("appParameters.woPcrPlaceholder")}
+                          className="w-full"
+                          display="chip"
+                          appendTo={overlayAppendTo}
+                          disabled={!siteParamSiteId || siteParamsLoading || siteParamsSaving}
+                          onChange={(e) =>
+                            setWoPcrOrderTypeKeys(
+                              Array.isArray(e.value) ? e.value.map((v) => String(v)) : [],
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        label={t("appParameters.saveAll")}
+                        icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                        className="p-button-sm"
+                        disabled={!woPcrDirty || !siteParamSiteId || siteParamsLoading || siteParamsSaving}
+                        loading={siteParamsSaving}
+                        onClick={() => void saveWoPcr()}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ) : null}
               {loading && draftRows.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center py-16 text-sm text-on-surface-variant">
                   {t("appParameters.loadingParameters")}
                 </div>
-              ) : list.length === 0 ? (
+              ) : list.length === 0 && cat !== "WO" ? (
                 <div className="py-12 text-center text-sm text-on-surface-variant">{t("appParameters.emptyTab")}</div>
-              ) : (
+              ) : list.length === 0 && cat === "WO" ? null : (
                 <div className="flex flex-col gap-4">{list.map((row) => renderParameterCard(row))}</div>
               )}
             </div>
           </TabPanel>
         );
       }),
-    [byCategory, loading, renderParameterCard, draftRows.length, t],
+    [
+      byCategory,
+      loading,
+      renderParameterCard,
+      draftRows.length,
+      t,
+      siteParamSiteId,
+      siteDropdownOptions,
+      siteParamsLoading,
+      siteParamsSaving,
+      woPcrOrderTypeKeys,
+      woPcrTypeOptions,
+      woPcrDirty,
+      saveWoPcr,
+    ],
   );
 
   const assetTypesDialogFooter = (

@@ -3,7 +3,7 @@ import type { Pool } from "pg";
 
 import { EMPLOYEE_PSEUDO_ME, WORKGROUP_PSEUDO_MY } from "./workOrderListQuery.js";
 
-type WorkOrderType = "maintenance" | "repair" | "breakdown";
+type WorkOrderType = string;
 type WorkOrderStatus =
   | "open"
   | "assigned"
@@ -17,7 +17,6 @@ type WorkOrderStatus =
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const allowedOrderTypes: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "open",
   "assigned",
@@ -33,8 +32,9 @@ function isUuid(value: string): boolean {
   return uuidRe.test(value);
 }
 
-function isWorkOrderType(value: string): value is WorkOrderType {
-  return (allowedOrderTypes as string[]).includes(value);
+function isWorkOrderType(value: string): boolean {
+  const t = value.trim();
+  return t.length > 0 && t.length <= 100;
 }
 
 function isWorkOrderStatus(value: string): value is WorkOrderStatus {

@@ -10,6 +10,7 @@ import type {
   WorkOrderReferenceCostCenter,
   WorkOrderReferenceEmployee,
   WorkOrderReferenceMaintenancePlan,
+  WorkOrderReferenceOrderType,
   WorkOrderReferenceWorkgroup,
   WorkOrderSiteOption,
   WorkOrderUserDirectoryRow,
@@ -40,6 +41,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
   const [employees, setEmployees] = useState<WorkOrderReferenceEmployee[]>([]);
   const [workgroups, setWorkgroups] = useState<WorkOrderReferenceWorkgroup[]>([]);
   const [maintenancePlans, setMaintenancePlans] = useState<WorkOrderReferenceMaintenancePlan[]>([]);
+  const [workOrderTypes, setWorkOrderTypes] = useState<WorkOrderReferenceOrderType[]>([]);
   const [directoryUsers, setDirectoryUsers] = useState<WorkOrderUserDirectoryRow[]>([]);
 
   const load = useCallback(async () => {
@@ -54,6 +56,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         sitesRes,
         usersRes,
         maintenancePlansRes,
+        workOrderTypesRes,
       ] = await Promise.all([
         includeAssets ? apiFetch("/api/assets") : Promise.resolve(null),
         apiFetch("/api/cost-centers"),
@@ -63,6 +66,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         apiFetch("/api/sites"),
         apiFetch("/api/users"),
         apiFetch("/api/maintenance-plans"),
+        apiFetch("/api/work-order-types"),
       ]);
       if (
         (includeAssets && !assetsRes?.ok) ||
@@ -72,7 +76,8 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         !workgroupsRes.ok ||
         !sitesRes.ok ||
         !usersRes.ok ||
-        !maintenancePlansRes.ok
+        !maintenancePlansRes.ok ||
+        !workOrderTypesRes.ok
       ) {
         throw new Error("load_ref");
       }
@@ -85,6 +90,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         sitesData,
         usersData,
         maintenancePlansData,
+        workOrderTypesData,
       ] = (await Promise.all([
         includeAssets && assetsRes ? assetsRes.json() : Promise.resolve([]),
         costCentersRes.json(),
@@ -94,6 +100,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         sitesRes.json(),
         usersRes.json(),
         maintenancePlansRes.json(),
+        workOrderTypesRes.json(),
       ])) as [
         WorkOrderReferenceAsset[],
         WorkOrderReferenceCostCenter[],
@@ -103,6 +110,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
         WorkOrderSiteOption[],
         WorkOrderUserDirectoryRow[],
         WorkOrderReferenceMaintenancePlan[],
+        WorkOrderReferenceOrderType[],
       ];
 
       setAssets(Array.isArray(assetsData) ? assetsData : []);
@@ -134,6 +142,18 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
             }))
           : [],
       );
+      setWorkOrderTypes(
+        Array.isArray(workOrderTypesData)
+          ? workOrderTypesData.map((row) => ({
+              id: row.id,
+              key: row.key,
+              name: row.name,
+              siteId: row.siteId,
+              isActive: Boolean(row.isActive),
+              sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : 0,
+            }))
+          : [],
+      );
       setLoaded(true);
     } catch {
       setAssets([]);
@@ -142,6 +162,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
       setEmployees([]);
       setWorkgroups([]);
       setMaintenancePlans([]);
+      setWorkOrderTypes([]);
       setSites([]);
       setDirectoryUsers([]);
     } finally {
@@ -218,8 +239,33 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
 
   const calendarDateFormat = i18n.language?.toLowerCase().startsWith("de") ? "dd.mm.yy" : "mm/dd/yy";
 
-  const typeOrder = useMemo(() => ["maintenance", "repair", "breakdown"] as const, []);
-  const typeLabel = useCallback((code: string) => t(`workOrders.typeValues.${code}`), [t]);
+  const typeOrder = useMemo(() => {
+    const byKey = new Map<string, WorkOrderReferenceOrderType>();
+    for (const row of workOrderTypes) {
+      if (!row.isActive) continue;
+      if (siteFieldLocked && row.siteId !== user.workingSiteId) continue;
+      const prev = byKey.get(row.key);
+      if (!prev || row.sortOrder < prev.sortOrder) byKey.set(row.key, row);
+    }
+    return [...byKey.values()]
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+      .map((row) => row.key);
+  }, [siteFieldLocked, user.workingSiteId, workOrderTypes]);
+
+  const typeLabel = useCallback(
+    (code: string) => {
+      const preferredSite = user.workingSiteId;
+      const match =
+        workOrderTypes.find((row) => row.key === code && row.siteId === preferredSite) ??
+        workOrderTypes.find((row) => row.key === code);
+      if (match) return match.name;
+      const key = `workOrders.typeValues.${code}`;
+      const translated = t(key);
+      return translated === key ? code : translated;
+    },
+    [t, user.workingSiteId, workOrderTypes],
+  );
+
   const statusLabel = useCallback((code: string) => t(`workOrders.statusValues.${code}`), [t]);
 
   return {
@@ -233,6 +279,7 @@ export function useWorkOrderSearchReferenceData(options: Options = {}) {
     employees,
     workgroups,
     maintenancePlans,
+    workOrderTypes,
     sites,
     directoryUsers,
     searchSiteOptions,

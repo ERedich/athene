@@ -7,6 +7,7 @@ import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { BottomSheetModal } from "./BottomSheetModal";
 import { FeedbackRemarkInput } from "./FeedbackRemarkInput";
 import { HapticPressable } from "./HapticPressable";
+import { PcrOptionPicker } from "./PcrOptionPicker";
 
 import type { WorkOrderFeedbackBody } from "../hooks/queries";
 import {
@@ -15,6 +16,14 @@ import {
   type FeedbackEntryMode,
   type FeedbackStatusAction,
 } from "../lib/workOrderFeedback";
+import {
+  fetchPcrCauses,
+  fetchPcrProblems,
+  fetchPcrRemedies,
+  fetchSitePcrOrderTypeKeys,
+  isPcrEnabledForOrderType,
+  type PcrSelectOption,
+} from "../lib/workOrderPcr";
 import { pressedOpacity, PRESSED_OPACITY_CONTROL } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
 
@@ -28,6 +37,11 @@ export type WorkOrderFeedbackModalOrder = {
   assetId: string;
   assetKey: string;
   assetName: string;
+  assetClassificationId?: string | null;
+  orderType: string;
+  problemId?: string | null;
+  causeId?: string | null;
+  remedyId?: string | null;
 };
 
 type Props = {
@@ -58,6 +72,16 @@ export function WorkOrderFeedbackModal({
   const [remark, setRemark] = useState("");
   const [pauseRemark, setPauseRemark] = useState("");
   const [statusAction, setStatusAction] = useState<FeedbackStatusAction>("none");
+  const [pcrOrderTypeKeys, setPcrOrderTypeKeys] = useState<string[]>([]);
+  const [problemId, setProblemId] = useState<string | null>(null);
+  const [causeId, setCauseId] = useState<string | null>(null);
+  const [remedyId, setRemedyId] = useState<string | null>(null);
+  const [problemOptions, setProblemOptions] = useState<PcrSelectOption[]>([]);
+  const [causeOptions, setCauseOptions] = useState<PcrSelectOption[]>([]);
+  const [remedyOptions, setRemedyOptions] = useState<PcrSelectOption[]>([]);
+
+  const pcrEnabled = order ? isPcrEnabledForOrderType(pcrOrderTypeKeys, order.orderType) : false;
+  const pcrRequired = pcrEnabled && statusAction === "end";
 
   useEffect(() => {
     if (!visible) return;
@@ -65,7 +89,89 @@ export function WorkOrderFeedbackModal({
     setPauseRemark("");
     setRemark("");
     setHours(computeSegmentHours(segmentStartedAt));
-  }, [visible, entryMode, segmentStartedAt]);
+    setProblemId(order?.problemId ?? null);
+    setCauseId(order?.causeId ?? null);
+    setRemedyId(order?.remedyId ?? null);
+  }, [visible, entryMode, segmentStartedAt, order?.problemId, order?.causeId, order?.remedyId]);
+
+  useEffect(() => {
+    if (!visible || !order?.siteId) {
+      setPcrOrderTypeKeys([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const keys = await fetchSitePcrOrderTypeKeys(order.siteId);
+        if (!cancelled) setPcrOrderTypeKeys(keys);
+      } catch {
+        if (!cancelled) setPcrOrderTypeKeys(["breakdown"]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, order?.siteId]);
+
+  useEffect(() => {
+    if (!visible || !order?.siteId || !pcrEnabled) {
+      setProblemOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrProblems({
+          siteId: order.siteId,
+          classificationId: order.assetClassificationId ?? null,
+        });
+        if (!cancelled) setProblemOptions(opts);
+      } catch {
+        if (!cancelled) setProblemOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, order?.siteId, order?.assetClassificationId, pcrEnabled]);
+
+  useEffect(() => {
+    if (!problemId) {
+      setCauseOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrCauses(problemId);
+        if (!cancelled) setCauseOptions(opts);
+      } catch {
+        if (!cancelled) setCauseOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [problemId]);
+
+  useEffect(() => {
+    if (!causeId) {
+      setRemedyOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const opts = await fetchPcrRemedies(causeId);
+        if (!cancelled) setRemedyOptions(opts);
+      } catch {
+        if (!cancelled) setRemedyOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [causeId]);
 
   const showPauseRemark = entryMode === "pause" || statusAction === "pause";
 
@@ -159,6 +265,9 @@ export function WorkOrderFeedbackModal({
     setRemark("");
     setPauseRemark("");
     setStatusAction("none");
+    setProblemId(null);
+    setCauseId(null);
+    setRemedyId(null);
     onClose();
   };
 
@@ -177,11 +286,22 @@ export function WorkOrderFeedbackModal({
       Alert.alert("", t("workOrders.feedbackPauseRemarkRequired"));
       return;
     }
+    if (pcrRequired && (!problemId || !causeId || !remedyId)) {
+      Alert.alert("", t("workOrders.pcrRequired"));
+      return;
+    }
     const ok = await onSubmit({
       hours: value,
       remark: remark.trim() ? remark.trim() : null,
       statusAction,
       pauseRemark: statusAction === "pause" ? pauseRemark.trim() : null,
+      ...(pcrEnabled
+        ? {
+            problemId: problemId ?? null,
+            causeId: causeId ?? null,
+            remedyId: remedyId ?? null,
+          }
+        : {}),
     });
     if (!ok) return;
     resetAndClose();
@@ -284,6 +404,43 @@ export function WorkOrderFeedbackModal({
             disabled={saving}
             placeholder={t("workOrders.feedbackRemark")}
           />
+
+          {pcrEnabled ? (
+            <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }}>
+              <Text style={styles.label}>{t("workOrders.pcrSection")}</Text>
+              <PcrOptionPicker
+                label={t("workOrders.pcrProblem")}
+                placeholder={t("workOrders.pcrProblemPlaceholder")}
+                value={problemId}
+                options={problemOptions}
+                disabled={saving}
+                onChange={(id) => {
+                  setProblemId(id);
+                  setCauseId(null);
+                  setRemedyId(null);
+                }}
+              />
+              <PcrOptionPicker
+                label={t("workOrders.pcrCause")}
+                placeholder={t("workOrders.pcrCausePlaceholder")}
+                value={causeId}
+                options={causeOptions}
+                disabled={saving || !problemId}
+                onChange={(id) => {
+                  setCauseId(id);
+                  setRemedyId(null);
+                }}
+              />
+              <PcrOptionPicker
+                label={t("workOrders.pcrRemedy")}
+                placeholder={t("workOrders.pcrRemedyPlaceholder")}
+                value={remedyId}
+                options={remedyOptions}
+                disabled={saving || !causeId}
+                onChange={setRemedyId}
+              />
+            </View>
+          ) : null}
 
           <Text style={styles.label}>{t("workOrders.feedbackStatusActionLegend")}</Text>
           {statusOptions.map((value) => (

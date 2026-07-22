@@ -893,6 +893,18 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
             sessionEmployeeId={userEmployeeId}
             disabled={props.feedbackSaving}
             doneOrder={editingMeta?.status === "done"}
+            pcrEnabled={props.pcrEnabled}
+            pcrRequired={props.pcrRequired}
+            pcrProblemId={props.pcrProblemId}
+            pcrCauseId={props.pcrCauseId}
+            pcrRemedyId={props.pcrRemedyId}
+            onPcrProblemIdChange={props.setPcrProblemId}
+            onPcrCauseIdChange={props.setPcrCauseId}
+            onPcrRemedyIdChange={props.setPcrRemedyId}
+            pcrProblemOptions={props.pcrProblemOptions}
+            pcrCauseOptions={props.pcrCauseOptions}
+            pcrRemedyOptions={props.pcrRemedyOptions}
+            pcrLoading={props.pcrLoading}
           />
         </TabPanel>
         <TabPanel

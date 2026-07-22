@@ -6,7 +6,7 @@ export const WORKGROUP_PSEUDO_MY = "__MY_WORKGROUPS__";
 /** Query value for employee MultiSelect: resolves to session user's employee row; filters assignment OR responsible. */
 export const EMPLOYEE_PSEUDO_ME = "__ME__";
 
-type WorkOrderType = "maintenance" | "repair" | "breakdown";
+type WorkOrderType = string;
 type WorkOrderStatus =
   | "open"
   | "assigned"
@@ -23,7 +23,6 @@ const uuidRe =
 /** Hours past planned end before a work order counts as delayed. Keep in sync with `dashboard.ts`. */
 const DELAY_TOLERANCE_HOURS = 0.05;
 
-const allowedOrderTypes: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "open",
   "assigned",
@@ -39,8 +38,9 @@ function isUuid(value: string): boolean {
   return uuidRe.test(value);
 }
 
-function isWorkOrderType(value: string): value is WorkOrderType {
-  return (allowedOrderTypes as string[]).includes(value);
+function isWorkOrderType(value: string): boolean {
+  const t = value.trim();
+  return t.length > 0 && t.length <= 100;
 }
 
 function isWorkOrderStatus(value: string): value is WorkOrderStatus {
@@ -259,10 +259,14 @@ export async function buildWorkOrderListFilters(
 
   // --- Discrete: orderType ---
   const orderTypesRaw = collectQueryStrings(q, "orderType");
-  const orderTypes = orderTypesRaw.filter(isWorkOrderType);
-  if (orderTypesRaw.length && orderTypes.length !== orderTypesRaw.length) {
+  if (orderTypesRaw.some((v) => !isWorkOrderType(v))) {
     return { ok: false, status: 400, error: "invalid_order_type" };
   }
+  const orderTypes = [
+    ...new Set(
+      orderTypesRaw.map((v) => (v.trim() === "repair" ? "plannedRepair" : v.trim())),
+    ),
+  ];
   if (orderTypes.length) {
     params.push(orderTypes);
     pushCond(`w."orderType" = ANY($${pi++}::text[])`);

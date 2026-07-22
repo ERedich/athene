@@ -4665,6 +4665,10 @@ button.app-calendar-day__num:focus-visible {
   background: color-mix(in srgb, rgb(234 179 8) 42%, var(--surface-overlay));
 }
 
+.app-calendar-event-bar--inspection {
+  background: color-mix(in srgb, rgb(16 185 129) 40%, var(--surface-overlay));
+}
+
 .app-calendar-event-bar--breakdown {
   background: color-mix(in srgb, rgb(239 68 68) 40%, var(--surface-overlay));
 }
@@ -5924,7 +5928,8 @@ button.app-calendar-day__num:focus-visible {
   font-size: 0.75rem;
 }
 
-.app-shift-planner-employees__availability {
+.app-shift-planner-employees__availability,
+.app-segmented-control {
   display: inline-flex;
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -5934,7 +5939,8 @@ button.app-calendar-day__num:focus-visible {
   background: color-mix(in srgb, var(--color-surface-container-low) 80%, transparent);
 }
 
-.app-shift-planner-employees__filter-btn {
+.app-shift-planner-employees__filter-btn,
+.app-segmented-control__btn {
   min-height: 1.625rem;
   padding: 0.25rem 0.625rem;
   border: none;
@@ -5947,14 +5953,97 @@ button.app-calendar-day__num:focus-visible {
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-.app-shift-planner-employees__filter-btn:hover {
+.app-shift-planner-employees__filter-btn:hover,
+.app-segmented-control__btn:hover:not(:disabled) {
   color: var(--color-on-surface);
   background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
 }
 
-.app-shift-planner-employees__filter-btn--active {
+.app-shift-planner-employees__filter-btn--active,
+.app-segmented-control__btn--active {
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-container-low));
+}
+
+.app-segmented-control__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Match adjacent .p-inputtext height in form rows (e.g. WO feedback). */
+.app-segmented-control.app-segmented-control--match-input {
+  display: flex;
+  width: 100%;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  box-sizing: border-box;
+  min-height: calc(1.25em + 1.3rem + 2px);
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--color-outline) 55%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 65%, transparent);
+}
+
+.app-segmented-control.app-segmented-control--match-input .app-segmented-control__btn {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-feedback-fade {
+  opacity: 0;
+  transform: translateY(-0.4rem);
+  max-height: 0;
+  overflow: hidden;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease,
+    max-height 200ms ease;
+  pointer-events: none;
+}
+
+.app-feedback-fade--in {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 16rem;
+  pointer-events: auto;
+}
+
+.app-feedback-fade-inline {
+  display: inline;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.app-feedback-fade-inline--in {
+  opacity: 1;
+}
+
+@keyframes app-feedback-slide-y {
+  from {
+    opacity: 0.7;
+    transform: translateY(-0.45rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-feedback-slide-y {
+  will-change: transform, opacity;
+}
+
+.app-feedback-slide-y--pulse {
+  animation: app-feedback-slide-y 200ms ease;
 }
 
 .app-shift-planner-employees__empty {

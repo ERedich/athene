@@ -28,7 +28,7 @@ export type WorkOrderRealtimePayload = {
   plannedStart: string;
   plannedEnd: string;
   plannedDurationMinutes: number | null;
-  orderType: "maintenance" | "repair" | "breakdown";
+  orderType: string;
   status: "open" | "assigned" | "started" | "paused" | "continued" | "ended" | "done" | "cancelled";
   responsibleEmployeeIds: string[];
   responsibleEmployeeKey: string | null;

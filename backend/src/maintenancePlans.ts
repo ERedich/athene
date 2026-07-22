@@ -22,6 +22,7 @@ import {
   type DbClient,
 } from "./workOrderCreate.js";
 import { assertInspectionRoundForSite } from "./inspectionRoundSnapshot.js";
+import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
 
 export type MaintenancePlanStatus = "active" | "paused" | "ended";
 
@@ -50,6 +51,7 @@ export type MaintenancePlanRow = {
   inspectionRoundKey: string | null;
   inspectionRoundName: string | null;
   plannedDurationMinutes: number | null;
+  orderType: string;
   intervalUnit: MaintenanceIntervalUnit;
   intervalValue: number;
   anchorDate: string;
@@ -79,6 +81,7 @@ type ParsedBody = {
   classificationId: string | null;
   inspectionRoundId: string | null;
   plannedDurationMinutes: number | null;
+  orderType: string;
   intervalUnit: MaintenanceIntervalUnit;
   intervalValue: number;
   anchorDate: string;
@@ -189,6 +192,10 @@ function parseBody(body: unknown): ParsedBody | null {
     return null;
   }
 
+  const orderTypeRaw = typeof o.orderType === "string" ? o.orderType.trim() : "";
+  if (!orderTypeRaw || orderTypeRaw.length > 100) return null;
+  const orderType = orderTypeRaw === "repair" ? "plannedRepair" : orderTypeRaw;
+
   const intervalUnit = o.intervalUnit;
   if (typeof intervalUnit !== "string" || !intervalUnits.includes(intervalUnit as MaintenanceIntervalUnit)) {
     return null;
@@ -232,6 +239,7 @@ function parseBody(body: unknown): ParsedBody | null {
     classificationId: classificationIdRaw,
     inspectionRoundId: inspectionRoundIdRaw,
     plannedDurationMinutes,
+    orderType,
     intervalUnit: intervalUnit as MaintenanceIntervalUnit,
     intervalValue,
     anchorDate,
@@ -294,6 +302,8 @@ function sendCreateError(res: Response, err: unknown) {
     responsible_employee_not_leader: 400,
     invalid_anchor_date: 400,
     invalid_next_due_at: 400,
+    invalid_order_type: 400,
+    invalid_inspection_round: 400,
   };
   if (message in mapped) {
     res.status(mapped[message]).json({ error: message });
@@ -355,6 +365,7 @@ const selectPlansSql = `
     ir."key" AS "inspectionRoundKey",
     ir."name" AS "inspectionRoundName",
     p."plannedDurationMinutes",
+    p."orderType",
     p."intervalUnit",
     p."intervalValue",
     p."anchorDate"::text AS "anchorDate",
@@ -454,6 +465,7 @@ async function assertPlanContext(
     effectiveSiteId,
     siteAccessSql,
   );
+  await assertWorkOrderTypeForSite(client, effectiveSiteId, parsed.orderType);
   return effectiveSiteId;
 }
 
@@ -614,11 +626,11 @@ router.post("/", async (req: Request, res: Response) => {
         `
         INSERT INTO "maintenancePlan"
           ("key", "name", "description", "siteId", "assetId", "costCenterId", "workgroupId",
-           "classificationId", "inspectionRoundId", "plannedDurationMinutes", "intervalUnit", "intervalValue",
+           "classificationId", "inspectionRoundId", "plannedDurationMinutes", "orderType", "intervalUnit", "intervalValue",
            "anchorDate", "nextDueAt", "leadTimeDays", "status", "ignoreOpenWorkOrders")
         VALUES
           ($1, $2, $3, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9::uuid, $10::integer,
-           $11, $12::integer, $13::date, $14::timestamptz, $15::integer, $16, $17)
+           $11, $12, $13::integer, $14::date, $15::timestamptz, $16::integer, $17, $18)
         RETURNING "id"
         `,
         [
@@ -632,6 +644,7 @@ router.post("/", async (req: Request, res: Response) => {
           parsed.classificationId,
           parsed.inspectionRoundId,
           parsed.plannedDurationMinutes,
+          parsed.orderType,
           parsed.intervalUnit,
           parsed.intervalValue,
           anchorDate,
@@ -700,14 +713,15 @@ router.put("/:id", async (req: Request, res: Response) => {
           "classificationId" = $8::uuid,
           "inspectionRoundId" = $9::uuid,
           "plannedDurationMinutes" = $10::integer,
-          "intervalUnit" = $11,
-          "intervalValue" = $12::integer,
-          "anchorDate" = $13::date,
-          "nextDueAt" = $14::timestamptz,
-          "leadTimeDays" = $15::integer,
-          "status" = $16,
-          "ignoreOpenWorkOrders" = $17
-        WHERE "id" = $18::uuid
+          "orderType" = $11,
+          "intervalUnit" = $12,
+          "intervalValue" = $13::integer,
+          "anchorDate" = $14::date,
+          "nextDueAt" = $15::timestamptz,
+          "leadTimeDays" = $16::integer,
+          "status" = $17,
+          "ignoreOpenWorkOrders" = $18
+        WHERE "id" = $19::uuid
         `,
         [
           parsed.key,
@@ -720,6 +734,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.classificationId,
           parsed.inspectionRoundId,
           parsed.plannedDurationMinutes,
+          parsed.orderType,
           parsed.intervalUnit,
           parsed.intervalValue,
           anchorDate,

@@ -24,8 +24,9 @@ type Props = {
 };
 
 function orderTypeClass(orderType?: string): string {
-  if (orderType === "repair") return "app-calendar-event-bar--repair";
+  if (orderType === "repair" || orderType === "plannedRepair") return "app-calendar-event-bar--repair";
   if (orderType === "breakdown") return "app-calendar-event-bar--breakdown";
+  if (orderType === "inspection") return "app-calendar-event-bar--inspection";
   if (orderType === "maintenancePlan") return "app-calendar-event-bar--maintenancePlan";
   return "app-calendar-event-bar--maintenance";
 }

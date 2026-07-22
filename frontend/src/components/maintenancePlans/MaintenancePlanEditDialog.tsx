@@ -39,6 +39,7 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
     siteDropdownOptions,
     assetOptions,
     costCenterOptions,
+    orderTypeOptions,
     classificationOptions,
     inspectionRoundOptions,
     workgroupOptions,
@@ -232,6 +233,26 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
                   placeholder={t("workOrders.costCenterPlaceholder")}
                   className="w-full app-inline-icon-dropdown"
                   disabled={!form.assetId}
+                  filter
+                  appendTo={overlayAppendTo}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-3">
+                <label htmlFor="mp-order-type" className={fieldLabelClass}>
+                  {t("workOrders.orderType")}
+                  <span className="app-required-marker" aria-hidden>
+                    *
+                  </span>
+                </label>
+                <Dropdown
+                  inputId="mp-order-type"
+                  value={form.orderType}
+                  options={orderTypeOptions}
+                  onChange={(e) => setForm((c) => ({ ...c, orderType: String(e.value ?? "") }))}
+                  placeholder={t("workOrders.orderType")}
+                  className="w-full app-inline-icon-dropdown"
+                  disabled={!form.assetId && !form.siteId}
                   filter
                   appendTo={overlayAppendTo}
                 />

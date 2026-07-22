@@ -26,6 +26,8 @@ import {
   assertInspectionRoundForSite,
   syncWorkOrderInspectionPointsSnapshot,
 } from "./inspectionRoundSnapshot.js";
+import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
+import { assertWorkOrderPcr, parseOptionalPcrUuid } from "./pcrAssert.js";
 import {
   DOCUMENT_MAX_BYTES,
   createDocument,
@@ -62,7 +64,7 @@ import {
   type PlanningOrderRow,
 } from "./workOrderScheduling.js";
 
-type WorkOrderType = "maintenance" | "repair" | "breakdown";
+type WorkOrderType = string;
 type WorkOrderStatus =
   | "open"
   | "assigned"
@@ -84,6 +86,7 @@ type WorkOrderRow = {
   assetId: string;
   assetKey: string;
   assetName: string;
+  assetClassificationId: string | null;
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
@@ -106,6 +109,15 @@ type WorkOrderRow = {
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;
+  problemId: string | null;
+  problemKey: string | null;
+  problemName: string | null;
+  causeId: string | null;
+  causeKey: string | null;
+  causeName: string | null;
+  remedyId: string | null;
+  remedyKey: string | null;
+  remedyName: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -147,7 +159,6 @@ const upload = multer({
 
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const allowedOrderTypes: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "open",
   "assigned",
@@ -169,8 +180,8 @@ function normalizeEmployeeIds(value: unknown): string[] | null {
   return [...new Set(normalized)];
 }
 
-function isWorkOrderType(value: unknown): value is WorkOrderType {
-  return typeof value === "string" && (allowedOrderTypes as string[]).includes(value);
+function isWorkOrderType(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 100;
 }
 
 function isWorkOrderStatus(value: unknown): value is WorkOrderStatus {
@@ -191,6 +202,10 @@ type ParsedFeedbackBody = {
   statusAction: FeedbackStatusAction;
   pauseRemark: string | null;
   additionalHours: ParsedAdditionalHours[];
+  problemId: string | null;
+  causeId: string | null;
+  remedyId: string | null;
+  pcrProvided: boolean;
 };
 
 function parseFeedbackHours(value: unknown): number | null {
@@ -252,12 +267,23 @@ function parseFeedbackBody(body: unknown): ParsedFeedbackBody | "pause_remark_re
     }
   }
 
+  const pcrProvided =
+    o.problemId !== undefined || o.causeId !== undefined || o.remedyId !== undefined;
+  const problemId = parseOptionalPcrUuid(o.problemId);
+  const causeId = parseOptionalPcrUuid(o.causeId);
+  const remedyId = parseOptionalPcrUuid(o.remedyId);
+  if (problemId === "invalid" || causeId === "invalid" || remedyId === "invalid") return null;
+
   return {
     hours,
     remark,
     statusAction,
     pauseRemark: pauseRemarkParsed,
     additionalHours,
+    problemId,
+    causeId,
+    remedyId,
+    pcrProvided,
   };
 }
 
@@ -305,8 +331,9 @@ function parseBody(body: unknown): ParsedBody | null {
         : null;
   if (rawDuration !== null && rawDuration !== undefined && plannedDurationMinutes === null) return null;
 
-  const orderType = o.orderType;
-  if (!isWorkOrderType(orderType)) return null;
+  const orderTypeRaw = o.orderType;
+  if (!isWorkOrderType(orderTypeRaw)) return null;
+  const orderType = orderTypeRaw.trim();
 
   const responsibleEmployeeIds = normalizeEmployeeIds(o.responsibleEmployeeIds);
   if (!responsibleEmployeeIds || responsibleEmployeeIds.length === 0) return null;
@@ -470,6 +497,7 @@ const selectWorkOrdersSql = `
     w."assetId",
     a."key" AS "assetKey",
     a."name" AS "assetName",
+    a."classificationId"::text AS "assetClassificationId",
     w."costCenterId",
     c."key" AS "costCenterKey",
     c."name" AS "costCenterName",
@@ -497,6 +525,15 @@ const selectWorkOrdersSql = `
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
+    w."problemId"::text AS "problemId",
+    prob."key" AS "problemKey",
+    prob."name" AS "problemName",
+    w."causeId"::text AS "causeId",
+    cau."key" AS "causeKey",
+    cau."name" AS "causeName",
+    w."remedyId"::text AS "remedyId",
+    rem."key" AS "remedyKey",
+    rem."name" AS "remedyName",
     w."originalWo",
     orig."orderNumber" AS "originalWoOrderNumber",
     orig."name" AS "originalWoName",
@@ -521,6 +558,9 @@ const selectWorkOrdersSql = `
   LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
   LEFT JOIN "employee" dbe ON dbe."id" = w."doneBy"
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
+  LEFT JOIN "problem" prob ON prob."id" = w."problemId"
+  LEFT JOIN "cause" cau ON cau."id" = w."causeId"
+  LEFT JOIN "remedy" rem ON rem."id" = w."remedyId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
   LEFT JOIN "inspectionRound" ir ON ir."id" = w."inspectionRoundId"
@@ -1427,9 +1467,28 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
     let nextStatus: string | null = null;
     const bookedQuantities: number[] = [];
     const row = await withAuditContext(meta, async (client) => {
-      const wo = await client.query<QueryResultRow & { id: string; siteId: string; status: string }>(
+      const wo = await client.query<
+        QueryResultRow & {
+          id: string;
+          siteId: string;
+          status: string;
+          orderType: string;
+          assetId: string;
+          problemId: string | null;
+          causeId: string | null;
+          remedyId: string | null;
+        }
+      >(
         `
-        SELECT "id", "siteId"::text AS "siteId", "status"
+        SELECT
+          "id",
+          "siteId"::text AS "siteId",
+          "status",
+          "orderType",
+          "assetId"::text AS "assetId",
+          "problemId"::text AS "problemId",
+          "causeId"::text AS "causeId",
+          "remedyId"::text AS "remedyId"
         FROM "workOrder"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -1441,6 +1500,44 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
       if (!isWorkOrderStatus(current.status)) throw new Error("invalid_status");
       if (!["started", "continued", "ended"].includes(current.status)) {
         throw new Error("cannot_feedback_from_status");
+      }
+
+      const pcr: {
+        problemId: string | null;
+        causeId: string | null;
+        remedyId: string | null;
+      } = parsed.pcrProvided
+        ? {
+            problemId: parsed.problemId,
+            causeId: parsed.causeId,
+            remedyId: parsed.remedyId,
+          }
+        : {
+            problemId: current.problemId,
+            causeId: current.causeId,
+            remedyId: current.remedyId,
+          };
+
+      await assertWorkOrderPcr(client, {
+        siteId: current.siteId,
+        orderType: current.orderType,
+        assetId: current.assetId,
+        pcr,
+        required: parsed.statusAction === "end",
+      });
+
+      if (parsed.pcrProvided) {
+        await client.query(
+          `
+          UPDATE "workOrder"
+          SET
+            "problemId" = $2::uuid,
+            "causeId" = $3::uuid,
+            "remedyId" = $4::uuid
+          WHERE "id" = $1::uuid
+          `,
+          [id, pcr.problemId, pcr.causeId, pcr.remedyId],
+        );
       }
 
       const userEmp = await client.query<{ employeeId: string | null }>(
@@ -1571,6 +1668,17 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
     }
     if (message === "invalid_additional_hours") {
       res.status(400).json({ error: "invalid_additional_hours" });
+      return;
+    }
+    if (
+      message === "pcr_required" ||
+      message === "pcr_incomplete" ||
+      message === "invalid_pcr_problem" ||
+      message === "invalid_pcr_problem_classification" ||
+      message === "invalid_pcr_cause" ||
+      message === "invalid_pcr_remedy"
+    ) {
+      res.status(400).json({ error: message });
       return;
     }
     sendPgError(res, err);
@@ -1844,6 +1952,10 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid_inspection_round" });
       return;
     }
+    if (message === "invalid_order_type") {
+      res.status(400).json({ error: "invalid_order_type" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -1955,6 +2067,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         effectiveSiteId,
         siteAccessSql,
       );
+      await assertWorkOrderTypeForSite(client, effectiveSiteId, parsed.orderType);
 
       await client.query(
         `
@@ -2069,6 +2182,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "assignments_incompatible_with_workgroup") {
       res.status(400).json({ error: "assignments_incompatible_with_workgroup" });
+      return;
+    }
+    if (message === "invalid_order_type") {
+      res.status(400).json({ error: "invalid_order_type" });
       return;
     }
     sendPgError(res, err);
@@ -2390,6 +2507,7 @@ export async function updateWorkOrderPlanning(
         parsed.classificationId,
         "work_order",
       );
+      await assertWorkOrderTypeForSite(client, effectiveSiteId, parsed.orderType);
 
       await client.query(
         `

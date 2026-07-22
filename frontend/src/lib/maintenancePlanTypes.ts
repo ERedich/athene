@@ -26,6 +26,7 @@ export type MaintenancePlan = {
   inspectionRoundKey: string | null;
   inspectionRoundName: string | null;
   plannedDurationMinutes: number | null;
+  orderType: string;
   intervalUnit: MaintenancePlanIntervalUnit;
   intervalValue: number;
   anchorDate: string;
@@ -55,6 +56,7 @@ export type MaintenancePlanFormState = {
   classificationId: string;
   inspectionRoundId: string;
   plannedDurationMinutes: number | null;
+  orderType: string;
   intervalUnit: MaintenancePlanIntervalUnit;
   intervalValue: number;
   nextDueAt: Date | null;
@@ -75,6 +77,7 @@ export const emptyMaintenancePlanForm = (siteId = ""): MaintenancePlanFormState 
   classificationId: "",
   inspectionRoundId: "",
   plannedDurationMinutes: null,
+  orderType: "maintenance",
   intervalUnit: "week",
   intervalValue: 4,
   nextDueAt: new Date(),
@@ -97,6 +100,7 @@ export function maintenancePlanToFormState(row: MaintenancePlan): MaintenancePla
     classificationId: row.classificationId ?? "",
     inspectionRoundId: row.inspectionRoundId ?? "",
     plannedDurationMinutes: row.plannedDurationMinutes,
+    orderType: row.orderType || "maintenance",
     intervalUnit: row.intervalUnit,
     intervalValue: row.intervalValue,
     nextDueAt: Number.isNaN(due.getTime()) ? new Date() : due,

@@ -44,7 +44,7 @@ import {
 import { EMPLOYEE_PSEUDO_ME, WORKGROUP_PSEUDO_MY } from "./workOrderListQuery.js";
 
 type AssistantRole = "user" | "assistant" | "system" | "tool";
-type WorkOrderType = "maintenance" | "repair" | "breakdown";
+type WorkOrderType = string;
 type WorkOrderStatus =
   | "open"
   | "assigned"
@@ -317,7 +317,6 @@ type TransactionSummaryRow = {
 const router = Router();
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const allowedOrderTypes: WorkOrderType[] = ["maintenance", "repair", "breakdown"];
 const allowedWorkOrderStatuses: WorkOrderStatus[] = [
   "open",
   "assigned",
@@ -606,7 +605,7 @@ function workOrderDatetimeToIso(value: unknown): string | null {
 }
 
 function isOrderType(value: unknown): value is WorkOrderType {
-  return typeof value === "string" && (allowedOrderTypes as string[]).includes(value);
+  return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 100;
 }
 
 function normalizeStatusText(value: string): string {
@@ -3807,7 +3806,7 @@ const tools = [
           },
           plannedEnd: { type: ["string", "null"] },
           plannedDurationMinutes: { type: ["integer", "null"] },
-          orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
+          orderType: { type: "string" },
           responsibleEmployeeIds: {
             type: "array",
             items: { type: "string" },
@@ -3834,7 +3833,7 @@ const tools = [
           plannedStart: { type: "string", description: "ISO 8601 datetime." },
           plannedEnd: { type: ["string", "null"] },
           plannedDurationMinutes: { type: ["integer", "null"] },
-          orderType: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
+          orderType: { type: "string" },
           responsibleEmployeeIds: {
             type: "array",
             items: { type: "string" },
@@ -3950,7 +3949,7 @@ const tools = [
     function: {
       name: "createWorkOrderSearchPreset",
       description:
-        "Create a saved work-order search configuration for the current user. Only include advanced fields the user explicitly requested; omit all others (server fills empty defaults). Require a name from the user. employeeId may include __ME__; workgroupId may include __MY_WORKGROUPS__; status uses API values open/assigned/started/paused/continued/ended/done/cancelled; orderType uses maintenance/repair/breakdown. Does not apply the filter to the open UI.",
+        "Create a saved work-order search configuration for the current user. Only include advanced fields the user explicitly requested; omit all others (server fills empty defaults). Require a name from the user. employeeId may include __ME__; workgroupId may include __MY_WORKGROUPS__; status uses API values open/assigned/started/paused/continued/ended/done/cancelled; orderType uses site work-order-type keys (e.g. plannedRepair, breakdown, maintenance, inspection). Does not apply the filter to the open UI.",
       parameters: {
         type: "object",
         properties: {
@@ -3988,7 +3987,7 @@ const tools = [
               updatedAtTo: { type: "string" },
               orderType: {
                 type: "array",
-                items: { type: "string", enum: ["maintenance", "repair", "breakdown"] },
+                items: { type: "string" },
               },
               status: {
                 type: "array",

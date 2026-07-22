@@ -1,4 +1,5 @@
-export type WorkOrderType = "maintenance" | "repair" | "breakdown";
+/** Stable key from site Stammdaten `workOrderType`. */
+export type WorkOrderType = string;
 
 export type WorkOrderFormFields = {
   orderNumber: number | null;

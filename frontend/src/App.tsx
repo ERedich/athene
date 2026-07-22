@@ -7,6 +7,10 @@ import { AssetsPage } from "./pages/AssetsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { BaumstrukturPage } from "./pages/BaumstrukturPage";
 import { ClassificationsPage } from "./pages/ClassificationsPage";
+import { AuftragstypenPage } from "./pages/AuftragstypenPage";
+import { ProblemePage } from "./pages/ProblemePage";
+import { UrsachenPage } from "./pages/UrsachenPage";
+import { MassnahmenPage } from "./pages/MassnahmenPage";
 import { CostCentersPage } from "./pages/CostCentersPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { SparePartsPage } from "./pages/SparePartsPage";
@@ -61,6 +65,10 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="cost-centers" element={<CostCentersPage />} />
+          <Route path="auftragstypen" element={<AuftragstypenPage />} />
+          <Route path="probleme" element={<ProblemePage />} />
+          <Route path="ursachen" element={<UrsachenPage />} />
+          <Route path="massnahmen" element={<MassnahmenPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="storage-locations" element={<StorageLocationsPage />} />

@@ -39,7 +39,7 @@ type WorkOrderRow = {
   plannedStart: string;
   plannedEnd: string;
   plannedDurationMinutes: number | null;
-  orderType: "maintenance" | "repair" | "breakdown";
+  orderType: string;
   status: "open" | "assigned" | "started" | "paused" | "continued" | "ended" | "done" | "cancelled";
   responsibleEmployeeIds: string[];
   doneBy: string | null;

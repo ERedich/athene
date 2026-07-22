@@ -707,8 +707,8 @@ export function WorkOrdersPage() {
   );
 
   const typeLabel = useCallback(
-    (value: WorkOrderType) => t(`workOrders.typeValues.${value}`),
-    [t],
+    (value: WorkOrderType) => refData.typeLabel(value),
+    [refData],
   );
 
   const durationBody = (row: WorkOrder) =>

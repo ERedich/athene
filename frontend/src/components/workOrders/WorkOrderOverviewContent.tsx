@@ -271,7 +271,10 @@ export function WorkOrderOverviewContent({ order }: Props) {
             label={t("workOrders.workgroup")}
             value={formatKeyName(order.workgroupKey, order.workgroupName)}
           />
-          <DetailRow label={t("workOrders.orderType")} value={t(`workOrders.typeValues.${order.orderType}`)} />
+          <DetailRow
+            label={t("workOrders.orderType")}
+            value={t(`workOrders.typeValues.${order.orderType}`, { defaultValue: order.orderType })}
+          />
           <DetailRow
             label={t("workOrders.responsible")}
             value={formatKeyName(order.responsibleEmployeeKey, order.responsibleEmployeeName)}

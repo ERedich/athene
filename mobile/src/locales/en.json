@@ -302,6 +302,14 @@
     "feedbackSaved": "Feedback saved.",
     "feedbackHoursInvalid": "Please enter a valid number of hours greater than 0.",
     "feedbackRemarkTooLong": "Remark must be 2000 characters or less.",
+    "pcrSection": "PCR",
+    "pcrProblem": "Problem",
+    "pcrCause": "Cause",
+    "pcrRemedy": "Remedy",
+    "pcrProblemPlaceholder": "Select problem",
+    "pcrCausePlaceholder": "Select cause",
+    "pcrRemedyPlaceholder": "Select remedy",
+    "pcrRequired": "Problem, cause and remedy are required when ending the order.",
     "feedbackSaveError": "Could not save feedback.",
     "feedbackInvalidBody": "Feedback input is invalid.",
     "cannotFeedbackFromStatus": "Feedback is not allowed for this order status.",
@@ -371,8 +379,10 @@
     },
     "typeValues": {
       "maintenance": "Maintenance",
+      "plannedRepair": "Planned repair",
       "repair": "Repair",
-      "breakdown": "Breakdown"
+      "breakdown": "Breakdown",
+      "inspection": "Inspection"
     },
     "statusValues": {
       "open": "Open",

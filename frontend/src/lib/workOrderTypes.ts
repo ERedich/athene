@@ -1,6 +1,7 @@
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
 
-export type WorkOrderType = "maintenance" | "repair" | "breakdown";
+/** Stable key from site Stammdaten `workOrderType` (e.g. plannedRepair, breakdown). */
+export type WorkOrderType = string;
 
 export type WorkOrderStatus =
   | "open"
@@ -23,6 +24,7 @@ export type WorkOrder = {
   assetId: string;
   assetKey: string;
   assetName: string;
+  assetClassificationId?: string | null;
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
@@ -42,6 +44,15 @@ export type WorkOrder = {
   doneByEmployeeName: string | null;
   pauseRemark: string | null;
   currentSegmentStartedAt: string | null;
+  problemId?: string | null;
+  problemKey?: string | null;
+  problemName?: string | null;
+  causeId?: string | null;
+  causeKey?: string | null;
+  causeName?: string | null;
+  remedyId?: string | null;
+  remedyKey?: string | null;
+  remedyName?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -117,6 +128,15 @@ export type WorkOrderReferenceCostCenter = {
   isActive: boolean;
 };
 
+export type WorkOrderReferenceOrderType = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  isActive: boolean;
+  sortOrder: number;
+};
+
 export type WorkOrderReferenceClassification = {
   id: string;
   key: string;
@@ -168,10 +188,15 @@ export type WorkOrderEditMeta = {
   assetId?: string;
   assetKey?: string;
   assetName?: string;
+  assetClassificationId?: string | null;
   name?: string;
   documentCount?: number;
   assetDocumentCount?: number;
   transactionCount?: number;
+  orderType?: WorkOrderType;
+  problemId?: string | null;
+  causeId?: string | null;
+  remedyId?: string | null;
 };
 
 export function workOrderToEditMeta(row: WorkOrder | WorkOrderEditMeta): WorkOrderEditMeta {
@@ -186,10 +211,16 @@ export function workOrderToEditMeta(row: WorkOrder | WorkOrderEditMeta): WorkOrd
     assetId: "assetId" in row ? row.assetId : undefined,
     assetKey: "assetKey" in row ? row.assetKey : undefined,
     assetName: "assetName" in row ? row.assetName : undefined,
+    assetClassificationId:
+      "assetClassificationId" in row ? (row.assetClassificationId ?? null) : undefined,
     name: "name" in row ? row.name : undefined,
     documentCount: "documentCount" in row ? row.documentCount : undefined,
     assetDocumentCount: "assetDocumentCount" in row ? row.assetDocumentCount : undefined,
     transactionCount: "transactionCount" in row ? row.transactionCount : undefined,
+    orderType: "orderType" in row ? row.orderType : undefined,
+    problemId: "problemId" in row ? (row.problemId ?? null) : undefined,
+    causeId: "causeId" in row ? (row.causeId ?? null) : undefined,
+    remedyId: "remedyId" in row ? (row.remedyId ?? null) : undefined,
   };
 }
 

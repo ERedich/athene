@@ -7,8 +7,9 @@ import {
   syncWorkOrderInspectionPointsSnapshot,
 } from "./inspectionRoundSnapshot.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
+import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
 
-export type WorkOrderType = "maintenance" | "repair" | "breakdown";
+export type WorkOrderType = string;
 
 export type WorkOrderCreateInput = {
   name: string;
@@ -227,6 +228,8 @@ export async function createWorkOrderRecord(
     effectiveSiteId,
     siteAccessSql,
   );
+
+  await assertWorkOrderTypeForSite(client, effectiveSiteId, input.orderType);
 
   const inserted = await client.query<{ id: string }>(
     `

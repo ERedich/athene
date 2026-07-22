@@ -117,6 +117,20 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     [form.costCenterId, refData.costCenters, selectedAsset?.siteId, t],
   );
 
+  const orderTypeOptions = useMemo<SelectOption[]>(() => {
+    // form.siteId is seeded from the user's Hauptbuchungskreis on create.
+    const siteId = selectedAsset?.siteId || form.siteId || user?.workingSiteId || "";
+    if (!siteId) return [];
+    return refData.workOrderTypes
+      .filter((row) => row.siteId === siteId)
+      .filter((row) => row.isActive || row.key === form.orderType)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
+      .map((row) => ({
+        label: row.isActive ? row.name : `${row.name} (${t("auftragstypen.inactive")})`,
+        value: row.key,
+      }));
+  }, [form.orderType, form.siteId, refData.workOrderTypes, selectedAsset?.siteId, t, user?.workingSiteId]);
+
   const classificationOptions = useMemo<SelectOption[]>(
     () =>
       refData.classifications
@@ -157,6 +171,17 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     const ok = inspectionRoundOptions.some((o) => o.value === form.inspectionRoundId);
     if (!ok) setForm((cur) => ({ ...cur, inspectionRoundId: "" }));
   }, [form.inspectionRoundId, inspectionRoundOptions]);
+
+  useEffect(() => {
+    if (!form.siteId && !selectedAsset?.siteId) return;
+    if (orderTypeOptions.length === 0) return;
+    const stillAllowed = orderTypeOptions.some((o) => o.value === form.orderType);
+    if (stillAllowed) return;
+    const preferred =
+      orderTypeOptions.find((o) => o.value === "maintenance")?.value ?? orderTypeOptions[0]?.value;
+    if (!preferred) return;
+    setForm((cur) => ({ ...cur, orderType: preferred }));
+  }, [form.orderType, form.siteId, orderTypeOptions, selectedAsset?.siteId]);
 
   const workgroupOptions = useMemo<SelectOption[]>(
     () =>
@@ -227,13 +252,14 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
   }, [onClose]);
 
   const openCreate = useCallback(() => {
-    const defaultSiteId = siteFieldLocked ? (user?.workingSiteId ?? "") : "";
+    // Neue Datensätze starten immer im Hauptbuchungskreis des Users.
+    const defaultSiteId = user?.workingSiteId ?? "";
     setEditingId(null);
     setEditingRow(null);
     setActiveTabIndex(maintenancePlanDialogTabs.General);
     setForm(emptyMaintenancePlanForm(defaultSiteId));
     setDialogVisible(true);
-  }, [siteFieldLocked, user?.workingSiteId]);
+  }, [user?.workingSiteId]);
 
   const openEdit = useCallback((row: MaintenancePlan) => {
     setEditingId(row.id);
@@ -255,6 +281,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
       !form.assetId ||
       !form.costCenterId ||
       !form.workgroupId ||
+      !form.orderType ||
       !form.nextDueAt ||
       form.responsibleEmployeeIds.length === 0 ||
       form.intervalValue < 1
@@ -279,6 +306,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
         classificationId: form.classificationId || null,
         inspectionRoundId: form.inspectionRoundId || null,
         plannedDurationMinutes: form.plannedDurationMinutes,
+        orderType: form.orderType,
         intervalUnit: form.intervalUnit,
         intervalValue: form.intervalValue,
         nextDueAt: form.nextDueAt.toISOString(),
@@ -335,6 +363,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     siteDropdownOptions,
     assetOptions,
     costCenterOptions,
+    orderTypeOptions,
     classificationOptions,
     inspectionRoundOptions,
     workgroupOptions,

@@ -89,7 +89,23 @@ export type AssetRow = {
   keyPath?: string | null;
 };
 
-export type WorkOrderType = "maintenance" | "repair" | "breakdown";
+export type WorkOrderType = string;
+
+export type WorkOrderTypeRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  siteKey: string;
+  siteName: string;
+  siteColorHex: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+};
 
 /** Aligns with `frontend/src/index.css` work-order status cell backgrounds (~30%). */
 export type WorkOrderStatus =
@@ -122,6 +138,7 @@ export type WorkOrderRow = {
   assetId: string;
   assetKey: string;
   assetName: string;
+  assetClassificationId?: string | null;
   costCenterId: string;
   costCenterKey: string;
   costCenterName: string;
@@ -139,6 +156,15 @@ export type WorkOrderRow = {
   workgroupKey: string | null;
   workgroupName: string | null;
   responsibleEmployeeIds: string[];
+  problemId?: string | null;
+  problemKey?: string | null;
+  problemName?: string | null;
+  causeId?: string | null;
+  causeKey?: string | null;
+  causeName?: string | null;
+  remedyId?: string | null;
+  remedyKey?: string | null;
+  remedyName?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string;

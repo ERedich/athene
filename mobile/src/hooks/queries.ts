@@ -27,6 +27,7 @@ import type {
   TransactionRow,
   WorkOrderRow,
   WorkOrderType,
+  WorkOrderTypeRow,
   WorkgroupRow,
   EmployeeRow,
 } from "../types/api";
@@ -34,6 +35,7 @@ import type {
 export const queryKeys = {
   sites: ["sites"] as const,
   costCenters: ["costCenters"] as const,
+  workOrderTypes: ["workOrderTypes"] as const,
   classifications: ["classifications"] as const,
   assets: ["assets"] as const,
   assetDocuments: (assetId: string) => ["assets", assetId, "documents"] as const,
@@ -54,6 +56,8 @@ export type WorkOrderActionErrorCode =
   | "cannot_pause_from_status"
   | "cannot_feedback_from_status"
   | "invalid_body"
+  | "pause_remark_required"
+  | "pcr_required"
   | "unknown";
 
 export class WorkOrderActionError extends Error {
@@ -71,6 +75,9 @@ export type WorkOrderFeedbackBody = {
   statusAction?: "none" | "pause" | "end";
   pauseRemark?: string | null;
   additionalHours?: { employeeId: string; hours: number }[];
+  problemId?: string | null;
+  causeId?: string | null;
+  remedyId?: string | null;
   /** @deprecated use statusAction: "end" */
   completeOrder?: boolean;
 };
@@ -83,9 +90,12 @@ async function readActionErrorCode(r: Response): Promise<WorkOrderActionErrorCod
       code === "cannot_start_from_status" ||
       code === "cannot_pause_from_status" ||
       code === "cannot_feedback_from_status" ||
-      code === "invalid_body"
+      code === "invalid_body" ||
+      code === "pause_remark_required" ||
+      code === "pcr_required" ||
+      code === "pcr_incomplete"
     ) {
-      return code;
+      return code === "pcr_incomplete" ? "pcr_required" : code;
     }
   } catch {
     // Ignore JSON parsing failures and fallback to unknown.
@@ -134,6 +144,17 @@ export function useCostCentersQuery() {
       const r = await apiFetch("/api/cost-centers");
       if (!r.ok) throw new Error("costCenters");
       return r.json() as Promise<CostCenterRow[]>;
+    },
+  });
+}
+
+export function useWorkOrderTypesQuery() {
+  return useQuery({
+    queryKey: queryKeys.workOrderTypes,
+    queryFn: async (): Promise<WorkOrderTypeRow[]> => {
+      const r = await apiFetch("/api/work-order-types");
+      if (!r.ok) throw new Error("workOrderTypes");
+      return r.json() as Promise<WorkOrderTypeRow[]>;
     },
   });
 }
