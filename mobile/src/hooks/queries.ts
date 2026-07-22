@@ -543,6 +543,14 @@ export async function postWorkOrderPause(orderId: string): Promise<WorkOrderRow>
 }
 
 export async function postWorkOrderFeedback(orderId: string, body: WorkOrderFeedbackBody): Promise<WorkOrderRow> {
+  const pcrPayload =
+    body.problemId !== undefined || body.causeId !== undefined || body.remedyId !== undefined
+      ? {
+          problemId: body.problemId ?? null,
+          causeId: body.causeId ?? null,
+          remedyId: body.remedyId ?? null,
+        }
+      : {};
   const r = await apiFetch(`/api/work-orders/${orderId}/feedback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -552,6 +560,7 @@ export async function postWorkOrderFeedback(orderId: string, body: WorkOrderFeed
       statusAction: body.statusAction ?? (body.completeOrder ? "end" : "none"),
       pauseRemark: body.pauseRemark ?? null,
       additionalHours: body.additionalHours ?? [],
+      ...pcrPayload,
     }),
   });
   if (!r.ok) {

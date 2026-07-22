@@ -1778,9 +1778,13 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
           statusAction: feedbackStatusAction,
           pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
           additionalHours,
-          problemId: pcrEnabled ? pcrProblemId || null : undefined,
-          causeId: pcrEnabled ? pcrCauseId || null : undefined,
-          remedyId: pcrEnabled ? pcrRemedyId || null : undefined,
+          ...(pcrEnabled && (pcrProblemId || pcrCauseId || pcrRemedyId)
+            ? {
+                problemId: pcrProblemId || null,
+                causeId: pcrCauseId || null,
+                remedyId: pcrRemedyId || null,
+              }
+            : {}),
         }),
       });
       if (!res.ok) {

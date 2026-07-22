@@ -1185,7 +1185,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       remark: feedbackRemark.trim() ? feedbackRemark.trim() : null,
       statusAction: feedbackStatusAction,
       pauseRemark: feedbackStatusAction === "pause" ? feedbackPauseRemark.trim() : null,
-      ...(pcrEnabled
+      ...(pcrEnabled && (pcrProblemId || pcrCauseId || pcrRemedyId)
         ? {
             problemId: pcrProblemId ?? null,
             causeId: pcrCauseId ?? null,

@@ -267,12 +267,14 @@ function parseFeedbackBody(body: unknown): ParsedFeedbackBody | "pause_remark_re
     }
   }
 
-  const pcrProvided =
-    o.problemId !== undefined || o.causeId !== undefined || o.remedyId !== undefined;
   const problemId = parseOptionalPcrUuid(o.problemId);
   const causeId = parseOptionalPcrUuid(o.causeId);
   const remedyId = parseOptionalPcrUuid(o.remedyId);
   if (problemId === "invalid" || causeId === "invalid" || remedyId === "invalid") return null;
+
+  // Only treat PCR as provided when at least one id is set. Sending explicit nulls
+  // (common from clients when PCR UI is enabled but empty) must not clear existing PCR.
+  const pcrProvided = Boolean(problemId || causeId || remedyId);
 
   return {
     hours,

@@ -295,7 +295,7 @@ export function WorkOrderFeedbackModal({
       remark: remark.trim() ? remark.trim() : null,
       statusAction,
       pauseRemark: statusAction === "pause" ? pauseRemark.trim() : null,
-      ...(pcrEnabled
+      ...(pcrEnabled && (problemId || causeId || remedyId)
         ? {
             problemId: problemId ?? null,
             causeId: causeId ?? null,
