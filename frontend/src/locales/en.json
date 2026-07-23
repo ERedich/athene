@@ -130,6 +130,9 @@
     "backToHub": "All guides",
     "required": "Required",
     "optional": "Optional",
+    "complete": "Done",
+    "completeHint": "Prerequisites met — guide still available to open",
+    "progress": "{{done}} / {{total}} required prerequisites met",
     "requiredCount": "{{required}} of {{total}} steps are required",
     "tipLabel": "Tip",
     "links": {

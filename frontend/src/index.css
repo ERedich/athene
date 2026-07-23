@@ -6637,6 +6637,16 @@ button.app-calendar-day__num:focus-visible {
     color 0.15s ease;
 }
 
+.app-getting-started-tile--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 40%, var(--getting-started-tile-border));
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 14%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 4%, var(--surface-overlay))
+    );
+}
+
 .app-getting-started-tile:hover,
 .app-getting-started-tile:focus-visible {
   border-color: color-mix(in srgb, var(--color-primary) 45%, var(--getting-started-tile-border));
@@ -6644,9 +6654,32 @@ button.app-calendar-day__num:focus-visible {
   outline: none;
 }
 
+.app-getting-started-tile--complete:hover,
+.app-getting-started-tile--complete:focus-visible {
+  border-color: color-mix(in srgb, rgb(34 197 94) 55%, var(--getting-started-tile-border));
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 18%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 6%, var(--surface-overlay))
+    );
+}
+
 .app-getting-started-tile:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+.app-getting-started-tile--complete:focus-visible {
+  outline-color: rgb(34 197 94);
+}
+
+.app-getting-started-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
 }
 
 .app-getting-started-tile-icon {
@@ -6659,6 +6692,26 @@ button.app-calendar-day__num:focus-visible {
 .app-getting-started-tile:hover .app-getting-started-tile-icon,
 .app-getting-started-tile:focus-visible .app-getting-started-tile-icon {
   color: var(--color-primary);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-icon {
+  color: rgb(22 163 74);
+}
+
+.app-getting-started-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 22%, transparent);
 }
 
 .app-getting-started-tile-title {
@@ -6675,6 +6728,16 @@ button.app-calendar-day__num:focus-visible {
   color: var(--color-on-surface-variant);
 }
 
+.app-getting-started-tile-progress {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-progress {
+  color: rgb(21 128 61);
+}
+
 .app-getting-started-tile-cta {
   margin-top: auto;
   display: inline-flex;
@@ -6686,6 +6749,10 @@ button.app-calendar-day__num:focus-visible {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-primary);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-cta {
+  color: rgb(22 163 74);
 }
 
 .app-getting-started-back {
@@ -6709,6 +6776,20 @@ button.app-calendar-day__num:focus-visible {
   align-items: flex-start;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--surface-overlay);
+}
+
+.app-getting-started-detail-header--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 40%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 14%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 4%, var(--surface-overlay))
+    );
 }
 
 .app-getting-started-detail-icon {
@@ -6723,8 +6804,20 @@ button.app-calendar-day__num:focus-visible {
   color: var(--color-primary);
 }
 
+.app-getting-started-detail-header--complete .app-getting-started-detail-icon {
+  background: color-mix(in srgb, rgb(34 197 94) 20%, var(--surface-overlay));
+  color: rgb(22 163 74);
+}
+
 .app-getting-started-detail-titles {
   min-width: 0;
+}
+
+.app-getting-started-detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
 }
 
 .app-getting-started-steps {
@@ -6746,6 +6839,16 @@ button.app-calendar-day__num:focus-visible {
   border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
 }
 
+.app-getting-started-step--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 35%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 12%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 3%, var(--surface-overlay))
+    );
+}
+
 .app-getting-started-step-index {
   display: flex;
   align-items: center;
@@ -6758,6 +6861,11 @@ button.app-calendar-day__num:focus-visible {
   font-weight: 700;
   color: var(--color-on-surface);
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.app-getting-started-step-index--complete {
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 24%, transparent);
 }
 
 .app-getting-started-step-topline {
@@ -6796,6 +6904,11 @@ button.app-calendar-day__num:focus-visible {
 .app-getting-started-badge--optional {
   color: var(--color-on-surface-variant);
   background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-getting-started-badge--complete {
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 22%, transparent);
 }
 
 .app-getting-started-step-text {

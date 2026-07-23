@@ -130,6 +130,9 @@
     "backToHub": "Alle Guides",
     "required": "Pflicht",
     "optional": "Optional",
+    "complete": "Erledigt",
+    "completeHint": "Voraussetzungen erfüllt — Guide weiterhin einsehbar",
+    "progress": "{{done}} / {{total}} Pflicht-Voraussetzungen erfüllt",
     "requiredCount": "{{required}} von {{total}} Schritten sind Pflicht",
     "tipLabel": "Tipp",
     "links": {
