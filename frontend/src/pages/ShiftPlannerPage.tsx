@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +23,7 @@ import {
   isoWeekNumberForWeekStart,
 } from "../lib/calendar/calendarDates";
 import type { ShiftPlannerViewMode } from "../lib/shiftPlanner/shiftPlannerViewMode";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 
 const TAB_OVERVIEW = 0;
 
@@ -109,25 +109,7 @@ export function ShiftPlannerPage() {
     viewMode,
   ]);
 
-  const updateTabInk = useCallback(() => {
-    const host = tabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    const raf = requestAnimationFrame(updateTabInk);
-    return () => cancelAnimationFrame(raf);
-  }, [activeTab, updateTabInk]);
-
-  useEffect(() => {
-    window.addEventListener("resize", updateTabInk);
-    return () => window.removeEventListener("resize", updateTabInk);
-  }, [updateTabInk]);
+  useTabInk(tabHostRef, [activeTab]);
 
   const handleTabChange = useCallback((event: { index: number }) => {
     setActiveTab(event.index);
@@ -136,8 +118,8 @@ export function ShiftPlannerPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="app-tabbed-page-shell min-h-0 flex flex-1 flex-col">
-        <div ref={tabHostRef} className="app-tabview-with-ink">
-          <TabView className="app-sticky-tabs" activeIndex={activeTab} onTabChange={handleTabChange}>
+        <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
+          <TabView className={STANDARD_TAB_VIEW_CLASS} activeIndex={activeTab} onTabChange={handleTabChange}>
             <TabPanel header={t("schichtplaner.tabOverview")}>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ShiftWeekCalendar

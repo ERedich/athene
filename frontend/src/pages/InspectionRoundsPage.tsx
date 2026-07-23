@@ -40,6 +40,7 @@ import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { collectSubtreeAssetIds } from "../lib/assetTree";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 
 type SiteOption = {
@@ -79,6 +80,7 @@ export function InspectionRoundsPage() {
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const tabHostRef = useRef<HTMLDivElement | null>(null);
   const requestedInspectionPointAssets = useRef(new Set<string>());
 
   const [rounds, setRounds] = useState<InspectionRound[]>([]);
@@ -94,6 +96,8 @@ export function InspectionRoundsPage() {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [form, setForm] = useState<InspectionRoundFormState>(emptyInspectionRoundForm());
+
+  const updateTabInk = useTabInk(tabHostRef, [activeTabIndex, dialogVisible, dialogLoading], dialogVisible);
 
   const siteOptions = useMemo<SelectOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
@@ -538,6 +542,7 @@ export function InspectionRoundsPage() {
         header={editingId ? t("inspectionRounds.editTitle") : t("inspectionRounds.createTitle")}
         visible={dialogVisible}
         className="app-big-modal-window app-tabbed-modal-window"
+        onShow={updateTabInk}
         onHide={closeDialog}
         footer={dialogFooter}
         modal
@@ -551,9 +556,9 @@ export function InspectionRoundsPage() {
             <i className="pi pi-spin pi-spinner text-2xl" aria-hidden />
           </div>
         ) : (
-          <div className="app-tabview-with-ink app-wo-edit-tab-host">
+          <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
             <TabView
-              className="app-sticky-tabs"
+              className={STANDARD_TAB_VIEW_CLASS}
               activeIndex={activeTabIndex}
               onTabChange={(event) => setActiveTabIndex(event.index)}
             >

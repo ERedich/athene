@@ -4,11 +4,11 @@ import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
-import { ColorPicker } from "primereact/colorpicker";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { AppDialog } from "../components/AppDialog";
+import { AppColorPicker } from "../components/AppColorPicker";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
@@ -18,7 +18,11 @@ import { lucidePrimeBtnIcon } from "../icons/lucide";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
-import { overlayAppendTo } from "../lib/overlayAppendTo";
+import {
+  DEFAULT_PICKER_COLOR_HEX,
+  pickerValueFromStored,
+  storedFromPickerValue,
+} from "../lib/colorHex";
 import { readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 
@@ -41,22 +45,7 @@ type FormState = {
   colorHex: string;
 };
 
-const defaultColorHex = "#64748b";
-
-function pickerValueFromStored(hex: string): string {
-  return hex.replace(/^#/, "").toLowerCase();
-}
-
-function storedFromPickerValue(raw: string): string {
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/i.exec(withHash);
-  if (!m) return defaultColorHex;
-  let h = m[1]!.toLowerCase();
-  if (h.length === 3) {
-    h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
-  }
-  return `#${h}`;
-}
+const defaultColorHex = DEFAULT_PICKER_COLOR_HEX;
 
 const emptyForm = (): FormState => ({
   key: "",
@@ -495,18 +484,11 @@ export function SitesPage() {
               {t("sites.color")}
             </label>
             <div className="flex flex-wrap items-center gap-3">
-              <ColorPicker
+              <AppColorPicker
                 inputId="site-colorHex"
-                format="hex"
-                value={pickerValueFromStored(form.colorHex)}
-                onChange={(e) => {
-                  const v = e.value;
-                  const raw = typeof v === "string" ? v : "";
-                  setForm((f) => ({ ...f, colorHex: storedFromPickerValue(raw) }));
-                }}
-                appendTo={overlayAppendTo}
+                value={form.colorHex}
+                onChange={(colorHex) => setForm((f) => ({ ...f, colorHex }))}
               />
-              <span className="text-sm text-on-surface-variant">{form.colorHex}</span>
             </div>
           </div>
           <label className="flex items-center gap-3 cursor-pointer group">

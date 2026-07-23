@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import { Button } from "primereact/button";
 
 import { lucidePrimeBtnIcon } from "../../icons/lucide";
+import { STANDARD_TAB_HOST_CLASS } from "../../lib/tabs";
 
 type SparePartEditFooterProps = {
   cancelLabel: string;
@@ -51,7 +52,7 @@ type SparePartEditTabHostProps = {
 /** Tab host wrapper used by fullscreen (and formerly modal) spare-part edit. */
 export function SparePartEditTabHost({ tabHostRef, children }: SparePartEditTabHostProps) {
   return (
-    <div ref={tabHostRef} className="app-tabview-with-ink app-sp-edit-tab-host">
+    <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
       {children}
     </div>
   );

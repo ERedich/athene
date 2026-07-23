@@ -37,6 +37,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
 import { KpiBuilderPage } from "./pages/KpiBuilderPage";
+import { LayoutEditorPage } from "./pages/LayoutEditorPage";
 import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
 import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
+          <Route path="layout-editor" element={<LayoutEditorPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />

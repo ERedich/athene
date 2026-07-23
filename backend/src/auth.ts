@@ -1,11 +1,13 @@
 import { Router, type Request, type Response } from "express";
 
 import {
+  DEFAULT_PRIMARY_COLOR_HEX,
   fetchAppParameterBooleans,
   getAssetKeyGenerationMode,
   getAssetTypeDisplayConfig,
   getDefaultShiftHours,
   getDefaultWorkOrderWorkgroupId,
+  getPrimaryColorHex,
   getShowAssetKeyPath,
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
@@ -132,6 +134,7 @@ router.get("/me", async (req: Request, res: Response) => {
     let appParameterAssetKeyMode: Awaited<ReturnType<typeof getAssetKeyGenerationMode>> = "manual";
     let appParameterShowAssetKeyPath = false;
     let appParameterAssetKeyPathSeparator = ".";
+    let appParameterPrimaryColorHex = DEFAULT_PRIMARY_COLOR_HEX;
     try {
       appParameterBooleans = await fetchAppParameterBooleans(pool);
     } catch (paramErr) {
@@ -164,6 +167,11 @@ router.get("/me", async (req: Request, res: Response) => {
     } catch (sakpErr) {
       console.warn("[athene-backend] GN-SAKP load skipped:", sakpErr);
     }
+    try {
+      appParameterPrimaryColorHex = await getPrimaryColorHex(pool);
+    } catch (primErr) {
+      console.warn("[athene-backend] GN-PRIM load skipped:", primErr);
+    }
     res.json({
       user,
       appParameterBooleans,
@@ -173,6 +181,7 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterAssetKeyMode,
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,
+      appParameterPrimaryColorHex,
     });
   } catch (err) {
     console.error(err);

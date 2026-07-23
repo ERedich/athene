@@ -63,7 +63,7 @@ const WORK_ORDER_STATUSES = [
   "cancelled",
 ] as const;
 
-const TRANSACTION_TYPES = ["IN", "EX", "RM", "RT", "IV"] as const;
+const TRANSACTION_TYPES = ["IN", "EX", "RM", "RT", "IV", "ZU"] as const;
 const ASSET_TYPES = ["site", "structure", "line", "maintenanceObject"] as const;
 
 export const KPI_ENTITY_DEFS: Record<KpiEntity, KpiEntityDef> = {

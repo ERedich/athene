@@ -30,6 +30,8 @@ export type AuthSession = {
   /** GN-SAKP */
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;
+  /** GN-PRIM: CSS --color-primary hex. */
+  appParameterPrimaryColorHex: string;
   refresh: () => Promise<void>;
 };
 

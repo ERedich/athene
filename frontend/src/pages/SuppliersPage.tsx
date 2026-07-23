@@ -3,6 +3,7 @@ import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
+import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -20,6 +21,24 @@ import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
+import type { AppLayout } from "../lib/layoutEditor/api";
+import { fetchActiveAppLayout } from "../lib/layoutEditor/api";
+import {
+  coerceWidgetValueToStorage,
+  formatStorageForTable,
+  storageToCheckbox,
+  storageToDate,
+} from "../lib/layoutEditor/dynamicFieldValue";
+import {
+  getFieldCatalog,
+  normalizeModalPayload,
+  resolveColumnWidget,
+  SUPPLIER_DYNAMIC_FIELD_KEYS,
+  type FieldWidget,
+  type ModalColumnDef,
+  type ModalLayoutPayload,
+  type TableLayoutPayload,
+} from "../lib/layoutEditor/types";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
@@ -32,6 +51,8 @@ type SiteOption = {
 };
 
 type SiteDropdownOption = { label: string; value: string };
+
+type DynamicFields = Record<(typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number], string | null>;
 
 type Supplier = {
   id: string;
@@ -50,7 +71,7 @@ type Supplier = {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
-};
+} & DynamicFields;
 
 type FormState = {
   key: string;
@@ -61,6 +82,12 @@ type FormState = {
   phone: string;
   email: string;
   isActive: boolean;
+} & Record<(typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number], string>;
+
+const emptyDynamicFields = (): Record<(typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number], string> => {
+  const out = {} as Record<(typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number], string>;
+  for (const key of SUPPLIER_DYNAMIC_FIELD_KEYS) out[key] = "";
+  return out;
 };
 
 const emptyForm = (): FormState => ({
@@ -72,7 +99,161 @@ const emptyForm = (): FormState => ({
   phone: "",
   email: "",
   isActive: true,
+  ...emptyDynamicFields(),
 });
+
+const FALLBACK_MODAL: ModalLayoutPayload = {
+  version: 1,
+  rows: [
+    {
+      id: "r-key",
+      columns: [
+        {
+          id: "c-key",
+          fieldKey: "key",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: true,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-name",
+      columns: [
+        {
+          id: "c-name",
+          fieldKey: "name",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: true,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-customerNumber",
+      columns: [
+        {
+          id: "c-customerNumber",
+          fieldKey: "customerNumber",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: false,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-address",
+      columns: [
+        {
+          id: "c-address",
+          fieldKey: "address",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: false,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-phone",
+      columns: [
+        {
+          id: "c-phone",
+          fieldKey: "phone",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: false,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-email",
+      columns: [
+        {
+          id: "c-email",
+          fieldKey: "email",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: false,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-siteId",
+      columns: [
+        {
+          id: "c-siteId",
+          fieldKey: "siteId",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: true,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+    {
+      id: "r-isActive",
+      columns: [
+        {
+          id: "c-isActive",
+          fieldKey: "isActive",
+          kind: "field",
+          label: null,
+          widget: null,
+          span: 12,
+          required: false,
+          readonly: false,
+          visible: true,
+        },
+      ],
+    },
+  ],
+};
+
+const FALLBACK_TABLE: TableLayoutPayload = {
+  version: 1,
+  columns: [
+    { fieldKey: "key", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "name", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "customerNumber", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "phone", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "email", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "siteName", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "isActive", width: null, visible: true, sortable: false, frozen: false },
+    { fieldKey: "createdAt", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "createdBy", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "updatedAt", width: null, visible: true, sortable: true, frozen: false },
+    { fieldKey: "updatedBy", width: null, visible: true, sortable: true, frozen: false },
+  ],
+  sort: [],
+  groupBy: [],
+};
 
 const actionNavItem =
   "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
@@ -84,14 +265,28 @@ const createActionIcon = "text-green-500/70";
 const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 const deleteActionIcon = "text-red-500";
 
+function findModalColumn(
+  modal: ModalLayoutPayload,
+  fieldKey: string,
+): ModalColumnDef | undefined {
+  for (const row of modal.rows) {
+    for (const col of row.columns) {
+      if (col.fieldKey === fieldKey) return col;
+    }
+  }
+  return undefined;
+}
+
 export function SuppliersPage() {
   const { t, i18n } = useTranslation();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const catalog = useMemo(() => getFieldCatalog("suppliers"), []);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [sites, setSites] = useState<SiteOption[]>([]);
+  const [activeLayout, setActiveLayout] = useState<AppLayout | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -100,9 +295,35 @@ export function SuppliersPage() {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const modal = useMemo(
+    () => normalizeModalPayload(activeLayout?.modal ?? FALLBACK_MODAL),
+    [activeLayout],
+  );
+  const tableLayout = activeLayout?.table ?? FALLBACK_TABLE;
+
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
     [sites],
+  );
+
+  const fieldDisplayLabel = useCallback(
+    (fieldKey: string) => {
+      const col = findModalColumn(modal, fieldKey);
+      const custom = col?.label?.trim();
+      if (custom) return custom;
+      const def = catalog.find((f) => f.fieldKey === fieldKey);
+      return def ? t(def.labelKey) : fieldKey;
+    },
+    [catalog, modal, t],
+  );
+
+  const fieldWidget = useCallback(
+    (fieldKey: string): FieldWidget => {
+      const col = findModalColumn(modal, fieldKey);
+      if (col) return resolveColumnWidget(col, catalog);
+      return catalog.find((f) => f.fieldKey === fieldKey)?.widget ?? "text";
+    },
+    [catalog, modal],
   );
 
   const renderSiteDropdownOption = useCallback(
@@ -154,8 +375,8 @@ export function SuppliersPage() {
   const filteredSuppliers = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return suppliers;
-    return suppliers.filter((row) =>
-      [
+    return suppliers.filter((row) => {
+      const base = [
         row.key,
         row.name,
         row.customerNumber,
@@ -167,12 +388,14 @@ export function SuppliersPage() {
         row.siteColorHex,
         row.createdBy,
         row.updatedBy,
-      ]
+        ...SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => row[k as keyof Supplier]),
+      ];
+      return base
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
+        .includes(q);
+    });
   }, [suppliers, searchTerm]);
 
   useEffect(() => {
@@ -185,9 +408,10 @@ export function SuppliersPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [suppliersRes, sitesRes] = await Promise.all([
+      const [suppliersRes, sitesRes, layoutResult] = await Promise.all([
         apiFetch("/api/suppliers"),
         apiFetch("/api/sites"),
+        fetchActiveAppLayout(user.workingSiteId, "suppliers").catch(() => null),
       ]);
       if (!suppliersRes.ok || !sitesRes.ok) throw new Error("load");
       const [suppliersData, sitesData] = (await Promise.all([
@@ -196,6 +420,7 @@ export function SuppliersPage() {
       ])) as [Supplier[], SiteOption[]];
       setSuppliers(suppliersData);
       setSites(sitesData);
+      setActiveLayout(layoutResult);
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -205,7 +430,7 @@ export function SuppliersPage() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, user.workingSiteId]);
 
   useEffect(() => {
     void loadData();
@@ -222,6 +447,11 @@ export function SuppliersPage() {
 
   const openEdit = useCallback((row: Supplier) => {
     setEditingId(row.id);
+    const dynamic = emptyDynamicFields();
+    for (const key of SUPPLIER_DYNAMIC_FIELD_KEYS) {
+      const v = row[key];
+      dynamic[key] = v == null ? "" : String(v);
+    }
     setForm({
       key: row.key,
       name: row.name,
@@ -231,6 +461,7 @@ export function SuppliersPage() {
       phone: row.phone ?? "",
       email: row.email ?? "",
       isActive: row.isActive,
+      ...dynamic,
     });
     setDialogVisible(true);
   }, []);
@@ -263,6 +494,14 @@ export function SuppliersPage() {
     }
     setSaving(true);
     try {
+      const dynamicPayload = {} as DynamicFields;
+      for (const fieldKey of SUPPLIER_DYNAMIC_FIELD_KEYS) {
+        const widget = fieldWidget(fieldKey);
+        dynamicPayload[fieldKey] = coerceWidgetValueToStorage(
+          widget,
+          form[fieldKey],
+        );
+      }
       const payload = {
         key,
         name,
@@ -272,6 +511,7 @@ export function SuppliersPage() {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         isActive: form.isActive,
+        ...dynamicPayload,
       };
       const url = editingId ? `/api/suppliers/${editingId}` : "/api/suppliers";
       const res = await apiFetch(url, {
@@ -421,17 +661,6 @@ export function SuppliersPage() {
     };
   }, [confirmDelete, openCreate, openEdit, searchTerm, selectedSupplier, setHeaderActions, t]);
 
-  const activeBody = (row: Supplier) =>
-    row.isActive ? (
-      <Check
-        className="h-4 w-4 text-on-surface"
-        strokeWidth={1.75}
-        aria-label={t("suppliers.active")}
-      />
-    ) : (
-      <span className="text-on-surface-variant">{t("suppliers.inactive")}</span>
-    );
-
   const formatShortDt = (iso: string) => {
     try {
       return new Intl.DateTimeFormat(i18n.language, {
@@ -441,6 +670,142 @@ export function SuppliersPage() {
     } catch {
       return iso;
     }
+  };
+
+  const setFormField = (fieldKey: string, value: string | boolean) => {
+    setForm((f) => ({ ...f, [fieldKey]: value }));
+  };
+
+  const renderFormField = (col: ModalColumnDef) => {
+    if (!col.fieldKey || !col.visible) return null;
+    const fieldKey = col.fieldKey;
+    const widget = resolveColumnWidget(col, catalog);
+    const label = fieldDisplayLabel(fieldKey);
+    const required = col.required || fieldKey === "key" || fieldKey === "name" || fieldKey === "siteId";
+    const readonly = col.readonly || (fieldKey === "siteId" && siteFieldLocked);
+    const id = `supplier-${fieldKey}`;
+
+    if (widget === "checkbox" || fieldKey === "isActive") {
+      const checked =
+        fieldKey === "isActive"
+          ? form.isActive
+          : storageToCheckbox(form[fieldKey as keyof FormState]);
+      return (
+        <label className="flex cursor-pointer items-center gap-3">
+          <Checkbox
+            inputId={id}
+            checked={checked}
+            disabled={readonly}
+            onChange={(e) => {
+              if (fieldKey === "isActive") {
+                setFormField("isActive", Boolean(e.checked));
+              } else {
+                setFormField(fieldKey, e.checked ? "true" : "false");
+              }
+            }}
+          />
+          <span className="text-[11px] uppercase tracking-wide text-on-surface-variant">
+            {label}
+            {required ? <span className="app-required-marker">*</span> : null}
+          </span>
+        </label>
+      );
+    }
+
+    if (widget === "siteDropdown" || fieldKey === "siteId") {
+      return (
+        <div className="space-y-2">
+          <label htmlFor={id} className="block text-[11px] uppercase tracking-[0.1em] text-outline">
+            {label}
+            {required ? <span className="app-required-marker">*</span> : null}
+          </label>
+          <Dropdown
+            inputId={id}
+            value={form.siteId}
+            options={siteDropdownOptions}
+            onChange={(e) => setFormField("siteId", String(e.value ?? ""))}
+            placeholder={t("suppliers.sitePlaceholder")}
+            className="w-full app-inline-icon-dropdown"
+            itemTemplate={renderSiteDropdownOption}
+            valueTemplate={renderSiteDropdownValue}
+            filter
+            disabled={readonly}
+            appendTo={overlayAppendTo}
+          />
+        </div>
+      );
+    }
+
+    if (widget === "datetime") {
+      return (
+        <div className="space-y-2">
+          <label htmlFor={id} className="block text-[11px] uppercase tracking-[0.1em] text-outline">
+            {label}
+            {required ? <span className="app-required-marker">*</span> : null}
+          </label>
+          <Calendar
+            inputId={id}
+            value={storageToDate(form[fieldKey as keyof FormState])}
+            onChange={(e) => {
+              const d = e.value instanceof Date ? e.value : null;
+              setFormField(fieldKey, d && !Number.isNaN(d.getTime()) ? d.toISOString() : "");
+            }}
+            showTime
+            hourFormat="24"
+            disabled={readonly}
+            className="w-full"
+            inputClassName="w-full"
+            appendTo={overlayAppendTo}
+          />
+        </div>
+      );
+    }
+
+    const textValue = String(form[fieldKey as keyof FormState] ?? "");
+    return (
+      <div className="space-y-2">
+        <label htmlFor={id} className="block text-[11px] uppercase tracking-[0.1em] text-outline">
+          {label}
+          {required ? <span className="app-required-marker">*</span> : null}
+        </label>
+        <InputText
+          id={id}
+          value={textValue}
+          onChange={(e) => setFormField(fieldKey, e.target.value)}
+          className="w-full"
+          disabled={readonly}
+          type={widget === "email" ? "email" : "text"}
+          autoComplete={widget === "email" ? "email" : "off"}
+        />
+      </div>
+    );
+  };
+
+  const renderTableBody = (fieldKey: string, row: Supplier) => {
+    if (fieldKey === "siteName") return siteColumnBody(row);
+    if (fieldKey === "isActive") {
+      return row.isActive ? (
+        <Check
+          className="h-4 w-4 text-on-surface"
+          strokeWidth={1.75}
+          aria-label={t("suppliers.active")}
+        />
+      ) : (
+        <span className="text-on-surface-variant">{t("suppliers.inactive")}</span>
+      );
+    }
+    if (fieldKey === "createdAt" || fieldKey === "updatedAt") {
+      return formatShortDt(String(row[fieldKey as keyof Supplier] ?? ""));
+    }
+    const widget = fieldWidget(fieldKey);
+    const raw = row[fieldKey as keyof Supplier];
+    if (SUPPLIER_DYNAMIC_FIELD_KEYS.includes(fieldKey as (typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number])) {
+      return formatStorageForTable(widget, raw, i18n.language);
+    }
+    if (widget === "checkbox") {
+      return formatStorageForTable("checkbox", raw, i18n.language);
+    }
+    return raw == null ? "" : String(raw);
   };
 
   const dialogFooter = (
@@ -462,6 +827,8 @@ export function SuppliersPage() {
       />
     </div>
   );
+
+  const visibleTableColumns = tableLayout.columns.filter((c) => c.visible);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
@@ -493,44 +860,28 @@ export function SuppliersPage() {
           stateKey="athene-suppliers-table"
           emptyMessage={t("suppliers.empty")}
         >
-          <Column field="key" header={t("suppliers.key")} sortable />
-          <Column field="name" header={t("suppliers.name")} sortable />
-          <Column field="customerNumber" header={t("suppliers.customerNumber")} sortable />
-          <Column field="phone" header={t("suppliers.phone")} sortable />
-          <Column field="email" header={t("suppliers.email")} sortable />
-          <Column field="siteName" header={t("suppliers.site")} sortable body={siteColumnBody} />
-          <Column
-            columnKey="active"
-            header={t("suppliers.active")}
-            body={activeBody}
-            className="w-28 text-center"
-          />
-          <Column
-            field="createdAt"
-            header={t("suppliers.createdAt")}
-            body={(row: Supplier) => formatShortDt(row.createdAt)}
-            sortable
-            className="whitespace-nowrap text-on-surface-variant"
-          />
-          <Column
-            field="createdBy"
-            header={t("suppliers.createdBy")}
-            sortable
-            className="text-on-surface-variant"
-          />
-          <Column
-            field="updatedAt"
-            header={t("suppliers.updatedAt")}
-            body={(row: Supplier) => formatShortDt(row.updatedAt)}
-            sortable
-            className="whitespace-nowrap text-on-surface-variant"
-          />
-          <Column
-            field="updatedBy"
-            header={t("suppliers.updatedBy")}
-            sortable
-            className="text-on-surface-variant"
-          />
+          {visibleTableColumns.map((col) => (
+            <Column
+              key={col.fieldKey}
+              field={col.fieldKey}
+              header={fieldDisplayLabel(col.fieldKey)}
+              sortable={col.sortable}
+              frozen={Boolean(col.frozen)}
+              alignFrozen={col.frozen === "left" || col.frozen === "right" ? col.frozen : undefined}
+              style={col.width ? { width: col.width } : undefined}
+              body={(row: Supplier) => renderTableBody(col.fieldKey, row)}
+              className={
+                col.fieldKey === "isActive"
+                  ? "w-28 text-center"
+                  : col.fieldKey === "createdAt" ||
+                      col.fieldKey === "updatedAt" ||
+                      col.fieldKey === "createdBy" ||
+                      col.fieldKey === "updatedBy"
+                    ? "whitespace-nowrap text-on-surface-variant"
+                    : undefined
+              }
+            />
+          ))}
         </DataTable>
       </div>
 
@@ -546,137 +897,26 @@ export function SuppliersPage() {
         resizable={false}
       >
         <div className="flex flex-col gap-4 pt-1">
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-key"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.key")}
-              <span className="app-required-marker" aria-hidden>
-                *
-              </span>
-            </label>
-            <InputText
-              id="supplier-key"
-              value={form.key}
-              onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-name"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.name")}
-              <span className="app-required-marker" aria-hidden>
-                *
-              </span>
-            </label>
-            <InputText
-              id="supplier-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-customer-number"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.customerNumber")}
-            </label>
-            <InputText
-              id="supplier-customer-number"
-              value={form.customerNumber}
-              onChange={(e) => setForm((f) => ({ ...f, customerNumber: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-address"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.address")}
-            </label>
-            <InputText
-              id="supplier-address"
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-phone"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.phone")}
-            </label>
-            <InputText
-              id="supplier-phone"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-email"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.email")}
-            </label>
-            <InputText
-              id="supplier-email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              className="w-full"
-              autoComplete="email"
-            />
-          </div>
-          <div className="space-y-2">
-            <label
-              htmlFor="supplier-site"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("suppliers.site")}
-              <span className="app-required-marker" aria-hidden>
-                *
-              </span>
-            </label>
-            <Dropdown
-              inputId="supplier-site"
-              value={form.siteId}
-              options={siteDropdownOptions}
-              onChange={(e) => setForm((f) => ({ ...f, siteId: String(e.value ?? "") }))}
-              placeholder={t("suppliers.sitePlaceholder")}
-              className="w-full app-inline-icon-dropdown"
-              itemTemplate={renderSiteDropdownOption}
-              valueTemplate={renderSiteDropdownValue}
-              filter
-              disabled={siteFieldLocked}
-              appendTo={overlayAppendTo}
-            />
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <Checkbox
-              inputId="supplier-isActive"
-              checked={form.isActive}
-              onChange={(e) => setForm((f) => ({ ...f, isActive: Boolean(e.checked) }))}
-              className="rounded-none"
-            />
-            <span className="text-[11px] text-on-surface-variant uppercase tracking-wide">
-              {t("suppliers.active")}
-            </span>
-          </label>
+          {modal.rows.map((row) => {
+            const cols = row.columns.filter(
+              (c) => c.visible && (c.kind === "spacer" || c.fieldKey),
+            );
+            if (cols.length === 0) return null;
+            return (
+              <div key={row.id} className="grid grid-cols-12 gap-3">
+                {cols.map((col) => (
+                  <div
+                    key={col.id}
+                    style={{
+                      gridColumn: `span ${Math.min(12, Math.max(1, col.span))} / span ${Math.min(12, Math.max(1, col.span))}`,
+                    }}
+                  >
+                    {col.kind === "spacer" ? <div aria-hidden /> : renderFormField(col)}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </AppDialog>
     </div>

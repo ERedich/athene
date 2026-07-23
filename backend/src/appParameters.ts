@@ -27,6 +27,12 @@ export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP";
 /** Allgemein: Asset-TreeTable-Zeilen mit Asset-Typ-Farbe (10% Opazität). */
 export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR";
 
+/** Allgemein: Primärfarbe der UI (JSON colorHex → CSS --color-primary). */
+export const APP_PARAM_KEY_PRIMARY_COLOR = "GN-PRIM";
+
+/** Default when GN-PRIM is missing or invalid. */
+export const DEFAULT_PRIMARY_COLOR_HEX = "#f97316";
+
 /** Material: Lagerdaten in der Ersatzteil-App nachträglich bearbeiten. */
 export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD";
 
@@ -135,6 +141,15 @@ export function parseGnSakpJsonValue(raw: unknown): ShowAssetKeyPathConfig | nul
   }
   if (sepRaw.length !== 1) return null;
   return { show: true, separator: sepRaw };
+}
+
+export type PrimaryColorConfig = { colorHex: string };
+
+export function parseGnPrimJsonValue(raw: unknown): PrimaryColorConfig | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const colorHex = parseColorHexStrict((raw as Record<string, unknown>).colorHex);
+  if (!colorHex) return null;
+  return { colorHex };
 }
 
 function parseNumValueBody(raw: unknown): number | null {
@@ -252,6 +267,18 @@ export async function getShowAssetKeyPath(client: DbQueryable): Promise<ShowAsse
     return parseGnSakpJsonValue(rows[0]?.jsonValue ?? null) ?? { show: false, separator: "." };
   } catch {
     return { show: false, separator: "." };
+  }
+}
+
+export async function getPrimaryColorHex(client: DbQueryable): Promise<string> {
+  try {
+    const { rows } = await client.query<{ jsonValue: unknown }>(
+      `SELECT "jsonValue" FROM "appParameter" WHERE "key" = $1 AND "valueType" = 'json' LIMIT 1`,
+      [APP_PARAM_KEY_PRIMARY_COLOR],
+    );
+    return parseGnPrimJsonValue(rows[0]?.jsonValue ?? null)?.colorHex ?? DEFAULT_PRIMARY_COLOR_HEX;
+  } catch {
+    return DEFAULT_PRIMARY_COLOR_HEX;
   }
 }
 
@@ -447,6 +474,13 @@ router.patch("/:key", async (req: Request, res: Response) => {
         payload = parsed;
       } else if (key === APP_PARAM_KEY_SHOW_ASSET_KEY_PATH) {
         const parsed = parseGnSakpJsonValue(body.jsonValue);
+        if (!parsed) {
+          res.status(400).json({ error: "invalid_json_value" });
+          return;
+        }
+        payload = parsed;
+      } else if (key === APP_PARAM_KEY_PRIMARY_COLOR) {
+        const parsed = parseGnPrimJsonValue(body.jsonValue);
         if (!parsed) {
           res.status(400).json({ error: "invalid_json_value" });
           return;

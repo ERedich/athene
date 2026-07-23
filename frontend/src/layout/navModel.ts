@@ -13,6 +13,7 @@ import {
   IdCard,
   Languages,
   LayoutGrid,
+  LayoutTemplate,
   MapPin,
   MessageSquare,
   FolderTree,
@@ -93,6 +94,11 @@ export const navGroups: NavGroup[] = [
         to: "/kpi-builder",
         Icon: Gauge,
         labelKey: "kpiBuilder.navKpiBuilder",
+      },
+      {
+        to: "/layout-editor",
+        Icon: LayoutTemplate,
+        labelKey: "layoutEditor.navLayoutEditor",
       },
       {
         to: "/suchkonfig",

@@ -15,6 +15,10 @@ import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql, type SiteAccessClient } from "./siteAccess.js";
 import {
+  notifySparePartStockBelowReorder,
+  snapshotSparePartStockScopes,
+} from "./sparePartStockNotify.js";
+import {
   quantityForPolicyScope,
   resolveEffectiveStockPolicy,
   type StockPolicyScopeType,
@@ -61,6 +65,7 @@ export type StockPolicyRow = {
   reorderLevel: string;
   minStock: string;
   orderQuantity: string;
+  responsibleEmployeeIds: string[];
 };
 
 export type EffectiveStockPolicyRow = {
@@ -139,6 +144,7 @@ type StockPolicyInput = {
   reorderLevel: number;
   minStock: number;
   orderQuantity: number;
+  responsibleEmployeeIds: string[];
 };
 
 type SparePartSupplierInput = {
@@ -300,6 +306,21 @@ function normalizeStockControlLines(value: unknown): StockControlLineInput[] | n
   return result;
 }
 
+function normalizeEmployeeIds(value: unknown): string[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string" || !isUuid(item.trim())) return null;
+    const id = item.trim();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 function policyDedupeKey(policy: StockPolicyInput): string {
   if (policy.scopeType === "SITE") return "SITE";
   if (policy.scopeType === "WAREHOUSE") return `WAREHOUSE\0${policy.warehouseId}`;
@@ -344,6 +365,9 @@ function normalizeStockPolicies(value: unknown): StockPolicyInput[] | null {
     const orderQuantity = parseNonNegativeNumber(o.orderQuantity);
     if (reorderLevel === null || minStock === null || orderQuantity === null) return null;
 
+    const responsibleEmployeeIds = normalizeEmployeeIds(o.responsibleEmployeeIds);
+    if (responsibleEmployeeIds === null) return null;
+
     const policy: StockPolicyInput = {
       scopeType,
       warehouseId,
@@ -351,6 +375,7 @@ function normalizeStockPolicies(value: unknown): StockPolicyInput[] | null {
       reorderLevel,
       minStock,
       orderQuantity,
+      responsibleEmployeeIds,
     };
     const key = policyDedupeKey(policy);
     if (seen.has(key)) return null;
@@ -662,13 +687,14 @@ async function setStockPolicies(
     sparePartId,
   ]);
   for (const policy of policies) {
-    await client.query(
+    const { rows } = await client.query<{ id: string }>(
       `
       INSERT INTO "sparePartStockPolicy" (
         "sparePartId", "scopeType", "warehouseId", "storageLocationId",
         "reorderLevel", "minStock", "orderQuantity"
       )
       VALUES ($1::uuid, $2, $3::uuid, $4::uuid, $5, $6, $7)
+      RETURNING "id"::text AS "id"
       `,
       [
         sparePartId,
@@ -680,6 +706,43 @@ async function setStockPolicies(
         policy.orderQuantity,
       ],
     );
+    const stockPolicyId = rows[0]?.id;
+    if (!stockPolicyId || policy.responsibleEmployeeIds.length === 0) continue;
+    const placeholders = policy.responsibleEmployeeIds
+      .map((_, idx) => `($1::uuid, $${idx + 2}::uuid)`)
+      .join(", ");
+    await client.query(
+      `
+      INSERT INTO "sparePartStockPolicyResponsibleEmployee" ("stockPolicyId", "employeeId")
+      VALUES ${placeholders}
+      ON CONFLICT ("stockPolicyId", "employeeId") DO NOTHING
+      `,
+      [stockPolicyId, ...policy.responsibleEmployeeIds],
+    );
+  }
+}
+
+async function assertStockPolicyResponsibles(
+  client: SiteAccessClient,
+  userId: string,
+  siteId: string,
+  policies: StockPolicyInput[],
+): Promise<void> {
+  for (const policy of policies) {
+    for (const employeeId of policy.responsibleEmployeeIds) {
+      const employee = await client.query<{ id: string; siteId: string }>(
+        `
+        SELECT "id"::text AS "id", "siteId"::text AS "siteId"
+        FROM "employee"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [employeeId, userId],
+      );
+      const row = employee.rows[0];
+      if (!row) throw new Error("invalid_responsible_employee");
+      if (row.siteId !== siteId) throw new Error("responsible_employee_site_mismatch");
+    }
   }
 }
 
@@ -845,19 +908,27 @@ async function fetchStockPolicies(
   client: SiteAccessClient,
   sparePartId: string,
 ): Promise<StockPolicyRow[]> {
-  const { rows } = await client.query<StockPolicyRow>(
+  const { rows } = await client.query<Omit<StockPolicyRow, "responsibleEmployeeIds"> & {
+    responsibleEmployeeIds: string[] | null;
+  }>(
     `
     SELECT
-      p."id",
+      p."id"::text AS "id",
       p."scopeType",
-      p."warehouseId",
+      p."warehouseId"::text AS "warehouseId",
       wh."key" AS "warehouseKey",
       wh."name" AS "warehouseName",
-      p."storageLocationId",
+      p."storageLocationId"::text AS "storageLocationId",
       sl."key" AS "storageLocationKey",
       p."reorderLevel"::text AS "reorderLevel",
       p."minStock"::text AS "minStock",
-      p."orderQuantity"::text AS "orderQuantity"
+      p."orderQuantity"::text AS "orderQuantity",
+      (
+        SELECT COALESCE(array_agg(r."employeeId"::text ORDER BY e."key"), ARRAY[]::text[])
+        FROM "sparePartStockPolicyResponsibleEmployee" r
+        JOIN "employee" e ON e."id" = r."employeeId"
+        WHERE r."stockPolicyId" = p."id"
+      ) AS "responsibleEmployeeIds"
     FROM "sparePartStockPolicy" p
     LEFT JOIN "warehouse" wh ON wh."id" = p."warehouseId"
     LEFT JOIN "storageLocation" sl ON sl."id" = p."storageLocationId"
@@ -873,7 +944,12 @@ async function fetchStockPolicies(
     `,
     [sparePartId],
   );
-  return rows;
+  return rows.map((row) => ({
+    ...row,
+    responsibleEmployeeIds: Array.isArray(row.responsibleEmployeeIds)
+      ? row.responsibleEmployeeIds
+      : [],
+  }));
 }
 
 async function fetchSparePartSuppliers(
@@ -969,10 +1045,15 @@ function buildEffectivePolicies(
     if (seen.has(key)) return;
     seen.add(key);
     results.push({
-      ...resolved,
+      scopeType: resolved.scopeType,
+      warehouseId: resolved.warehouseId,
+      storageLocationId: resolved.storageLocationId,
       storageLocationKey: resolved.storageLocationId
         ? (keyById.get(resolved.storageLocationId) ?? null)
         : null,
+      reorderLevel: resolved.reorderLevel,
+      minStock: resolved.minStock,
+      orderQuantity: resolved.orderQuantity,
       onHandQuantity: quantityForPolicyScope(quantityLines, resolved),
     });
   };
@@ -1237,6 +1318,7 @@ router.post("/", async (req: Request, res: Response) => {
       );
       await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
       await assertSuppliersForSite(client, meta.userId, effectiveSiteId, suppliers);
+      await assertStockPolicyResponsibles(client, meta.userId, effectiveSiteId, stockPolicies);
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO "sparePart" (
@@ -1302,6 +1384,13 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(409).json({ error: "supplier_site_mismatch" });
       return;
     }
+    if (
+      message === "invalid_responsible_employee" ||
+      message === "responsible_employee_site_mismatch"
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -1334,6 +1423,17 @@ router.put("/:id", async (req: Request, res: Response) => {
   } = parsed;
   try {
     const meta = auditMeta(req);
+    const beforeScopes = await snapshotSparePartStockScopes(id);
+    const existingQtyByLocation = new Map(
+      (await fetchStockControlLineInputs(pool, id)).map((line) => [
+        `${line.warehouseId}\0${line.storageLocationId}`,
+        line.quantity,
+      ]),
+    );
+    const stockDecreased = stockControlLines.some((line) => {
+      const prev = existingQtyByLocation.get(`${line.warehouseId}\0${line.storageLocationId}`);
+      return prev != null && line.quantity < prev;
+    });
     const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<{ id: string; siteId: string }>(
         `
@@ -1371,6 +1471,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       );
       await assertStorageLocationsMatchWarehouse(client, stockControlLines, stockPolicies);
       await assertSuppliersForSite(client, meta.userId, effectiveSiteId, suppliers);
+      await assertStockPolicyResponsibles(client, meta.userId, effectiveSiteId, stockPolicies);
       await client.query(
         `
         UPDATE "sparePart"
@@ -1414,6 +1515,11 @@ router.put("/:id", async (req: Request, res: Response) => {
       await reindexSparePart(row.id);
       await reindexWarehousesForSparePart(row.id);
     });
+    if (stockDecreased) {
+      void notifySparePartStockBelowReorder(id, beforeScopes).catch((err) => {
+        console.error(err);
+      });
+    }
     res.json(row);
   } catch (err) {
     const message = (err as Error).message;
@@ -1443,6 +1549,13 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "stock_data_locked") {
       res.status(409).json({ error: "stock_data_locked" });
+      return;
+    }
+    if (
+      message === "invalid_responsible_employee" ||
+      message === "responsible_employee_site_mismatch"
+    ) {
+      res.status(400).json({ error: message });
       return;
     }
     sendPgError(res, err);
@@ -1495,6 +1608,279 @@ router.delete("/:id", async (req: Request, res: Response) => {
     sendPgError(res, err);
   }
 });
+
+router.get(
+  "/:id/stock-control/:stockControlId/moving-average-history",
+  async (req: Request, res: Response) => {
+    const userId = req.session.userId;
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const { id, stockControlId } = req.params;
+    if (!isUuid(id) || !isUuid(stockControlId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+    try {
+      const stockRes = await pool.query<{ id: string }>(
+        `
+        SELECT sc."id"
+        FROM "stockControl" sc
+        JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+        WHERE sc."id" = $1::uuid
+          AND sc."sparePartId" = $2::uuid
+          AND ${siteAccessSql('sp."siteId"', "$3")}
+        LIMIT 1
+        `,
+        [stockControlId, id, userId],
+      );
+      if (!stockRes.rows[0]) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const { rows } = await pool.query<{
+        id: string;
+        bookedAt: string;
+        quantity: string;
+        unitPrice: string | null;
+        movingAveragePrice: string;
+      }>(
+        `
+        SELECT
+          h."id",
+          h."bookedAt",
+          h."quantity"::text AS "quantity",
+          h."unitPrice"::text AS "unitPrice",
+          h."movingAveragePrice"::text AS "movingAveragePrice"
+        FROM "stockControlMovingAverageHistory" h
+        WHERE h."stockControlId" = $1::uuid
+        ORDER BY h."bookedAt" DESC, h."createdAt" DESC
+        `,
+        [stockControlId],
+      );
+      res.json({ rows });
+    } catch (err) {
+      sendPgError(res, err);
+    }
+  },
+);
+
+type HistoryCascadeRow = {
+  id: string;
+  bookedAt: string;
+  createdAt: string;
+  quantity: string;
+  unitPrice: string | null;
+  movingAveragePrice: string;
+  transactionId: string | null;
+  transactionType: string | null;
+};
+
+function resolveHistoryMovementKind(row: HistoryCascadeRow): "ZU" | "RM" {
+  if (row.transactionType === "ZU" || row.transactionType === "RM") {
+    return row.transactionType;
+  }
+  return row.unitPrice != null && row.unitPrice !== "" ? "ZU" : "RM";
+}
+
+router.patch(
+  "/:id/stock-control/:stockControlId/moving-average-history/:historyId",
+  async (req: Request, res: Response) => {
+    const { id, stockControlId, historyId } = req.params;
+    if (!isUuid(id) || !isUuid(stockControlId) || !isUuid(historyId)) {
+      res.status(400).json({ error: "invalid_id" });
+      return;
+    }
+
+    const unitPrice = parseOptionalNonNegativeNumber(req.body?.unitPrice);
+    if (unitPrice === undefined || unitPrice === null) {
+      res.status(400).json({ error: "invalid_unit_price" });
+      return;
+    }
+
+    try {
+      const meta = auditMeta(req);
+      const result = await withAuditContext(meta, async (client) => {
+        const stockRes = await client.query<{ id: string; quantity: string }>(
+          `
+          SELECT sc."id", sc."quantity"::text AS "quantity"
+          FROM "stockControl" sc
+          JOIN "sparePart" sp ON sp."id" = sc."sparePartId"
+          WHERE sc."id" = $1::uuid
+            AND sc."sparePartId" = $2::uuid
+            AND ${siteAccessSql('sp."siteId"', "$3")}
+          FOR UPDATE OF sc
+          `,
+          [stockControlId, id, meta.userId],
+        );
+        const stock = stockRes.rows[0];
+        if (!stock) {
+          return { kind: "not_found" as const };
+        }
+
+        const historyRes = await client.query<HistoryCascadeRow>(
+          `
+          SELECT
+            h."id",
+            h."bookedAt",
+            h."createdAt",
+            h."quantity"::text AS "quantity",
+            h."unitPrice"::text AS "unitPrice",
+            h."movingAveragePrice"::text AS "movingAveragePrice",
+            h."transactionId",
+            t."type" AS "transactionType"
+          FROM "stockControlMovingAverageHistory" h
+          LEFT JOIN "transaction" t ON t."id" = h."transactionId"
+          WHERE h."stockControlId" = $1::uuid
+          ORDER BY h."bookedAt" ASC, h."createdAt" ASC
+          `,
+          [stockControlId],
+        );
+        const history = historyRes.rows;
+        const editedIndex = history.findIndex((row) => row.id === historyId);
+        if (editedIndex < 0) {
+          return { kind: "history_not_found" as const };
+        }
+
+        const editedRow = history[editedIndex]!;
+        if (resolveHistoryMovementKind(editedRow) !== "ZU") {
+          return { kind: "unit_price_not_editable" as const };
+        }
+
+        const currentQty = Number(stock.quantity);
+        if (!Number.isFinite(currentQty)) {
+          return { kind: "invalid_stock_quantity" as const };
+        }
+
+        // qtyAfter[i] = on-hand quantity after history[i] was booked
+        const qtyAfter: number[] = new Array(history.length);
+        let qty = currentQty;
+        for (let i = history.length - 1; i >= 0; i--) {
+          qtyAfter[i] = qty;
+          const row = history[i]!;
+          const movementQty = Number(row.quantity);
+          if (!Number.isFinite(movementQty) || movementQty <= 0) {
+            return { kind: "invalid_history_quantity" as const };
+          }
+          const kind = resolveHistoryMovementKind(row);
+          qty = kind === "ZU" ? qty - movementQty : qty + movementQty;
+        }
+
+        editedRow.unitPrice = String(unitPrice);
+
+        let prevGld = 0;
+        if (editedIndex > 0) {
+          const prevRaw = Number(history[editedIndex - 1]!.movingAveragePrice);
+          prevGld = Number.isFinite(prevRaw) && prevRaw >= 0 ? prevRaw : 0;
+        }
+
+        for (let i = editedIndex; i < history.length; i++) {
+          const row = history[i]!;
+          const movementQty = Number(row.quantity);
+          const kind = resolveHistoryMovementKind(row);
+          const qtyBefore = i > 0 ? qtyAfter[i - 1]! : qty;
+
+          let newGld = prevGld;
+          if (kind === "ZU") {
+            const unitPriceRaw = row.unitPrice != null ? Number(row.unitPrice) : 0;
+            const rowUnitPrice =
+              Number.isFinite(unitPriceRaw) && unitPriceRaw >= 0 ? unitPriceRaw : 0;
+            newGld = computeMovingAverage(qtyBefore, prevGld, movementQty, rowUnitPrice);
+          }
+          row.movingAveragePrice = String(newGld);
+          prevGld = newGld;
+        }
+
+        await client.query(
+          `
+          UPDATE "stockControlMovingAverageHistory"
+          SET
+            "unitPrice" = $1::numeric,
+            "movingAveragePrice" = $2::numeric
+          WHERE "id" = $3::uuid
+          `,
+          [unitPrice, Number(editedRow.movingAveragePrice), editedRow.id],
+        );
+
+        if (editedRow.transactionId) {
+          await client.query(
+            `
+            UPDATE "transaction"
+            SET "unitPrice" = $1::numeric
+            WHERE "id" = $2::uuid
+            `,
+            [unitPrice, editedRow.transactionId],
+          );
+        }
+
+        for (let i = editedIndex + 1; i < history.length; i++) {
+          const row = history[i]!;
+          await client.query(
+            `
+            UPDATE "stockControlMovingAverageHistory"
+            SET "movingAveragePrice" = $1::numeric
+            WHERE "id" = $2::uuid
+            `,
+            [Number(row.movingAveragePrice), row.id],
+          );
+        }
+
+        const lastGld = Number(history[history.length - 1]!.movingAveragePrice);
+        await client.query(
+          `
+          UPDATE "stockControl"
+          SET "valuationPrice" = $1::numeric
+          WHERE "id" = $2::uuid
+          `,
+          [lastGld, stock.id],
+        );
+
+        const rowsDesc = [...history].reverse().map((row) => ({
+          id: row.id,
+          bookedAt: row.bookedAt,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          movingAveragePrice: row.movingAveragePrice,
+        }));
+
+        return {
+          kind: "ok" as const,
+          rows: rowsDesc,
+          valuationPrice: lastGld,
+        };
+      });
+
+      if (
+        result.kind === "not_found" ||
+        result.kind === "history_not_found"
+      ) {
+        res.status(404).json({ error: result.kind });
+        return;
+      }
+      if (result.kind === "unit_price_not_editable") {
+        res.status(400).json({ error: result.kind });
+        return;
+      }
+      if (result.kind === "invalid_stock_quantity" || result.kind === "invalid_history_quantity") {
+        res.status(409).json({ error: result.kind });
+        return;
+      }
+
+      res.json({
+        rows: result.rows,
+        valuationPrice: result.valuationPrice,
+      });
+    } catch (err) {
+      if ((err as Error).message === "missing_session_user") {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      sendPgError(res, err);
+    }
+  },
+);
 
 router.get("/:id/photo", async (req: Request, res: Response) => {
   const userId = req.session.userId;

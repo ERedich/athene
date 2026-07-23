@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type TransitionEvent } from "react";
-import { Bell, History, Inbox, MessageSquare, Pencil, X } from "lucide-react";
+import { Bell, History, Inbox, MessageSquare, Package, Pencil, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
@@ -18,12 +18,15 @@ import { apiFetch } from "../lib/api";
 import {
   fetchWorkOrderMessages,
   inboxItemFromChatNotification,
+  inboxItemFromStockNotification,
   inboxItemFromSubscriptionNotification,
   markNotificationsRead,
   sendWorkOrderMessage,
   type NotificationInboxItem,
   type WorkOrderMessage,
 } from "../lib/notificationCenter";
+import { sparePartDialogTabs } from "../lib/sparePartDialog";
+import { applySparePartUrlParams } from "../lib/sparePartDialogUrl";
 import { orderDialogTabs } from "../lib/workOrderDialog";
 import type { WorkOrder } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
@@ -33,7 +36,7 @@ type InboxResponse = {
   rows: NotificationInboxItem[];
 };
 
-type KindFilter = "all" | "subscription" | "chat";
+type KindFilter = "all" | "subscription" | "chat" | "stock";
 
 type HistoryDrawerState = {
   workOrderId: string;
@@ -53,13 +56,21 @@ const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,tran
 const selectedActionIcon = "text-[var(--color-primary)]";
 
 function parseKindFilter(raw: string | null): KindFilter {
-  if (raw === "subscription" || raw === "chat") return raw;
+  if (raw === "subscription" || raw === "chat" || raw === "stock") return raw;
   return "all";
+}
+
+function eventKind(messageType: string): KindFilter | null {
+  if (messageType === "subscription_notification") return "subscription";
+  if (messageType === "chat_notification") return "chat";
+  if (messageType === "stock_notification") return "stock";
+  return null;
 }
 
 export function MitteilungszentralePage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const { refreshUnreadCount, onNotificationEvent, onWorkOrderMessageEvent } = useWorkOrderSubscriptions();
@@ -160,14 +171,17 @@ export function MitteilungszentralePage() {
   useEffect(
     () =>
       onNotificationEvent((message) => {
-        const kind = message.type === "chat_notification" ? "chat" : "subscription";
+        const kind = eventKind(message.type);
+        if (!kind) return;
         const filter = kindFilterRef.current;
         const matchesFilter = filter === "all" || filter === kind;
         const readAt = new Date().toISOString();
         const item =
           message.type === "subscription_notification"
             ? inboxItemFromSubscriptionNotification(message.notification, { readAt })
-            : inboxItemFromChatNotification(message.notification, { readAt });
+            : message.type === "chat_notification"
+              ? inboxItemFromChatNotification(message.notification, { readAt })
+              : inboxItemFromStockNotification(message.notification, { readAt });
 
         if (matchesFilter) {
           let added = false;
@@ -230,8 +244,14 @@ export function MitteilungszentralePage() {
       const content =
         row.kind === "chat"
           ? `${row.messagePreview ?? ""} ${row.authorUserName ?? ""}`
-          : (row.changeKinds ?? []).join(" ");
-      const text = `${row.orderNumber} ${row.workOrderName} ${row.siteKey} ${row.siteName} ${content}`.toLowerCase();
+          : row.kind === "stock"
+            ? `${row.sparePartKey ?? ""} ${row.sparePartName ?? ""} ${row.scopeType ?? ""} ${row.warehouseKey ?? ""} ${row.storageLocationKey ?? ""} ${row.onHandQuantity ?? ""} ${row.reorderLevel ?? ""}`
+            : (row.changeKinds ?? []).join(" ");
+      const subject =
+        row.kind === "stock"
+          ? `${row.sparePartKey ?? ""} ${row.sparePartName ?? ""}`
+          : `${row.orderNumber ?? ""} ${row.workOrderName ?? ""}`;
+      const text = `${subject} ${row.siteKey} ${row.siteName} ${content}`.toLowerCase();
       return text.includes(q);
     });
   }, [rows, search]);
@@ -250,6 +270,7 @@ export function MitteilungszentralePage() {
 
   const openHistory = useCallback(
     (row: NotificationInboxItem) => {
+      if (row.kind === "stock" || !row.workOrderId || row.orderNumber == null || !row.workOrderName) return;
       setHistoryDrawer({
         workOrderId: row.workOrderId,
         orderNumber: row.orderNumber,
@@ -325,6 +346,23 @@ export function MitteilungszentralePage() {
 
   const openItem = useCallback(
     async (row: NotificationInboxItem) => {
+      if (row.kind === "stock") {
+        if (!row.sparePartId) {
+          toastRef.current?.show({
+            severity: "error",
+            summary: t("mitteilungszentrale.openSparePartError"),
+            life: 6000,
+          });
+          return;
+        }
+        const params = applySparePartUrlParams(
+          new URLSearchParams(),
+          row.sparePartId,
+          sparePartDialogTabs.StockPlanning,
+        );
+        navigate(`/spare-parts?${params.toString()}`);
+        return;
+      }
       try {
         const res = await apiFetch(`/api/work-orders/${row.workOrderId}`);
         if (!res.ok) throw new Error("load_order");
@@ -342,16 +380,39 @@ export function MitteilungszentralePage() {
         });
       }
     },
-    [t, woDialog],
+    [navigate, t, woDialog],
   );
 
   const kindBody = useCallback(
     (row: NotificationInboxItem) => (
       <span className="inline-flex h-5 items-center rounded-sm bg-surface-container-high px-2 text-[11px] uppercase tracking-wide text-on-surface-variant">
-        {row.kind === "chat" ? t("mitteilungszentrale.kindChat") : t("mitteilungszentrale.kindSubscription")}
+        {row.kind === "chat"
+          ? t("mitteilungszentrale.kindChat")
+          : row.kind === "stock"
+            ? t("mitteilungszentrale.kindStock")
+            : t("mitteilungszentrale.kindSubscription")}
       </span>
     ),
     [t],
+  );
+
+  const subjectBody = useCallback(
+    (row: NotificationInboxItem) => {
+      if (row.kind === "stock") {
+        return (
+          <span className="font-medium">
+            {row.sparePartKey}
+            {row.sparePartName ? ` - ${row.sparePartName}` : ""}
+          </span>
+        );
+      }
+      return (
+        <span className="font-medium">
+          #{row.orderNumber} - {row.workOrderName}
+        </span>
+      );
+    },
+    [],
   );
 
   const contentBody = useCallback(
@@ -366,6 +427,28 @@ export function MitteilungszentralePage() {
               </span>
             ) : null}
             <div className="text-on-surface-variant">{row.messagePreview}</div>
+          </div>
+        );
+      }
+      if (row.kind === "stock") {
+        const scopeLabel =
+          row.scopeType === "WAREHOUSE"
+            ? t("mitteilungszentrale.stockScopeWarehouse", { key: row.warehouseKey ?? "—" })
+            : row.scopeType === "STORAGE_LOCATION"
+              ? t("mitteilungszentrale.stockScopeStorageLocation", {
+                  warehouse: row.warehouseKey ?? "—",
+                  location: row.storageLocationKey ?? "—",
+                })
+              : t("mitteilungszentrale.stockScopeSite");
+        return (
+          <div className="text-sm">
+            <div>
+              {t("mitteilungszentrale.stockLevels", {
+                onHand: row.onHandQuantity ?? "—",
+                reorder: row.reorderLevel ?? "—",
+              })}
+            </div>
+            <div className="text-on-surface-variant">{scopeLabel}</div>
           </div>
         );
       }
@@ -433,6 +516,21 @@ export function MitteilungszentralePage() {
             <span>{t("mitteilungszentrale.filterChat")}</span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            className={kindFilter === "stock" ? selectedActionNavItem : primaryActionNavItem}
+            aria-pressed={kindFilter === "stock"}
+            onClick={() => setKindFilter("stock")}
+          >
+            <Package
+              className={`${kindFilter === "stock" ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              strokeWidth={1.75}
+              aria-hidden
+            />
+            <span>{t("mitteilungszentrale.filterStock")}</span>
+          </button>
+        </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -473,30 +571,25 @@ export function MitteilungszentralePage() {
           body={(row: NotificationInboxItem) => formatShortDt(row.createdAt)}
         />
         <Column header={t("mitteilungszentrale.kind")} body={kindBody} style={{ width: "9rem" }} />
-        <Column
-          header={t("mitteilungszentrale.order")}
-          body={(row: NotificationInboxItem) => (
-            <span className="font-medium">
-              #{row.orderNumber} - {row.workOrderName}
-            </span>
-          )}
-        />
+        <Column header={t("mitteilungszentrale.order")} body={subjectBody} />
         <Column header={t("mitteilungszentrale.content")} body={contentBody} style={{ width: "40%" }} />
         <Column
           header={t("mitteilungszentrale.history")}
-          body={(row: NotificationInboxItem) => (
-            <Button
-              type="button"
-              text
-              icon={<History className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-              onClick={(e) => {
-                e.stopPropagation();
-                openHistory(row);
-              }}
-              aria-label={t("mitteilungszentrale.openHistory")}
-              title={t("mitteilungszentrale.openHistory")}
-            />
-          )}
+          body={(row: NotificationInboxItem) =>
+            row.kind === "stock" ? null : (
+              <Button
+                type="button"
+                text
+                icon={<History className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openHistory(row);
+                }}
+                aria-label={t("mitteilungszentrale.openHistory")}
+                title={t("mitteilungszentrale.openHistory")}
+              />
+            )
+          }
           style={{ width: "5.5rem" }}
         />
         <Column
@@ -509,8 +602,16 @@ export function MitteilungszentralePage() {
               onClick={() => {
                 void openItem(row);
               }}
-              aria-label={t("mitteilungszentrale.openOrder")}
-              title={t("mitteilungszentrale.openOrder")}
+              aria-label={
+                row.kind === "stock"
+                  ? t("mitteilungszentrale.openSparePart")
+                  : t("mitteilungszentrale.openOrder")
+              }
+              title={
+                row.kind === "stock"
+                  ? t("mitteilungszentrale.openSparePart")
+                  : t("mitteilungszentrale.openOrder")
+              }
             />
           )}
           style={{ width: "5.5rem" }}

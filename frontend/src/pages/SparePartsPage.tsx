@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Check, ExternalLink, File, Image as ImageIcon, Pencil, Plus, Trash2, TriangleAlert, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Check, ExternalLink, File, History, Image as ImageIcon, Pencil, Plus, Trash2, TriangleAlert, Upload, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
-import { Badge } from "primereact/badge";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
@@ -15,7 +14,9 @@ import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
+import { MultiSelect } from "primereact/multiselect";
 import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
+import { Sidebar } from "primereact/sidebar";
 import { TabPanel, TabView } from "primereact/tabview";
 import { Toast } from "primereact/toast";
 
@@ -23,6 +24,7 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { SparePartEditPageView } from "../components/spareParts/SparePartEditPageView";
 import { SparePartEditTabHost } from "../components/spareParts/SparePartEditSurface";
 import { SparePartListThumb } from "../components/spareParts/SparePartListThumb";
+import { AppTabHeader } from "../components/tabs/AppTabHeader";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
@@ -48,6 +50,7 @@ import {
 import { buildSparePartBigMenuModel } from "../lib/sparePartBigContextMenu";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
+import { STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 
 type SiteOption = {
   id: string;
@@ -105,6 +108,15 @@ type StockPolicyRow = {
   reorderLevel: string;
   minStock: string;
   orderQuantity: string;
+  responsibleEmployeeIds?: string[];
+};
+
+type EmployeeListRow = {
+  id: string;
+  key: string;
+  name: string;
+  siteId: string;
+  isActive: boolean;
 };
 
 type SupplierListRow = {
@@ -197,6 +209,14 @@ type StockLineForm = {
   valuationCurrency: string;
 };
 
+type GldHistoryRow = {
+  id: string;
+  bookedAt: string;
+  quantity: string;
+  unitPrice: string | null;
+  movingAveragePrice: string;
+};
+
 type StockPolicyForm = {
   localId: string;
   scopeType: StockPolicyScopeType;
@@ -205,6 +225,7 @@ type StockPolicyForm = {
   reorderLevel: number;
   minStock: number;
   orderQuantity: number;
+  responsibleEmployeeIds: string[];
 };
 
 type SupplierForm = {
@@ -267,6 +288,7 @@ const newStockPolicy = (): StockPolicyForm => ({
   reorderLevel: 0,
   minStock: 0,
   orderQuantity: 0,
+  responsibleEmployeeIds: [],
 });
 
 const newSupplierLine = (): SupplierForm => ({
@@ -353,6 +375,9 @@ function mapStockPoliciesFromApi(policies: StockPolicyRow[]): StockPolicyForm[] 
     reorderLevel: Number(policy.reorderLevel) || 0,
     minStock: Number(policy.minStock) || 0,
     orderQuantity: Number(policy.orderQuantity) || 0,
+    responsibleEmployeeIds: Array.isArray(policy.responsibleEmployeeIds)
+      ? policy.responsibleEmployeeIds
+      : [],
   }));
 }
 
@@ -410,6 +435,7 @@ export function SparePartsPage() {
   const [warehouses, setWarehouses] = useState<WarehouseListRow[]>([]);
   const [storageLocations, setStorageLocations] = useState<StorageLocationListRow[]>([]);
   const [suppliersCatalog, setSuppliersCatalog] = useState<SupplierListRow[]>([]);
+  const [employees, setEmployees] = useState<EmployeeListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSparePart, setSelectedSparePart] = useState<SparePart | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
@@ -442,6 +468,14 @@ export function SparePartsPage() {
   const [documentEditDisplayName, setDocumentEditDisplayName] = useState("");
   const [documentEditCategory, setDocumentEditCategory] = useState<AssetDocumentCategory>("general");
   const [documentEditSaving, setDocumentEditSaving] = useState(false);
+  const [gldHistoryVisible, setGldHistoryVisible] = useState(false);
+  const [gldHistoryLoading, setGldHistoryLoading] = useState(false);
+  const [gldHistoryRows, setGldHistoryRows] = useState<GldHistoryRow[]>([]);
+  const [gldHistoryLabel, setGldHistoryLabel] = useState("");
+  const [gldHistoryStockControlId, setGldHistoryStockControlId] = useState<string | null>(null);
+  const [gldEditRow, setGldEditRow] = useState<GldHistoryRow | null>(null);
+  const [gldEditValue, setGldEditValue] = useState<number | null>(null);
+  const [gldEditSaving, setGldEditSaving] = useState(false);
   const urlOpenHandledRef = useRef<string | null>(null);
   const urlSyncFromDialogRef = useRef(false);
 
@@ -492,6 +526,22 @@ export function SparePartsPage() {
           value: su.id,
         })),
     [form.siteId, suppliersCatalog],
+  );
+
+  const policyEmployeeOptions = useMemo(
+    () =>
+      employees
+        .filter(
+          (emp) =>
+            emp.siteId === form.siteId &&
+            (emp.isActive ||
+              stockPolicies.some((policy) => policy.responsibleEmployeeIds.includes(emp.id))),
+        )
+        .map((emp) => ({
+          label: `${emp.key} - ${emp.name}`,
+          value: emp.id,
+        })),
+    [employees, form.siteId, stockPolicies],
   );
 
   const totalQuantityAll = useMemo(
@@ -666,6 +716,7 @@ export function SparePartsPage() {
         warehousesRes,
         storageLocRes,
         suppliersRes,
+        employeesRes,
       ] = await Promise.all([
         apiFetch("/api/spare-parts"),
         apiFetch("/api/sites"),
@@ -673,6 +724,7 @@ export function SparePartsPage() {
         apiFetch("/api/warehouses"),
         apiFetch("/api/storage-locations"),
         apiFetch("/api/suppliers"),
+        apiFetch("/api/employees"),
       ]);
       if (
         !sparePartsRes.ok ||
@@ -680,7 +732,8 @@ export function SparePartsPage() {
         !classificationsRes.ok ||
         !warehousesRes.ok ||
         !storageLocRes.ok ||
-        !suppliersRes.ok
+        !suppliersRes.ok ||
+        !employeesRes.ok
       ) {
         throw new Error("load");
       }
@@ -691,6 +744,7 @@ export function SparePartsPage() {
         warehousesData,
         storageLocData,
         suppliersData,
+        employeesData,
       ] = (await Promise.all([
         sparePartsRes.json(),
         sitesRes.json(),
@@ -698,6 +752,7 @@ export function SparePartsPage() {
         warehousesRes.json(),
         storageLocRes.json(),
         suppliersRes.json(),
+        employeesRes.json(),
       ])) as [
         SparePart[],
         SiteOption[],
@@ -705,6 +760,7 @@ export function SparePartsPage() {
         WarehouseListRow[],
         StorageLocationListRow[],
         SupplierListRow[],
+        EmployeeListRow[],
       ];
       setSpareParts(sparePartsData);
       setSites(sitesData);
@@ -712,6 +768,7 @@ export function SparePartsPage() {
       setWarehouses(warehousesData);
       setStorageLocations(storageLocData);
       setSuppliersCatalog(suppliersData);
+      setEmployees(employeesData);
     } catch {
       toastRef.current?.show({
         severity: "error",
@@ -943,32 +1000,15 @@ export function SparePartsPage() {
   ]);
 
   const tabHostRef = useRef<HTMLDivElement | null>(null);
-
-  const updateTabInk = useCallback(() => {
-    const host = tabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!dialogVisible) return;
-    const raf = requestAnimationFrame(updateTabInk);
-    return () => cancelAnimationFrame(raf);
-  }, [activeTabIndex, dialogVisible, stockTabCount, policyTabCount, suppliersTabCount, documentsTabCount, updateTabInk]);
+  const updateTabInk = useTabInk(
+    tabHostRef,
+    [activeTabIndex, dialogVisible, stockTabCount, policyTabCount, suppliersTabCount, documentsTabCount],
+    dialogVisible,
+  );
 
   useEffect(() => {
     if (dialogVisible && editingId) void loadDocuments(editingId);
   }, [dialogVisible, editingId, loadDocuments]);
-
-  useEffect(() => {
-    if (!dialogVisible) return;
-    window.addEventListener("resize", updateTabInk);
-    return () => window.removeEventListener("resize", updateTabInk);
-  }, [dialogVisible, updateTabInk]);
 
   useEffect(() => {
     if (!form.classificationId) return;
@@ -1007,6 +1047,20 @@ export function SparePartsPage() {
     });
   }, [supplierDropdownOptions]);
 
+  useEffect(() => {
+    const allowedEmployeeIds = new Set(policyEmployeeOptions.map((opt) => String(opt.value)));
+    setStockPolicies((policies) => {
+      let changed = false;
+      const next = policies.map((policy) => {
+        const filtered = policy.responsibleEmployeeIds.filter((id) => allowedEmployeeIds.has(id));
+        if (filtered.length === policy.responsibleEmployeeIds.length) return policy;
+        changed = true;
+        return { ...policy, responsibleEmployeeIds: filtered };
+      });
+      return changed ? next : policies;
+    });
+  }, [policyEmployeeOptions]);
+
   const showSaveError = async (res: Response) => {
     let code: string | undefined;
     try {
@@ -1025,6 +1079,12 @@ export function SparePartsPage() {
     }
     if (code === "stock_data_locked") detail = t("spareParts.stockDataLocked");
     if (code === "supplier_site_mismatch") detail = t("spareParts.supplierSiteMismatch");
+    if (
+      code === "invalid_responsible_employee" ||
+      code === "responsible_employee_site_mismatch"
+    ) {
+      detail = t("spareParts.policyResponsiblesInvalid");
+    }
     toastRef.current?.show({ severity: "error", summary: detail, life: 6000 });
   };
 
@@ -1225,6 +1285,7 @@ export function SparePartsPage() {
                   reorderLevel: policy.reorderLevel,
                   minStock: policy.minStock,
                   orderQuantity: policy.orderQuantity,
+                  responsibleEmployeeIds: policy.responsibleEmployeeIds,
                 };
               }
               if (policy.scopeType === "WAREHOUSE") {
@@ -1235,6 +1296,7 @@ export function SparePartsPage() {
                   reorderLevel: policy.reorderLevel,
                   minStock: policy.minStock,
                   orderQuantity: policy.orderQuantity,
+                  responsibleEmployeeIds: policy.responsibleEmployeeIds,
                 };
               }
               return {
@@ -1244,6 +1306,7 @@ export function SparePartsPage() {
                 reorderLevel: policy.reorderLevel,
                 minStock: policy.minStock,
                 orderQuantity: policy.orderQuantity,
+                responsibleEmployeeIds: policy.responsibleEmployeeIds,
               };
             })
           : [],
@@ -1579,6 +1642,123 @@ export function SparePartsPage() {
     setStockLines((lines) => lines.filter((line) => line.localId !== localId));
   };
 
+  const openGldHistory = useCallback(
+    async (line: StockLineForm) => {
+      if (!editingId || !line.persistedId) return;
+      const warehouse = warehouses.find((w) => w.id === line.warehouseId);
+      const location = storageLocations.find((s) => s.id === line.storageLocationId);
+      setGldHistoryLabel(
+        [warehouse?.key, location?.key].filter(Boolean).join(" / ") || t("spareParts.gldHistoryTitle"),
+      );
+      setGldHistoryStockControlId(line.persistedId);
+      setGldHistoryVisible(true);
+      setGldHistoryLoading(true);
+      setGldHistoryRows([]);
+      try {
+        const res = await apiFetch(
+          `/api/spare-parts/${editingId}/stock-control/${line.persistedId}/moving-average-history`,
+        );
+        if (!res.ok) throw new Error("load");
+        const data = (await res.json()) as { rows: GldHistoryRow[] };
+        setGldHistoryRows(data.rows ?? []);
+      } catch {
+        setGldHistoryRows([]);
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("spareParts.gldHistoryLoadError"),
+          life: 6000,
+        });
+      } finally {
+        setGldHistoryLoading(false);
+      }
+    },
+    [editingId, storageLocations, t, warehouses],
+  );
+
+  const openGldEdit = useCallback((row: GldHistoryRow) => {
+    if (row.unitPrice == null || row.unitPrice === "") return;
+    const n = Number(row.unitPrice);
+    setGldEditRow(row);
+    setGldEditValue(Number.isFinite(n) ? n : null);
+  }, []);
+
+  const closeGldEdit = useCallback(() => {
+    if (gldEditSaving) return;
+    setGldEditRow(null);
+    setGldEditValue(null);
+  }, [gldEditSaving]);
+
+  const applyGldEdit = useCallback(async () => {
+    if (!editingId || !gldHistoryStockControlId || !gldEditRow) return;
+    if (gldEditValue == null || gldEditValue < 0) {
+      toastRef.current?.show({
+        severity: "warn",
+        summary: t("spareParts.gldEditValidation"),
+        life: 4000,
+      });
+      return;
+    }
+
+    setGldEditSaving(true);
+    try {
+      const res = await apiFetch(
+        `/api/spare-parts/${editingId}/stock-control/${gldHistoryStockControlId}/moving-average-history/${gldEditRow.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unitPrice: gldEditValue }),
+        },
+      );
+      if (!res.ok) throw new Error("patch");
+      const data = (await res.json()) as {
+        rows: GldHistoryRow[];
+        valuationPrice: number;
+      };
+      setGldHistoryRows(data.rows ?? []);
+      setStockLines((lines) =>
+        lines.map((line) =>
+          line.persistedId === gldHistoryStockControlId
+            ? { ...line, valuationPrice: data.valuationPrice }
+            : line,
+        ),
+      );
+      setGldEditRow(null);
+      setGldEditValue(null);
+      toastRef.current?.show({
+        severity: "success",
+        summary: t("spareParts.gldEditSuccess"),
+        life: 3000,
+      });
+    } catch {
+      toastRef.current?.show({
+        severity: "error",
+        summary: t("spareParts.gldEditError"),
+        life: 6000,
+      });
+    } finally {
+      setGldEditSaving(false);
+    }
+  }, [editingId, gldEditRow, gldEditValue, gldHistoryStockControlId, t]);
+
+  const confirmGldEdit = useCallback(() => {
+    if (gldEditValue == null || gldEditValue < 0) {
+      toastRef.current?.show({
+        severity: "warn",
+        summary: t("spareParts.gldEditValidation"),
+        life: 4000,
+      });
+      return;
+    }
+    confirmDialog({
+      message: t("spareParts.gldEditConfirm"),
+      header: t("spareParts.gldEditConfirmTitle"),
+      icon: <TriangleAlert className={lucidePrimeBtnIcon} strokeWidth={1.75} aria-hidden />,
+      acceptLabel: t("spareParts.yes"),
+      rejectLabel: t("spareParts.no"),
+      accept: () => void applyGldEdit(),
+    });
+  }, [applyGldEdit, gldEditValue, t]);
+
   const updateStockLine = (localId: string, patch: Partial<StockLineForm>) => {
     setStockLines((lines) =>
       lines.map((line) => (line.localId === localId ? { ...line, ...patch } : line)),
@@ -1846,11 +2026,11 @@ export function SparePartsPage() {
         >
                   <SparePartEditTabHost tabHostRef={tabHostRef}>
                     <TabView
-                      className="app-sticky-tabs"
+                      className={STANDARD_TAB_VIEW_CLASS}
                       activeIndex={activeTabIndex}
                       onTabChange={handleSparePartTabChange}
                     >
-                    <TabPanel header={t("spareParts.tabGeneral")}>
+                    <TabPanel header={<AppTabHeader label={t("spareParts.tabGeneral")} />}>
                       <div className="flex min-w-0 max-w-full flex-col gap-4 pt-1 md:flex-row">
                         <div className="w-44 shrink-0 space-y-2">
                           <div className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-outline-variant bg-surface-container-low">
@@ -2072,10 +2252,10 @@ export function SparePartsPage() {
                     </TabPanel>
                     <TabPanel
                       header={
-                        <span className="inline-flex items-center gap-2">
-                          <span>{t("spareParts.tabStockData")}</span>
-                          {editingId && stockTabCount > 0 ? <Badge value={stockTabCount} /> : null}
-                        </span>
+                        <AppTabHeader
+                          label={t("spareParts.tabStockData")}
+                          count={editingId ? stockTabCount : 0}
+                        />
                       }
                     >
                       {!editingId ? (
@@ -2105,7 +2285,7 @@ export function SparePartsPage() {
                                     <th className="w-40 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
                                       {t("spareParts.valuationPrice")}
                                     </th>
-                                    <th className="w-14 px-3 py-2" aria-hidden />
+                                    <th className="w-24 px-3 py-2" aria-hidden />
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2188,17 +2368,39 @@ export function SparePartsPage() {
                                           </div>
                                         </td>
                                         <td className="px-3 py-2 align-top">
-                                          {!lineLocked ? (
-                                            <Button
-                                              type="button"
-                                              severity="danger"
-                                              text
-                                              rounded
-                                              aria-label={t("spareParts.removeStockLine")}
-                                              icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-                                              onClick={() => removeStockLine(line.localId)}
-                                            />
-                                          ) : null}
+                                          <div className="flex items-center justify-end gap-0.5">
+                                            {line.persistedId ? (
+                                              <Button
+                                                type="button"
+                                                text
+                                                rounded
+                                                aria-label={t("spareParts.gldHistoryOpen")}
+                                                icon={
+                                                  <History
+                                                    className={lucidePrimeBtnIcon}
+                                                    strokeWidth={1.75}
+                                                  />
+                                                }
+                                                onClick={() => void openGldHistory(line)}
+                                              />
+                                            ) : null}
+                                            {!lineLocked ? (
+                                              <Button
+                                                type="button"
+                                                severity="danger"
+                                                text
+                                                rounded
+                                                aria-label={t("spareParts.removeStockLine")}
+                                                icon={
+                                                  <Trash2
+                                                    className={lucidePrimeBtnIcon}
+                                                    strokeWidth={1.75}
+                                                  />
+                                                }
+                                                onClick={() => removeStockLine(line.localId)}
+                                              />
+                                            ) : null}
+                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -2222,10 +2424,10 @@ export function SparePartsPage() {
                     </TabPanel>
                     <TabPanel
                       header={
-                        <span className="inline-flex items-center gap-2">
-                          <span>{t("spareParts.tabStockPlanning")}</span>
-                          {editingId && policyTabCount > 0 ? <Badge value={policyTabCount} /> : null}
-                        </span>
+                        <AppTabHeader
+                          label={t("spareParts.tabStockPlanning")}
+                          count={editingId ? policyTabCount : 0}
+                        />
                       }
                     >
                       {!editingId ? (
@@ -2245,7 +2447,7 @@ export function SparePartsPage() {
                             </p>
                           ) : (
                             <div className="overflow-x-auto rounded-sm border border-outline-variant/40">
-                              <table className="w-full min-w-[56rem] border-collapse text-sm">
+                              <table className="w-full min-w-[72rem] border-collapse text-sm">
                                 <thead>
                                   <tr className="border-b border-outline-variant/40 bg-surface-container-low">
                                     <th className="px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
@@ -2265,6 +2467,9 @@ export function SparePartsPage() {
                                     </th>
                                     <th className="w-28 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
                                       {t("spareParts.orderQuantity")}
+                                    </th>
+                                    <th className="min-w-[14rem] px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.1em] text-outline">
+                                      {t("spareParts.policyResponsibles")}
                                     </th>
                                     <th className="w-14 px-3 py-2" aria-hidden />
                                   </tr>
@@ -2374,6 +2579,25 @@ export function SparePartsPage() {
                                           />
                                         </td>
                                         <td className="px-3 py-2 align-top">
+                                          <MultiSelect
+                                            value={policy.responsibleEmployeeIds}
+                                            options={policyEmployeeOptions}
+                                            onChange={(e) =>
+                                              updateStockPolicy(policy.localId, {
+                                                responsibleEmployeeIds: (
+                                                  Array.isArray(e.value) ? e.value : []
+                                                ).map(String),
+                                              })
+                                            }
+                                            placeholder={t("spareParts.policyResponsiblesPlaceholder")}
+                                            disabled={!form.siteId}
+                                            display="chip"
+                                            filter
+                                            className="w-full min-w-[12rem]"
+                                            appendTo={overlayAppendTo}
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2 align-top">
                                           <Button
                                             type="button"
                                             severity="danger"
@@ -2406,10 +2630,7 @@ export function SparePartsPage() {
                     </TabPanel>
                     <TabPanel
                       header={
-                        <span className="inline-flex items-center gap-2">
-                          <span>{t("spareParts.tabSuppliers")}</span>
-                          {suppliersTabCount > 0 ? <Badge value={suppliersTabCount} /> : null}
-                        </span>
+                        <AppTabHeader label={t("spareParts.tabSuppliers")} count={suppliersTabCount} />
                       }
                     >
                       {stockDetailLoading && editingId ? (
@@ -2712,7 +2933,11 @@ export function SparePartsPage() {
                         </div>
                       )}
                     </TabPanel>
-                    <TabPanel header={<span className="inline-flex items-center gap-2"><span>{t("spareParts.tabDocuments")}</span>{documentsTabCount > 0 ? <Badge value={documentsTabCount} /> : null}</span>}>
+                    <TabPanel
+                      header={
+                        <AppTabHeader label={t("spareParts.tabDocuments")} count={documentsTabCount} />
+                      }
+                    >
                       <div className="space-y-4 pt-1">
                         <div className="grid grid-cols-[8fr_2fr] gap-2">
                           <Button type="button" icon={<Upload className={lucidePrimeBtnIcon} strokeWidth={1.75} />} label={t("spareParts.documentsUpload")} onClick={() => documentsFileInputRef.current?.click()} />
@@ -2728,6 +2953,172 @@ export function SparePartsPage() {
                   </SparePartEditTabHost>
                 </SparePartEditPageView>
       ) : null}
+
+      <Sidebar
+        visible={gldHistoryVisible}
+        position="right"
+        onHide={() => {
+          setGldHistoryVisible(false);
+          setGldHistoryRows([]);
+          setGldHistoryLabel("");
+          setGldHistoryStockControlId(null);
+          setGldEditRow(null);
+          setGldEditValue(null);
+        }}
+        className="app-wo-search-sidebar !w-[min(70vw,40rem)] max-w-none"
+        pt={{
+          header: { className: "app-wo-search-sidebar-header" },
+          content: {
+            className: "app-wo-search-sidebar-content flex min-h-0 flex-1 flex-col p-0",
+          },
+        }}
+        header={
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate text-base font-medium text-on-surface">
+              {t("spareParts.gldHistoryTitle")}
+            </span>
+            {gldHistoryLabel ? (
+              <span className="truncate text-xs text-on-surface-variant">{gldHistoryLabel}</span>
+            ) : null}
+          </div>
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+          {gldHistoryLoading ? (
+            <p className="m-0 text-sm text-on-surface-variant">{t("spareParts.gldHistoryLoading")}</p>
+          ) : gldHistoryRows.length === 0 ? (
+            <p className="m-0 text-sm text-on-surface-variant">{t("spareParts.gldHistoryEmpty")}</p>
+          ) : (
+            <DataTable
+              className="app-data-table w-full"
+              value={gldHistoryRows}
+              dataKey="id"
+              size="small"
+              emptyMessage={t("spareParts.gldHistoryEmpty")}
+            >
+              <Column
+                header={t("spareParts.gldHistoryDate")}
+                body={(row: GldHistoryRow) => {
+                  try {
+                    return new Intl.DateTimeFormat(i18n.language, { dateStyle: "short" }).format(
+                      new Date(row.bookedAt),
+                    );
+                  } catch {
+                    return row.bookedAt;
+                  }
+                }}
+              />
+              <Column
+                header={t("spareParts.gldHistoryTime")}
+                body={(row: GldHistoryRow) => {
+                  try {
+                    return new Intl.DateTimeFormat(i18n.language, { timeStyle: "medium" }).format(
+                      new Date(row.bookedAt),
+                    );
+                  } catch {
+                    return row.bookedAt;
+                  }
+                }}
+              />
+              <Column
+                header={t("spareParts.quantity")}
+                body={(row: GldHistoryRow) => {
+                  const n = Number(row.quantity);
+                  if (!Number.isFinite(n)) return row.quantity;
+                  return new Intl.NumberFormat(i18n.language, {
+                    maximumFractionDigits: 4,
+                    minimumFractionDigits: 0,
+                  }).format(n);
+                }}
+              />
+              <Column
+                header={t("spareParts.gldHistoryUnitPrice")}
+                body={(row: GldHistoryRow) => {
+                  if (row.unitPrice == null || row.unitPrice === "") {
+                    return "—";
+                  }
+                  const n = Number(row.unitPrice);
+                  const priceLabel = Number.isFinite(n)
+                    ? new Intl.NumberFormat(i18n.language, {
+                        maximumFractionDigits: 4,
+                        minimumFractionDigits: 0,
+                      }).format(n)
+                    : row.unitPrice;
+                  return (
+                    <div className="flex items-center gap-1">
+                      <span>{priceLabel}</span>
+                      <Button
+                        type="button"
+                        text
+                        rounded
+                        aria-label={t("spareParts.gldEdit")}
+                        icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                        onClick={() => openGldEdit(row)}
+                      />
+                    </div>
+                  );
+                }}
+              />
+              <Column
+                header={t("spareParts.gldHistoryPrice")}
+                body={(row: GldHistoryRow) => {
+                  const n = Number(row.movingAveragePrice);
+                  if (!Number.isFinite(n)) return row.movingAveragePrice;
+                  return new Intl.NumberFormat(i18n.language, {
+                    maximumFractionDigits: 4,
+                    minimumFractionDigits: 0,
+                  }).format(n);
+                }}
+              />
+            </DataTable>
+          )}
+        </div>
+      </Sidebar>
+
+      <AppDialog
+        header={t("spareParts.gldEditTitle")}
+        visible={gldEditRow != null}
+        onHide={closeGldEdit}
+        modal
+        dismissableMask={!gldEditSaving}
+        draggable={false}
+        resizable={false}
+        style={{ width: "min(24rem, 92vw)" }}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              label={t("spareParts.cancel")}
+              severity="secondary"
+              outlined
+              disabled={gldEditSaving}
+              onClick={closeGldEdit}
+            />
+            <Button
+              type="button"
+              label={t("spareParts.save")}
+              loading={gldEditSaving}
+              onClick={confirmGldEdit}
+            />
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3 pt-1 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-on-surface-variant">{t("spareParts.gldHistoryUnitPrice")}</span>
+            <InputNumber
+              value={gldEditValue}
+              onValueChange={(e) => setGldEditValue(e.value ?? null)}
+              min={0}
+              minFractionDigits={0}
+              maxFractionDigits={4}
+              className="w-full"
+              inputClassName="w-full"
+              disabled={gldEditSaving}
+            />
+          </label>
+        </div>
+      </AppDialog>
     </>
   );
 }

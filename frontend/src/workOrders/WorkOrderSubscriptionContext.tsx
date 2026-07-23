@@ -43,6 +43,25 @@ export type WorkOrderChatNotification = {
   readAt: string | null;
 };
 
+export type SparePartStockNotification = {
+  id: string;
+  userId: string;
+  sparePartId: string;
+  sparePartKey: string;
+  sparePartName: string;
+  siteKey: string;
+  siteName: string;
+  scopeType: "SITE" | "WAREHOUSE" | "STORAGE_LOCATION";
+  warehouseId: string | null;
+  storageLocationId: string | null;
+  warehouseKey: string | null;
+  storageLocationKey: string | null;
+  onHandQuantity: number;
+  reorderLevel: number;
+  createdAt: string;
+  readAt: string | null;
+};
+
 type WorkOrderEventMessage = {
   type: "work_order_created" | "work_order_updated";
   workOrder: WorkOrder;
@@ -55,7 +74,8 @@ export type WorkOrderMessageEventMessage = {
 
 export type NotificationEventMessage =
   | { type: "subscription_notification"; notification: WorkOrderSubscriptionNotification }
-  | { type: "chat_notification"; notification: WorkOrderChatNotification };
+  | { type: "chat_notification"; notification: WorkOrderChatNotification }
+  | { type: "stock_notification"; notification: SparePartStockNotification };
 
 type NotificationEventHandler = (message: NotificationEventMessage) => boolean | void;
 
@@ -96,6 +116,39 @@ function isChatNotification(value: unknown): value is WorkOrderChatNotification 
     typeof n.messageId === "string" &&
     typeof n.messagePreview === "string"
   );
+}
+
+function isStockNotification(value: unknown): value is SparePartStockNotification {
+  if (!value || typeof value !== "object") return false;
+  const n = value as SparePartStockNotification & {
+    onHandQuantity: unknown;
+    reorderLevel: unknown;
+  };
+  const onHand =
+    typeof n.onHandQuantity === "number"
+      ? n.onHandQuantity
+      : typeof n.onHandQuantity === "string"
+        ? Number(n.onHandQuantity)
+        : NaN;
+  const reorder =
+    typeof n.reorderLevel === "number"
+      ? n.reorderLevel
+      : typeof n.reorderLevel === "string"
+        ? Number(n.reorderLevel)
+        : NaN;
+  if (
+    typeof n.id !== "string" ||
+    typeof n.sparePartId !== "string" ||
+    typeof n.sparePartKey !== "string" ||
+    typeof n.scopeType !== "string" ||
+    !Number.isFinite(onHand) ||
+    !Number.isFinite(reorder)
+  ) {
+    return false;
+  }
+  n.onHandQuantity = onHand;
+  n.reorderLevel = reorder;
+  return true;
 }
 
 function isWorkOrderMessage(value: unknown): value is WorkOrderMessage {
@@ -218,6 +271,18 @@ export function WorkOrderSubscriptionProvider({ children }: { children: ReactNod
         if (message.type === "chat_notification" && isChatNotification(message.notification)) {
           const casted: NotificationEventMessage = {
             type: "chat_notification",
+            notification: message.notification,
+          };
+          let handled = false;
+          for (const listener of notificationEventListenersRef.current) {
+            if (listener(casted) === true) handled = true;
+          }
+          if (!handled) setUnreadCount((current) => current + 1);
+          return;
+        }
+        if (message.type === "stock_notification" && isStockNotification(message.notification)) {
+          const casted: NotificationEventMessage = {
+            type: "stock_notification",
             notification: message.notification,
           };
           let handled = false;

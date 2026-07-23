@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
-import { ColorPicker } from "primereact/colorpicker";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { AppDialog } from "../components/AppDialog";
+import { AppColorPicker } from "../components/AppColorPicker";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -24,6 +24,11 @@ import { useAuth } from "../auth/AuthContext";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
+import {
+  DEFAULT_PICKER_COLOR_HEX,
+  pickerValueFromStored,
+  storedFromPickerValue,
+} from "../lib/colorHex";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
@@ -75,22 +80,7 @@ type FormState = {
   isActive: boolean;
 };
 
-const defaultColorHex = "#64748b";
-
-function pickerValueFromStored(hex: string): string {
-  return hex.replace(/^#/, "").toLowerCase();
-}
-
-function storedFromPickerValue(raw: string): string {
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/i.exec(withHash);
-  if (!m) return defaultColorHex;
-  let h = m[1]!.toLowerCase();
-  if (h.length === 3) {
-    h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
-  }
-  return `#${h}`;
-}
+const defaultColorHex = DEFAULT_PICKER_COLOR_HEX;
 
 function timeStringToDate(time: string): Date | null {
   const trimmed = time.trim();
@@ -753,23 +743,11 @@ export function ShiftsPage() {
               </span>
             </label>
             <div className="flex flex-wrap items-center gap-3">
-              <span
-                className="app-atyp-color-swatch-wrap"
-                style={{ "--atyp-swatch": form.colorHex } as CSSProperties}
-              >
-                <ColorPicker
-                  inputId="shift-colorHex"
-                  className="app-atyp-colorpicker"
-                  format="hex"
-                  value={pickerValueFromStored(form.colorHex)}
-                  onChange={(e) => {
-                    const raw = typeof e.value === "string" ? e.value : "";
-                    setForm((f) => ({ ...f, colorHex: storedFromPickerValue(raw) }));
-                  }}
-                  appendTo={overlayAppendTo}
-                />
-              </span>
-              <span className="font-mono text-sm text-on-surface-variant">{form.colorHex}</span>
+              <AppColorPicker
+                inputId="shift-colorHex"
+                value={form.colorHex}
+                onChange={(colorHex) => setForm((f) => ({ ...f, colorHex }))}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

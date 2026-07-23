@@ -181,6 +181,40 @@ export async function broadcastChatNotification(notification: ChatNotificationPa
   }
 }
 
+export type StockNotificationPayload = {
+  id: string;
+  userId: string;
+  sparePartId: string;
+  sparePartKey: string;
+  sparePartName: string;
+  siteKey: string;
+  siteName: string;
+  scopeType: "SITE" | "WAREHOUSE" | "STORAGE_LOCATION";
+  warehouseId: string | null;
+  storageLocationId: string | null;
+  warehouseKey: string | null;
+  storageLocationKey: string | null;
+  onHandQuantity: number;
+  reorderLevel: number;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export async function broadcastStockNotification(
+  notification: StockNotificationPayload,
+): Promise<void> {
+  if (sockets.size === 0) return;
+  const message = JSON.stringify({
+    type: "stock_notification",
+    notification,
+  });
+  for (const [socket, socketUserId] of sockets.entries()) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    if (socketUserId !== notification.userId) continue;
+    socket.send(message);
+  }
+}
+
 export type WorkOrderMessageRealtimePayload = {
   id: string;
   workOrderId: string;

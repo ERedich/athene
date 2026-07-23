@@ -22,6 +22,12 @@ export const APP_PARAM_KEY_SHOW_ASSET_KEY_PATH = "GN-SAKP" as const;
 /** Must match backend `APP_PARAM_KEY_COLORED_ASSET_TREE` (GN-CATR). */
 export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR" as const;
 
+/** Must match backend `APP_PARAM_KEY_PRIMARY_COLOR` (GN-PRIM). */
+export const APP_PARAM_KEY_PRIMARY_COLOR = "GN-PRIM" as const;
+
+/** Default when GN-PRIM is missing; must match backend `DEFAULT_PRIMARY_COLOR_HEX`. */
+export const DEFAULT_PRIMARY_COLOR_HEX = "#f97316" as const;
+
 /** Must match backend `APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA` (MT-ACSD). */
 export const APP_PARAM_KEY_ALLOW_CHANGE_STOCKDATA = "MT-ACSD" as const;
 

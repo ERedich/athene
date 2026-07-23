@@ -8,6 +8,24 @@ import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
+export const SUPPLIER_DYNAMIC_FIELD_KEYS = [
+  "dynamicField0",
+  "dynamicField1",
+  "dynamicField2",
+  "dynamicField3",
+  "dynamicField4",
+  "dynamicField5",
+  "dynamicField6",
+  "dynamicField7",
+  "dynamicField8",
+  "dynamicField9",
+  "dynamicField10",
+] as const;
+
+export type SupplierDynamicFieldKey = (typeof SUPPLIER_DYNAMIC_FIELD_KEYS)[number];
+
+export type SupplierDynamicFields = Record<SupplierDynamicFieldKey, string | null>;
+
 export type SupplierRow = {
   id: string;
   key: string;
@@ -25,7 +43,18 @@ export type SupplierRow = {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
-};
+} & SupplierDynamicFields;
+
+type SupplierWriteBody = {
+  key: string;
+  name: string;
+  siteId: string;
+  customerNumber: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  isActive: boolean;
+} & SupplierDynamicFields;
 
 const router = Router();
 
@@ -42,18 +71,24 @@ function optionalText(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function parseBody(
-  body: unknown,
-): {
-  key: string;
-  name: string;
-  siteId: string;
-  customerNumber: string | null;
-  address: string | null;
-  phone: string | null;
-  email: string | null;
-  isActive: boolean;
-} | null {
+function parseDynamicFields(o: Record<string, unknown>): SupplierDynamicFields {
+  const out = {} as SupplierDynamicFields;
+  for (const key of SUPPLIER_DYNAMIC_FIELD_KEYS) {
+    const raw = o[key];
+    if (raw === null || raw === undefined) {
+      out[key] = null;
+    } else if (typeof raw === "boolean") {
+      out[key] = raw ? "true" : "false";
+    } else if (typeof raw === "string") {
+      out[key] = optionalText(raw);
+    } else {
+      out[key] = null;
+    }
+  }
+  return out;
+}
+
+function parseBody(body: unknown): SupplierWriteBody | null {
   if (body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
   const key = typeof o.key === "string" ? o.key.trim() : "";
@@ -70,6 +105,7 @@ function parseBody(
     phone: optionalText(o.phone),
     email: optionalText(o.email),
     isActive,
+    ...parseDynamicFields(o),
   };
 }
 
@@ -102,6 +138,10 @@ function auditMeta(req: Request) {
   };
 }
 
+const dynamicSelectCols = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => `s."${k}"`).join(",\n    ");
+const dynamicInsertedCols = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => `i."${k}"`).join(",\n    ");
+const dynamicUpdatedCols = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => `u."${k}"`).join(",\n    ");
+
 const selectSuppliersSql = `
   SELECT
     s."id",
@@ -116,6 +156,7 @@ const selectSuppliersSql = `
     s."phone",
     s."email",
     s."isActive",
+    ${dynamicSelectCols},
     s."createdAt",
     s."updatedAt",
     COALESCE(created_by."loginName", s."createdBy"::text) AS "createdBy",
@@ -140,6 +181,7 @@ const selectInsertedSupplierSql = `
     i."phone",
     i."email",
     i."isActive",
+    ${dynamicInsertedCols},
     i."createdAt",
     i."updatedAt",
     COALESCE(created_by."loginName", i."createdBy"::text) AS "createdBy",
@@ -149,6 +191,32 @@ const selectInsertedSupplierSql = `
   LEFT JOIN "users" created_by ON created_by."id" = i."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = i."updatedBy"
 `;
+
+const insertColNames = [
+  "key",
+  "name",
+  "siteId",
+  "customerNumber",
+  "address",
+  "phone",
+  "email",
+  "isActive",
+  ...SUPPLIER_DYNAMIC_FIELD_KEYS,
+]
+  .map((c) => `"${c}"`)
+  .join(", ");
+
+const insertPlaceholders = [
+  "$1",
+  "$2",
+  "$3::uuid",
+  "$4",
+  "$5",
+  "$6",
+  "$7",
+  "$8",
+  ...SUPPLIER_DYNAMIC_FIELD_KEYS.map((_, i) => `$${9 + i}`),
+].join(", ");
 
 router.get("/", async (req: Request, res: Response) => {
   const userId = req.session.userId;
@@ -178,6 +246,7 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
   const { key, name, siteId, customerNumber, address, phone, email, isActive } = parsed;
+  const dynamicValues = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => parsed[k]);
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
@@ -188,14 +257,14 @@ router.post("/", async (req: Request, res: Response) => {
         `
         WITH inserted AS (
           INSERT INTO "supplier" (
-            "key", "name", "siteId", "customerNumber", "address", "phone", "email", "isActive"
+            ${insertColNames}
           )
-          VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, $8)
+          VALUES (${insertPlaceholders})
           RETURNING *
         )
         ${selectInsertedSupplierSql}
         `,
-        [key, name, effectiveSiteId, customerNumber, address, phone, email, isActive],
+        [key, name, effectiveSiteId, customerNumber, address, phone, email, isActive, ...dynamicValues],
       );
       return rows[0];
     });
@@ -233,6 +302,8 @@ router.put("/:id", async (req: Request, res: Response) => {
     return;
   }
   const { key, name, siteId, customerNumber, address, phone, email, isActive } = parsed;
+  const dynamicValues = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k) => parsed[k]);
+  const dynamicSetSql = SUPPLIER_DYNAMIC_FIELD_KEYS.map((k, i) => `"${k}" = $${9 + i}`).join(",\n            ");
   try {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
@@ -264,8 +335,9 @@ router.put("/:id", async (req: Request, res: Response) => {
             "address" = $5,
             "phone" = $6,
             "email" = $7,
-            "isActive" = $8
-          WHERE "id" = $9::uuid
+            "isActive" = $8,
+            ${dynamicSetSql}
+          WHERE "id" = $${9 + SUPPLIER_DYNAMIC_FIELD_KEYS.length}::uuid
           RETURNING *
         )
         SELECT
@@ -281,6 +353,7 @@ router.put("/:id", async (req: Request, res: Response) => {
           u."phone",
           u."email",
           u."isActive",
+          ${dynamicUpdatedCols},
           u."createdAt",
           u."updatedAt",
           COALESCE(created_by."loginName", u."createdBy"::text) AS "createdBy",
@@ -290,7 +363,18 @@ router.put("/:id", async (req: Request, res: Response) => {
         LEFT JOIN "users" created_by ON created_by."id" = u."createdBy"
         LEFT JOIN "users" updated_by ON updated_by."id" = u."updatedBy"
         `,
-        [key, name, effectiveSiteId, customerNumber, address, phone, email, isActive, id],
+        [
+          key,
+          name,
+          effectiveSiteId,
+          customerNumber,
+          address,
+          phone,
+          email,
+          isActive,
+          ...dynamicValues,
+          id,
+        ],
       );
       return rows[0] ?? null;
     });

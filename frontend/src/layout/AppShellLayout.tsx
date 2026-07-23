@@ -13,10 +13,14 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
+import { useAuth } from "../auth/AuthContext";
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
 import { SidebarSweepTimer } from "../components/SidebarSweepTimer";
 import { apiFetch } from "../lib/api";
+import { fetchActiveAppLayout } from "../lib/layoutEditor/api";
+import { defaultTabsPayload } from "../lib/layoutEditor/types";
+import { applyTabsLayoutCssVars } from "../lib/tabs";
 import { ONBOARDING_ENSURE_SIDEBAR_EVENT } from "../onboarding/onboardingDom";
 import { useTableDensity } from "../tableDensity";
 import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
@@ -48,6 +52,7 @@ function headerTitleKey(pathname: string): string {
     monitoring: "monitoring.appName",
     suchkonfig: "suchkonfig.appName",
     "kpi-builder": "kpiBuilder.appName",
+    "layout-editor": "layoutEditor.appName",
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",
@@ -63,6 +68,7 @@ function headerTitleKey(pathname: string): string {
     warehouses: "warehouses.appName",
     "storage-locations": "storageLocations.appName",
     "spare-parts": "spareParts.appName",
+    suppliers: "suppliers.appName",
     "classifications": "classifications.appName",
     "app-parameters": "appParameters.appName",
     "audit-log": "auditLog.appName",
@@ -95,6 +101,7 @@ export function AppShellLayout() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const subscriptions = useWorkOrderSubscriptions();
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [headerRowCount, setHeaderRowCount] = useState<number | null>(null);
@@ -104,6 +111,24 @@ export function AppShellLayout() {
   const [collapsed, setCollapsed] = useState<boolean>(() =>
     readInitialCollapsed(),
   );
+
+  useEffect(() => {
+    applyTabsLayoutCssVars(document.documentElement, defaultTabsPayload());
+    let cancelled = false;
+    void (async () => {
+      try {
+        const layout = await fetchActiveAppLayout(user.workingSiteId, "design");
+        if (!cancelled && layout.tabs) {
+          applyTabsLayoutCssVars(document.documentElement, layout.tabs);
+        }
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.workingSiteId]);
 
   useEffect(() => {
     const onEnsure = () => {

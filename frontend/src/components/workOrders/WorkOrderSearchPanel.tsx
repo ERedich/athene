@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
@@ -11,6 +11,7 @@ import { MultiSelect } from "primereact/multiselect";
 import { Sidebar } from "primereact/sidebar";
 import { TabPanel, TabView } from "primereact/tabview";
 
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../../lib/tabs";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
 import {
   EMPLOYEE_PSEUDO_ME,
@@ -259,36 +260,14 @@ function PlanningDateField({
 }) {
   const tabHostRef = useRef<HTMLDivElement | null>(null);
   const activeIndex = planningModeToTabIndex(mode);
-
-  const updateTabInk = useCallback(() => {
-    const host = tabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      updateTabInk();
-      requestAnimationFrame(updateTabInk);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [activeIndex, updateTabInk]);
-
-  useLayoutEffect(() => {
-    window.addEventListener("resize", updateTabInk);
-    return () => window.removeEventListener("resize", updateTabInk);
-  }, [updateTabInk]);
+  useTabInk(tabHostRef, [activeIndex]);
 
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-on-surface-variant">{label}</span>
-      <div ref={tabHostRef} className="app-tabview-with-ink">
+      <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
         <TabView
-          className="app-sticky-tabs app-wo-search-planning-tabs"
+          className={`${STANDARD_TAB_VIEW_CLASS} app-wo-search-planning-tabs`}
           activeIndex={activeIndex}
           onTabChange={(e) => onMode(planningTabIndexToMode(e.index))}
         >

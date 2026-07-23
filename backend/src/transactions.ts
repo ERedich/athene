@@ -6,6 +6,11 @@ import type { PoolClient, QueryResult } from "pg";
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
 import { siteAccessSql } from "./siteAccess.js";
+import {
+  notifySparePartStockBelowReorder,
+  snapshotSparePartStockScopes,
+} from "./sparePartStockNotify.js";
+import { computeMovingAverage } from "./stockMovingAverage.js";
 import { buildTransactionListExtraFilters } from "./transactionListQuery.js";
 
 export type TransactionRow = {
@@ -37,6 +42,7 @@ export type TransactionRow = {
   costCenterId: string | null;
   costCenterKey: string | null;
   costCenterName: string | null;
+  unitPrice: string | null;
 };
 
 const router = Router();
@@ -44,8 +50,8 @@ const router = Router();
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const allowedTypes = new Set(["IN", "EX", "RM", "RT", "IV"]);
-const creatableTypes = new Set(["RM"]);
+const allowedTypes = new Set(["IN", "EX", "RM", "RT", "IV", "ZU"]);
+const creatableTypes = new Set(["RM", "ZU"]);
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
@@ -60,6 +66,12 @@ function parseIntParam(raw: unknown, fallback: number, max: number): number {
 function parsePositiveQuantity(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : Number.NaN;
   if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 10_000) / 10_000;
+}
+
+function parseNonNegativePrice(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : Number.NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 10_000) / 10_000;
 }
 
@@ -117,7 +129,8 @@ const transactionSelectSql = `
     a."name" AS "assetName",
     t."costCenterId",
     cc."key" AS "costCenterKey",
-    cc."name" AS "costCenterName"
+    cc."name" AS "costCenterName",
+    t."unitPrice"::text AS "unitPrice"
   FROM "transaction" t
   JOIN "site" s ON s."id" = t."siteId"
   LEFT JOIN "workOrder" w ON w."id" = t."workOrderId"
@@ -132,6 +145,7 @@ const transactionSelectSql = `
 type StockLineLock = {
   id: string;
   quantity: string;
+  valuationPrice: string | null;
   warehouseId: string;
   siteId: string;
 };
@@ -146,6 +160,7 @@ async function lockStockLine(
     SELECT
       sc."id",
       sc."quantity"::text AS "quantity",
+      sc."valuationPrice"::text AS "valuationPrice",
       sc."warehouseId",
       wh."siteId"
     FROM "stockControl" sc
@@ -157,6 +172,73 @@ async function lockStockLine(
     [sparePartId, storageLocationId],
   );
   return rows[0] ?? null;
+}
+
+async function insertMovingAverageHistory(
+  client: PoolClient,
+  args: {
+    stockControlId: string;
+    transactionId: string;
+    quantity: number;
+    unitPrice: number | null;
+    movingAveragePrice: number;
+  },
+): Promise<void> {
+  await client.query(
+    `
+    INSERT INTO "stockControlMovingAverageHistory" (
+      "stockControlId",
+      "transactionId",
+      "bookedAt",
+      "quantity",
+      "unitPrice",
+      "movingAveragePrice"
+    )
+    VALUES ($1::uuid, $2::uuid, now(), $3::numeric, $4::numeric, $5::numeric)
+    `,
+    [
+      args.stockControlId,
+      args.transactionId,
+      args.quantity,
+      args.unitPrice,
+      args.movingAveragePrice,
+    ],
+  );
+}
+
+async function deleteMovingAverageHistoryForTransaction(
+  client: PoolClient,
+  transactionId: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM "stockControlMovingAverageHistory" WHERE "transactionId" = $1::uuid`,
+    [transactionId],
+  );
+}
+
+async function restoreValuationPriceFromHistory(
+  client: PoolClient,
+  stockControlId: string,
+): Promise<void> {
+  const { rows } = await client.query<{ movingAveragePrice: string }>(
+    `
+    SELECT "movingAveragePrice"::text AS "movingAveragePrice"
+    FROM "stockControlMovingAverageHistory"
+    WHERE "stockControlId" = $1::uuid
+    ORDER BY "bookedAt" DESC, "createdAt" DESC
+    LIMIT 1
+    `,
+    [stockControlId],
+  );
+  const nextPrice = rows[0]?.movingAveragePrice ?? null;
+  await client.query(
+    `
+    UPDATE "stockControl"
+    SET "valuationPrice" = $1::numeric
+    WHERE "id" = $2::uuid
+    `,
+    [nextPrice, stockControlId],
+  );
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -292,6 +374,161 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
+  let remark: string | null = null;
+  if (typeof body.remark === "string") {
+    const trimmed = body.remark.trim();
+    if (trimmed.length > 2000) {
+      res.status(400).json({ error: "remark_too_long" });
+      return;
+    }
+    remark = trimmed.length ? trimmed : null;
+  }
+
+  if (typeRaw === "ZU") {
+    const unitPrice = parseNonNegativePrice(body.unitPrice);
+    if (unitPrice === null) {
+      res.status(400).json({ error: "invalid_unit_price" });
+      return;
+    }
+
+    try {
+      const meta = auditMeta(req);
+      const created = await withAuditContext(meta, async (client) => {
+        const sparePartRes = await client.query<{ id: string; siteId: string }>(
+          `
+          SELECT sp."id", sp."siteId"
+          FROM "sparePart" sp
+          WHERE sp."id" = $1::uuid
+            AND ${siteAccessSql('sp."siteId"', "$2")}
+          LIMIT 1
+          `,
+          [sparePartId, meta.userId],
+        );
+        const sparePart = sparePartRes.rows[0];
+        if (!sparePart) {
+          return { kind: "spare_part_not_found" as const };
+        }
+
+        const stock = await lockStockLine(client, sparePartId, storageLocationId);
+        if (!stock) {
+          return { kind: "stock_line_not_found" as const };
+        }
+        if (stock.siteId !== sparePart.siteId) {
+          return { kind: "site_mismatch" as const };
+        }
+
+        const oldQty = Number(stock.quantity);
+        if (!Number.isFinite(oldQty) || oldQty < 0) {
+          return { kind: "invalid_stock_quantity" as const };
+        }
+        const oldGldRaw = stock.valuationPrice != null ? Number(stock.valuationPrice) : 0;
+        const oldGld = Number.isFinite(oldGldRaw) && oldGldRaw >= 0 ? oldGldRaw : 0;
+        const newGld = computeMovingAverage(oldQty, oldGld, quantity, unitPrice);
+
+        const empRes = await client.query<{ employeeId: string | null }>(
+          `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+          [meta.userId],
+        );
+        const sessionEmployeeId = empRes.rows[0]?.employeeId ?? null;
+
+        await client.query(
+          `
+          UPDATE "stockControl"
+          SET
+            "quantity" = "quantity" + $1::numeric,
+            "valuationPrice" = $2::numeric
+          WHERE "id" = $3::uuid
+          `,
+          [quantity, newGld, stock.id],
+        );
+
+        const insertRes = await client.query<{ id: string }>(
+          `
+          INSERT INTO "transaction" (
+            "siteId",
+            "type",
+            "quantity",
+            "remark",
+            "employeeId",
+            "sparePartId",
+            "warehouseId",
+            "storageLocationId",
+            "unitPrice"
+          )
+          VALUES (
+            $1::uuid,
+            'ZU',
+            $2::numeric,
+            $3,
+            $4::uuid,
+            $5::uuid,
+            $6::uuid,
+            $7::uuid,
+            $8::numeric
+          )
+          RETURNING "id"
+          `,
+          [
+            sparePart.siteId,
+            quantity,
+            remark,
+            sessionEmployeeId,
+            sparePartId,
+            stock.warehouseId,
+            storageLocationId,
+            unitPrice,
+          ],
+        );
+        const transactionId = insertRes.rows[0]!.id;
+
+        await insertMovingAverageHistory(client, {
+          stockControlId: stock.id,
+          transactionId,
+          quantity,
+          unitPrice,
+          movingAveragePrice: newGld,
+        });
+
+        const rowRes = await client.query<TransactionRow>(
+          `
+          ${transactionSelectSql}
+          WHERE t."id" = $1::uuid
+          LIMIT 1
+          `,
+          [transactionId],
+        );
+        return { kind: "ok" as const, row: rowRes.rows[0]! };
+      });
+
+      if (created.kind === "spare_part_not_found") {
+        res.status(404).json({ error: "spare_part_not_found" });
+        return;
+      }
+      if (created.kind === "stock_line_not_found") {
+        res.status(404).json({ error: "stock_line_not_found" });
+        return;
+      }
+      if (created.kind === "site_mismatch") {
+        res.status(400).json({ error: "site_mismatch" });
+        return;
+      }
+      if (created.kind === "invalid_stock_quantity") {
+        res.status(409).json({ error: "invalid_stock_quantity" });
+        return;
+      }
+
+      res.status(201).json(created.row);
+    } catch (err) {
+      if ((err as Error).message === "missing_session_user") {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      sendPgError(res, err);
+    }
+    return;
+  }
+
+  // RM — Materialentnahme
   const workOrderIdRaw =
     typeof body.workOrderId === "string" && body.workOrderId.trim()
       ? body.workOrderId.trim()
@@ -315,18 +552,9 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  let remark: string | null = null;
-  if (typeof body.remark === "string") {
-    const trimmed = body.remark.trim();
-    if (trimmed.length > 2000) {
-      res.status(400).json({ error: "remark_too_long" });
-      return;
-    }
-    remark = trimmed.length ? trimmed : null;
-  }
-
   try {
     const meta = auditMeta(req);
+    const beforeScopes = await snapshotSparePartStockScopes(sparePartId);
     const created = await withAuditContext(meta, async (client) => {
       const sparePartRes = await client.query<{ id: string; siteId: string }>(
         `
@@ -424,6 +652,9 @@ router.post("/", async (req: Request, res: Response) => {
       );
       const sessionEmployeeId = empRes.rows[0]?.employeeId ?? null;
 
+      const gldRaw = stock.valuationPrice != null ? Number(stock.valuationPrice) : 0;
+      const currentGld = Number.isFinite(gldRaw) && gldRaw >= 0 ? gldRaw : 0;
+
       await client.query(
         `
         UPDATE "stockControl"
@@ -476,6 +707,15 @@ router.post("/", async (req: Request, res: Response) => {
           costCenterIdRaw,
         ],
       );
+      const transactionId = insertRes.rows[0]!.id;
+
+      await insertMovingAverageHistory(client, {
+        stockControlId: stock.id,
+        transactionId,
+        quantity,
+        unitPrice: null,
+        movingAveragePrice: currentGld,
+      });
 
       const rowRes = await client.query<TransactionRow>(
         `
@@ -483,7 +723,7 @@ router.post("/", async (req: Request, res: Response) => {
         WHERE t."id" = $1::uuid
         LIMIT 1
         `,
-        [insertRes.rows[0]!.id],
+        [transactionId],
       );
       return { kind: "ok" as const, row: rowRes.rows[0]! };
     });
@@ -525,6 +765,9 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
 
+    void notifySparePartStockBelowReorder(sparePartId, beforeScopes).catch((err) => {
+      console.error(err);
+    });
     res.status(201).json(created.row);
   } catch (err) {
     if ((err as Error).message === "missing_session_user") {
@@ -543,6 +786,26 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
   try {
     const meta = auditMeta(req);
+
+    const peekRes = await pool.query<{
+      type: string;
+      sparePartId: string | null;
+    }>(
+      `
+      SELECT t."type", t."sparePartId"
+      FROM "transaction" t
+      WHERE t."id" = $1::uuid
+        AND ${siteAccessSql('t."siteId"', "$2")}
+      LIMIT 1
+      `,
+      [id, meta.userId],
+    );
+    const peek = peekRes.rows[0];
+    const beforeScopes =
+      peek?.type === "ZU" && peek.sparePartId
+        ? await snapshotSparePartStockScopes(peek.sparePartId)
+        : null;
+
     const result = await withAuditContext(meta, async (client) => {
       const txRes = await client.query<{
         id: string;
@@ -570,7 +833,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
         return { kind: "not_found" as const };
       }
 
-      if (tx.type === "RM") {
+      if (tx.type === "RM" || tx.type === "ZU") {
         if (!tx.sparePartId || !tx.storageLocationId) {
           return { kind: "stock_line_missing" as const };
         }
@@ -582,14 +845,36 @@ router.delete("/:id", async (req: Request, res: Response) => {
         if (!Number.isFinite(qty) || qty <= 0) {
           return { kind: "invalid_quantity" as const };
         }
-        await client.query(
-          `
-          UPDATE "stockControl"
-          SET "quantity" = "quantity" + $1::numeric
-          WHERE "id" = $2::uuid
-          `,
-          [qty, stock.id],
-        );
+
+        if (tx.type === "RM") {
+          await client.query(
+            `
+            UPDATE "stockControl"
+            SET "quantity" = "quantity" + $1::numeric
+            WHERE "id" = $2::uuid
+            `,
+            [qty, stock.id],
+          );
+          await deleteMovingAverageHistoryForTransaction(client, tx.id);
+        } else {
+          const available = Number(stock.quantity);
+          if (!Number.isFinite(available) || available < qty) {
+            return {
+              kind: "insufficient_stock" as const,
+              available: Number.isFinite(available) ? available : 0,
+            };
+          }
+          await client.query(
+            `
+            UPDATE "stockControl"
+            SET "quantity" = "quantity" - $1::numeric
+            WHERE "id" = $2::uuid
+            `,
+            [qty, stock.id],
+          );
+          await deleteMovingAverageHistoryForTransaction(client, tx.id);
+          await restoreValuationPriceFromHistory(client, stock.id);
+        }
       }
 
       const deleted: QueryResult = await client.query(
@@ -599,7 +884,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
         `,
         [id],
       );
-      return { kind: "ok" as const, deleted: deleted.rowCount ?? 0 };
+      return {
+        kind: "ok" as const,
+        deleted: deleted.rowCount ?? 0,
+        sparePartId: tx.sparePartId,
+        type: tx.type,
+      };
     });
 
     if (result.kind === "not_found") {
@@ -614,9 +904,21 @@ router.delete("/:id", async (req: Request, res: Response) => {
       res.status(409).json({ error: "invalid_quantity" });
       return;
     }
+    if (result.kind === "insufficient_stock") {
+      res.status(409).json({
+        error: "insufficient_stock",
+        available: result.available,
+      });
+      return;
+    }
     if (result.deleted === 0) {
       res.status(404).json({ error: "not_found" });
       return;
+    }
+    if (result.type === "ZU" && result.sparePartId && beforeScopes) {
+      void notifySparePartStockBelowReorder(result.sparePartId, beforeScopes).catch((err) => {
+        console.error(err);
+      });
     }
     res.status(204).send();
   } catch (err) {

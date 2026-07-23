@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -22,7 +21,6 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
-import { Badge } from "primereact/badge";
 import { Button } from "primereact/button";
 import { Column } from "primereact/column";
 import { IconField } from "primereact/iconfield";
@@ -36,6 +34,7 @@ import type { TreeNode } from "primereact/treenode";
 import { useAuth } from "../auth/AuthContext";
 import { DocumentMimeIcon } from "../components/documents/DocumentMimeIcon";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
+import { AppTabHeader } from "../components/tabs/AppTabHeader";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 import { documentCategoryBadgeClass } from "../constants/assetDocumentCategory";
 import { useDocumentImageHoverPreview } from "../hooks/useDocumentImageHoverPreview";
@@ -58,6 +57,7 @@ import {
 } from "../lib/assetTree";
 import { isImageDocument } from "../lib/isImageDocument";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 import type { WorkOrder, WorkOrderStatus } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 
@@ -681,27 +681,11 @@ export function BaumstrukturPage() {
     [t],
   );
 
-  const updateRefsTabInk = useCallback(() => {
-    const host = refsTabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (refsAsset == null) return;
-    const raf = requestAnimationFrame(updateRefsTabInk);
-    return () => cancelAnimationFrame(raf);
-  }, [refsAsset, refsTab, docsLoading, woLoading, ipLoading, updateRefsTabInk]);
-
-  useEffect(() => {
-    if (refsAsset == null) return;
-    window.addEventListener("resize", updateRefsTabInk);
-    return () => window.removeEventListener("resize", updateRefsTabInk);
-  }, [refsAsset, updateRefsTabInk]);
+  useTabInk(
+    refsTabHostRef,
+    [refsAsset, refsTab, docsLoading, woLoading, ipLoading],
+    refsAsset != null,
+  );
 
   useEffect(() => {
     setHeaderActions(
@@ -873,11 +857,11 @@ export function BaumstrukturPage() {
       >
         {refsAsset ? (
           <div className="flex max-h-[calc(100dvh-4.5rem)] min-h-0 flex-1 flex-col">
-            <div ref={refsTabHostRef} className="app-tabview-with-ink flex min-h-0 flex-1 flex-col">
+            <div ref={refsTabHostRef} className={`${STANDARD_TAB_HOST_CLASS} flex min-h-0 flex-1 flex-col`}>
             <TabView
               activeIndex={refsTab}
               onTabChange={(e) => onRefsTabChange(e.index)}
-              className="app-sticky-tabs app-asset-refs-tabs flex min-h-0 flex-1 flex-col"
+              className={`${STANDARD_TAB_VIEW_CLASS} app-asset-refs-tabs flex min-h-0 flex-1 flex-col`}
               pt={{
                 navContent: { className: "shrink-0" },
                 panelContainer: { className: "min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-2" },
@@ -885,10 +869,10 @@ export function BaumstrukturPage() {
             >
               <TabPanel
                 header={
-                  <span className="inline-flex items-center gap-2">
-                    <span>{t("baumstruktur.referencesDocuments")}</span>
-                    {refsAsset.documentCount > 0 ? <Badge value={refsAsset.documentCount} /> : null}
-                  </span>
+                  <AppTabHeader
+                    label={t("baumstruktur.referencesDocuments")}
+                    count={refsAsset.documentCount}
+                  />
                 }
               >
                 <div className="space-y-3">
@@ -987,10 +971,10 @@ export function BaumstrukturPage() {
               </TabPanel>
               <TabPanel
                 header={
-                  <span className="inline-flex items-center gap-2">
-                    <span>{t("baumstruktur.referencesWorkOrders")}</span>
-                    {refsAsset.workOrderCount > 0 ? <Badge value={refsAsset.workOrderCount} /> : null}
-                  </span>
+                  <AppTabHeader
+                    label={t("baumstruktur.referencesWorkOrders")}
+                    count={refsAsset.workOrderCount}
+                  />
                 }
               >
                 <div className="space-y-3">
@@ -1041,12 +1025,10 @@ export function BaumstrukturPage() {
               </TabPanel>
               <TabPanel
                 header={
-                  <span className="inline-flex items-center gap-2">
-                    <span>{t("baumstruktur.referencesInspectionPoints")}</span>
-                    {refsAsset.inspectionPointCount > 0 ? (
-                      <Badge value={refsAsset.inspectionPointCount} />
-                    ) : null}
-                  </span>
+                  <AppTabHeader
+                    label={t("baumstruktur.referencesInspectionPoints")}
+                    count={refsAsset.inspectionPointCount}
+                  />
                 }
               >
                 <div className="space-y-3">

@@ -10,6 +10,9 @@ const OVERLAY_DELAY_MS = 180;
 const ROOT_CROSSFADE_CLASS = "theme-crossfade-fallback";
 const ROOT_CROSSFADE_MS = 240;
 
+/** Last GN-PRIM hex applied; re-used when light/dark toggles focus/highlight alphas. */
+let appliedPrimaryColorHex: string | null = null;
+
 type ViewTransitionCapableDocument = Document & {
   startViewTransition?: (update: () => void | Promise<void>) => {
     finished: Promise<void>;
@@ -129,6 +132,101 @@ export function initializeTheme(): void {
   void preloadThemeStylesheet(hrefForTheme(!dark));
 }
 
+type Rgb = { r: number; g: number; b: number };
+
+function parseHexToRgb(hex: string): Rgb | null {
+  let s = hex.trim();
+  if (!s.startsWith("#")) s = `#${s}`;
+  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(s);
+  if (!m) return null;
+  let h = m[1]!;
+  if (h.length === 3) {
+    h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+  }
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex({ r, g, b }: Rgb): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  return `#${[clamp(r), clamp(g), clamp(b)].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mixRgb(a: Rgb, b: Rgb, t: number): Rgb {
+  return {
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
+  };
+}
+
+function darkenRgb(rgb: Rgb, amount: number): Rgb {
+  return mixRgb(rgb, { r: 0, g: 0, b: 0 }, amount);
+}
+
+function lightenRgb(rgb: Rgb, amount: number): Rgb {
+  return mixRgb(rgb, { r: 255, g: 255, b: 255 }, amount);
+}
+
+/**
+ * Apply app primary color to CSS variables on `:root`.
+ * Updates `--color-primary`, container, Prime scale, and focus/highlight tokens.
+ */
+export function applyPrimaryColor(hex: string): void {
+  const rgb = parseHexToRgb(hex);
+  if (!rgb) return;
+
+  const primary = rgbToHex(rgb);
+  const container = rgbToHex(darkenRgb(rgb, 0.18));
+  const root = document.documentElement;
+  const isDark = root.dataset.theme !== "light";
+
+  appliedPrimaryColorHex = primary;
+
+  root.style.setProperty("--color-primary", primary);
+  root.style.setProperty("--color-primary-container", container);
+
+  const scale: Array<[string, Rgb]> = [
+    ["--primary-50", lightenRgb(rgb, 0.92)],
+    ["--primary-100", lightenRgb(rgb, 0.84)],
+    ["--primary-200", lightenRgb(rgb, 0.68)],
+    ["--primary-300", lightenRgb(rgb, 0.48)],
+    ["--primary-400", lightenRgb(rgb, 0.24)],
+    ["--primary-500", rgb],
+    ["--primary-600", darkenRgb(rgb, 0.18)],
+    ["--primary-700", darkenRgb(rgb, 0.36)],
+    ["--primary-800", darkenRgb(rgb, 0.5)],
+    ["--primary-900", darkenRgb(rgb, 0.62)],
+  ];
+  for (const [name, value] of scale) {
+    root.style.setProperty(name, rgbToHex(value));
+  }
+
+  const focusAlpha = isDark ? 0.35 : 0.2;
+  const highlightAlpha = isDark ? 0.14 : 0.1;
+  root.style.setProperty(
+    "--focus-ring",
+    `0 0 0 0.2rem rgb(${rgb.r} ${rgb.g} ${rgb.b} / ${focusAlpha})`,
+  );
+  root.style.setProperty(
+    "--highlight-bg",
+    `rgb(${rgb.r} ${rgb.g} ${rgb.b} / ${highlightAlpha})`,
+  );
+  root.style.setProperty(
+    "--highlight-text-color",
+    isDark ? rgbToHex(lightenRgb(rgb, 0.35)) : rgbToHex(darkenRgb(rgb, 0.36)),
+  );
+}
+
+function reapplyPrimaryColorIfSet(): void {
+  if (appliedPrimaryColorHex) {
+    applyPrimaryColor(appliedPrimaryColorHex);
+  }
+}
+
 export function useThemeSwitcher() {
   const [dark, setDark] = useState(() => readInitialDark());
   const [isThemeLoading, setIsThemeLoading] = useState(false);
@@ -171,6 +269,7 @@ export function useThemeSwitcher() {
         persistTheme(nextDark);
         darkRef.current = nextDark;
         setDark(nextDark);
+        reapplyPrimaryColorIfSet();
       });
 
       // Keep the next toggle fast as well.

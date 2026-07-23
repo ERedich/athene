@@ -5,14 +5,14 @@ import type { WorkOrderSubscriptionChangeKind } from "./workOrderSubscriptionNot
 
 const router = Router();
 
-type InboxKind = "subscription" | "chat";
+type InboxKind = "subscription" | "chat" | "stock";
 
 type InboxRow = {
   id: string;
   kind: InboxKind;
-  workOrderId: string;
-  orderNumber: number;
-  workOrderName: string;
+  workOrderId: string | null;
+  orderNumber: number | null;
+  workOrderName: string | null;
   siteKey: string;
   siteName: string;
   createdAt: string;
@@ -22,10 +22,18 @@ type InboxRow = {
   messagePreview: string | null;
   authorUserName: string | null;
   isReply: boolean | null;
+  sparePartId: string | null;
+  sparePartKey: string | null;
+  sparePartName: string | null;
+  scopeType: string | null;
+  warehouseKey: string | null;
+  storageLocationKey: string | null;
+  onHandQuantity: string | null;
+  reorderLevel: string | null;
 };
 
 function parseKindFilter(raw: unknown): InboxKind | null {
-  if (raw === "subscription" || raw === "chat") return raw;
+  if (raw === "subscription" || raw === "chat" || raw === "stock") return raw;
   return null;
 }
 
@@ -46,7 +54,7 @@ router.get("/inbox", async (req: Request, res: Response) => {
   const kindFilter = parseKindFilter(req.query.kind);
 
   const subscriptionPart =
-    kindFilter === "chat"
+    kindFilter === "chat" || kindFilter === "stock"
       ? ""
       : `
       SELECT
@@ -63,13 +71,21 @@ router.get("/inbox", async (req: Request, res: Response) => {
         NULL::text AS "messageId",
         NULL::text AS "messagePreview",
         NULL::text AS "authorUserName",
-        NULL::boolean AS "isReply"
+        NULL::boolean AS "isReply",
+        NULL::text AS "sparePartId",
+        NULL::text AS "sparePartKey",
+        NULL::text AS "sparePartName",
+        NULL::text AS "scopeType",
+        NULL::text AS "warehouseKey",
+        NULL::text AS "storageLocationKey",
+        NULL::text AS "onHandQuantity",
+        NULL::text AS "reorderLevel"
       FROM "workOrderSubscriptionNotification" n
       WHERE n."userId" = $1::uuid
     `;
 
   const chatPart =
-    kindFilter === "subscription"
+    kindFilter === "subscription" || kindFilter === "stock"
       ? ""
       : `
       SELECT
@@ -90,7 +106,15 @@ router.get("/inbox", async (req: Request, res: Response) => {
           ELSE m."body"
         END AS "messagePreview",
         author_u."name" AS "authorUserName",
-        (m."replyToMessageId" IS NOT NULL) AS "isReply"
+        (m."replyToMessageId" IS NOT NULL) AS "isReply",
+        NULL::text AS "sparePartId",
+        NULL::text AS "sparePartKey",
+        NULL::text AS "sparePartName",
+        NULL::text AS "scopeType",
+        NULL::text AS "warehouseKey",
+        NULL::text AS "storageLocationKey",
+        NULL::text AS "onHandQuantity",
+        NULL::text AS "reorderLevel"
       FROM "workOrderMessageNotification" cn
       JOIN "workOrder" w ON w."id" = cn."workOrderId"
       JOIN "site" s ON s."id" = w."siteId"
@@ -99,17 +123,43 @@ router.get("/inbox", async (req: Request, res: Response) => {
       WHERE cn."userId" = $1::uuid
     `;
 
-  let unionSql: string;
-  if (subscriptionPart && chatPart) {
-    unionSql = `${subscriptionPart}\nUNION ALL\n${chatPart}`;
-  } else if (subscriptionPart) {
-    unionSql = subscriptionPart;
-  } else if (chatPart) {
-    unionSql = chatPart;
-  } else {
+  const stockPart =
+    kindFilter === "subscription" || kindFilter === "chat"
+      ? ""
+      : `
+      SELECT
+        sn."id"::text AS "id",
+        'stock'::text AS "kind",
+        NULL::text AS "workOrderId",
+        NULL::int AS "orderNumber",
+        NULL::text AS "workOrderName",
+        sn."siteKey",
+        sn."siteName",
+        sn."createdAt"::text AS "createdAt",
+        sn."readAt"::text AS "readAt",
+        NULL::text[] AS "changeKinds",
+        NULL::text AS "messageId",
+        NULL::text AS "messagePreview",
+        NULL::text AS "authorUserName",
+        NULL::boolean AS "isReply",
+        sn."sparePartId"::text AS "sparePartId",
+        sn."sparePartKey",
+        sn."sparePartName",
+        sn."scopeType",
+        sn."warehouseKey",
+        sn."storageLocationKey",
+        sn."onHandQuantity"::text AS "onHandQuantity",
+        sn."reorderLevel"::text AS "reorderLevel"
+      FROM "sparePartStockNotification" sn
+      WHERE sn."userId" = $1::uuid
+    `;
+
+  const parts = [subscriptionPart, chatPart, stockPart].filter(Boolean);
+  if (parts.length === 0) {
     res.json({ rows: [], total: 0, page, limit });
     return;
   }
+  const unionSql = parts.join("\nUNION ALL\n");
 
   try {
     const [rowsResult, totalResult] = await Promise.all([
@@ -132,25 +182,58 @@ router.get("/inbox", async (req: Request, res: Response) => {
     ]);
 
     res.json({
-      rows: rowsResult.rows.map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        workOrderId: row.workOrderId,
-        orderNumber: row.orderNumber,
-        workOrderName: row.workOrderName,
-        siteKey: row.siteKey,
-        siteName: row.siteName,
-        createdAt: row.createdAt,
-        readAt: row.readAt,
-        ...(row.kind === "subscription"
-          ? { changeKinds: row.changeKinds ?? [] }
-          : {
-              messageId: row.messageId ?? undefined,
-              messagePreview: row.messagePreview ?? undefined,
-              authorUserName: row.authorUserName ?? undefined,
-              isReply: row.isReply ?? false,
-            }),
-      })),
+      rows: rowsResult.rows.map((row) => {
+        if (row.kind === "subscription") {
+          return {
+            id: row.id,
+            kind: row.kind,
+            workOrderId: row.workOrderId,
+            orderNumber: row.orderNumber,
+            workOrderName: row.workOrderName,
+            siteKey: row.siteKey,
+            siteName: row.siteName,
+            createdAt: row.createdAt,
+            readAt: row.readAt,
+            changeKinds: row.changeKinds ?? [],
+          };
+        }
+        if (row.kind === "chat") {
+          return {
+            id: row.id,
+            kind: row.kind,
+            workOrderId: row.workOrderId,
+            orderNumber: row.orderNumber,
+            workOrderName: row.workOrderName,
+            siteKey: row.siteKey,
+            siteName: row.siteName,
+            createdAt: row.createdAt,
+            readAt: row.readAt,
+            messageId: row.messageId ?? undefined,
+            messagePreview: row.messagePreview ?? undefined,
+            authorUserName: row.authorUserName ?? undefined,
+            isReply: row.isReply ?? false,
+          };
+        }
+        return {
+          id: row.id,
+          kind: "stock" as const,
+          workOrderId: null,
+          orderNumber: null,
+          workOrderName: null,
+          siteKey: row.siteKey,
+          siteName: row.siteName,
+          createdAt: row.createdAt,
+          readAt: row.readAt,
+          sparePartId: row.sparePartId,
+          sparePartKey: row.sparePartKey,
+          sparePartName: row.sparePartName,
+          scopeType: row.scopeType,
+          warehouseKey: row.warehouseKey,
+          storageLocationKey: row.storageLocationKey,
+          onHandQuantity: row.onHandQuantity,
+          reorderLevel: row.reorderLevel,
+        };
+      }),
       total: totalResult.rows[0]?.count ?? 0,
       page,
       limit,
@@ -173,6 +256,8 @@ router.get("/unread-count", async (req: Request, res: Response) => {
         (SELECT COUNT(*)::int FROM "workOrderSubscriptionNotification" WHERE "userId" = $1::uuid AND "readAt" IS NULL)
         +
         (SELECT COUNT(*)::int FROM "workOrderMessageNotification" WHERE "userId" = $1::uuid AND "readAt" IS NULL)
+        +
+        (SELECT COUNT(*)::int FROM "sparePartStockNotification" WHERE "userId" = $1::uuid AND "readAt" IS NULL)
       ) AS "count"
       `,
       [userId],
@@ -197,6 +282,10 @@ router.post("/mark-read", async (req: Request, res: Response) => {
       WHERE "userId" = $1::uuid AND "readAt" IS NULL;
 
       UPDATE "workOrderMessageNotification"
+      SET "readAt" = now()
+      WHERE "userId" = $1::uuid AND "readAt" IS NULL;
+
+      UPDATE "sparePartStockNotification"
       SET "readAt" = now()
       WHERE "userId" = $1::uuid AND "readAt" IS NULL;
       `,

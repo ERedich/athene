@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Key, Moon, Sun, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +16,47 @@ import { ThemeLoadingOverlay, useThemeSwitcher } from "../theme";
 const logoSrc =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuDnDKENTaCHFOqAdjN14UnFa-vZmQPHcl4v3LF3e1drOvbl2kZqYu2ezKY4fgPmcQB1z6SXjYvMVL_JUG2qhgUoJzxU5FM2_giekynnoc6LnHcCEP0S-iOgCGpT2ktK_tqcYoxKnrQaayIvjB4dA-FMHSJjC98H-x9tK0Fgu_2KHobc5jvubRlozy-q6tzipOESW7d7IXtyqzNgSmDnMJ5w2EDvGjHYWnVT5G-_rFeUvOyEMHNR1gIN8S09jo_t8vmp_d7JWv7ePYSn";
 
+type LoginKpis = {
+  openActive: number | null;
+  completedLast24h: number | null;
+};
+
+function formatKpiValue(value: number | null): string {
+  if (value == null) return "—";
+  return value.toLocaleString();
+}
+
+function LoginKpiSquare({
+  label,
+  value,
+  animationDelayMs,
+  className = "",
+}: {
+  label: string;
+  value: number | null;
+  animationDelayMs: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`login-panel-enter min-h-0 ${className}`}
+      style={{ animationDelay: `${animationDelayMs}ms` }}
+    >
+      <div
+        className="professional-panel flex h-full min-h-0 flex-col justify-between p-5 opacity-80"
+        aria-label={`${label}: ${formatKpiValue(value)}`}
+      >
+        <p className="font-headline text-[10px] uppercase leading-snug tracking-[0.08em] text-outline sm:text-[11px]">
+          {label}
+        </p>
+        <p className="font-headline text-4xl font-medium tracking-tight text-on-surface tabular-nums sm:text-5xl">
+          {formatKpiValue(value)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function LoginPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -26,6 +67,35 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginToAppExit, setLoginToAppExit] = useState(false);
+  const [kpis, setKpis] = useState<LoginKpis>({
+    openActive: null,
+    completedLast24h: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/public/login-kpis");
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          openActive?: unknown;
+          completedLast24h?: unknown;
+        };
+        if (cancelled) return;
+        setKpis({
+          openActive: typeof data.openActive === "number" ? data.openActive : 0,
+          completedLast24h:
+            typeof data.completedLast24h === "number" ? data.completedLast24h : 0,
+        });
+      } catch {
+        // Login remains usable; squares keep placeholder.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const prepareCssFallbackExit = useCallback(() => {
     setLoginToAppExit(true);
@@ -101,9 +171,9 @@ export function LoginPage() {
         </div>
       </header>
 
-      <main className="flex-grow flex items-center justify-center relative px-6 pt-24 pb-28 md:px-0">
-        <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-[1100px] flex-col items-center justify-between gap-12 md:mx-0 md:max-w-none md:flex-row md:items-center md:gap-16 md:pr-48">
-          <div className="hidden min-w-0 md:block md:w-1/2 md:max-w-xl space-y-8 md:pl-[5vw] md:text-left">
+      <main className="flex-grow flex items-center justify-center relative px-6 pt-24 pb-28 md:px-8">
+        <div className="relative z-10 flex w-full min-w-0 items-center justify-center">
+          <div className="pointer-events-none absolute left-[5vw] top-1/2 hidden max-w-xl -translate-y-1/2 space-y-8 md:block lg:left-[6vw]">
             <h1 className="text-7xl lg:text-8xl xl:text-9xl font-bold font-headline leading-none tracking-tighter">
               <AtheneWordmark brand={t("login.brand")} />
             </h1>
@@ -112,8 +182,23 @@ export function LoginPage() {
             </p>
           </div>
 
-          <div className="flex w-full min-w-0 justify-center md:mr-6 md:w-1/2 md:justify-end">
-            <div className="professional-panel w-[90%] min-w-0 max-w-md p-6">
+          <div className="grid w-full min-w-0 max-w-md grid-cols-1 gap-3 sm:gap-4 lg:w-auto lg:max-w-none lg:translate-x-[18vw] lg:grid-cols-[auto_minmax(22rem,34rem)] lg:grid-rows-2 lg:gap-5">
+            <LoginKpiSquare
+              className="max-lg:hidden aspect-square lg:col-start-1 lg:row-start-1 lg:h-full lg:w-auto lg:min-h-0 lg:aspect-square"
+              label={t("login.kpiOpenActive")}
+              value={kpis.openActive}
+              animationDelayMs={0}
+            />
+            <LoginKpiSquare
+              className="max-lg:hidden aspect-square lg:col-start-1 lg:row-start-2 lg:h-full lg:w-auto lg:min-h-0 lg:aspect-square"
+              label={t("login.kpiCompletedLast24h")}
+              value={kpis.completedLast24h}
+              animationDelayMs={80}
+            />
+            <div
+              className="professional-panel login-panel-enter min-w-0 p-6 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1"
+              style={{ animationDelay: "160ms" }}
+            >
               <div className="space-y-8">
                 <div className="space-y-2 border-b border-white/5 pb-6">
                   <h2 className="text-2xl font-headline font-medium text-on-surface tracking-tight">

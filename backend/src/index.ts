@@ -36,6 +36,7 @@ import { workOrderSearchPresetsRouter } from "./workOrderSearchPresets.js";
 import { notificationCenterRouter } from "./notificationCenter.js";
 import { workOrderSubscriptionsRouter } from "./workOrderSubscriptions.js";
 import { customKpisRouter } from "./customKpis.js";
+import { appLayoutsRouter } from "./appLayouts.js";
 import { maintenancePlansRouter } from "./maintenancePlans.js";
 import { workOrderTypesRouter } from "./workOrderTypes.js";
 import { siteAppParametersRouter } from "./siteAppParameters.js";
@@ -43,6 +44,7 @@ import { problemsRouter } from "./problems.js";
 import { causesRouter } from "./causes.js";
 import { remediesRouter } from "./remedies.js";
 import { startMaintenancePlanDailyGenerate } from "./maintenancePlanGenerate.js";
+import { publicLoginKpisRouter } from "./publicLoginKpis.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -79,6 +81,7 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "athene-backend" });
 });
 
+app.use("/api/public", publicLoginKpisRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", requireAuth, usersRouter);
 app.use("/api/cost-centers", requireAuth, costCentersRouter);
@@ -106,6 +109,7 @@ app.use("/api/work-order-search-presets", requireAuth, workOrderSearchPresetsRou
 app.use("/api/work-order-subscriptions", requireAuth, workOrderSubscriptionsRouter);
 app.use("/api/notification-center", requireAuth, notificationCenterRouter);
 app.use("/api/custom-kpis", requireAuth, customKpisRouter);
+app.use("/api/app-layouts", requireAuth, appLayoutsRouter);
 app.use("/api/sites", requireAuth, sitesRouter);
 app.use("/api/transactions", requireAuth, transactionsRouter);
 app.use("/api/ui-translation-overrides", requireAuth, translationsRouter);

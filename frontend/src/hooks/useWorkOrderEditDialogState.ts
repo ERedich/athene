@@ -2,7 +2,6 @@ import {
   createElement,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -48,6 +47,7 @@ import type {
 } from "../lib/workOrderTypes";
 import { fetchWorkOrderMessages, sendWorkOrderMessage, type WorkOrderMessage } from "../lib/notificationCenter";
 import { workOrderToEditMeta } from "../lib/workOrderTypes";
+import { useTabInk } from "../lib/tabs";
 import {
   fetchPcrCauses,
   fetchPcrProblems,
@@ -660,27 +660,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     workgroups,
   ]);
 
-  const updateTabInk = useCallback(() => {
-    const host = tabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!dialogVisible) return;
-    const raf = requestAnimationFrame(updateTabInk);
-    return () => cancelAnimationFrame(raf);
-  }, [activeTabIndex, dialogVisible, updateTabInk]);
-
-  useEffect(() => {
-    if (!dialogVisible) return;
-    window.addEventListener("resize", updateTabInk);
-    return () => window.removeEventListener("resize", updateTabInk);
-  }, [dialogVisible, updateTabInk]);
+  const updateTabInk = useTabInk(tabHostRef, [activeTabIndex, dialogVisible], dialogVisible);
 
   const loadDocuments = useCallback(
     async (orderId: string) => {

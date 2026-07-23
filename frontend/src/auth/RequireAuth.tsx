@@ -11,7 +11,9 @@ import { apiFetch } from "../lib/api";
 import { applyUiTranslationOverrides } from "../lib/applyUiTranslationOverrides";
 
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
+import { DEFAULT_PRIMARY_COLOR_HEX } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+import { applyPrimaryColor } from "../theme";
 
 import { AuthSessionContext, type AuthUser } from "./AuthContext";
 import { POST_LOGIN_ENTER_FALLBACK_KEY } from "./loginNavigation";
@@ -25,6 +27,7 @@ type MeResponse = {
   appParameterAssetKeyMode?: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath?: boolean;
   appParameterAssetKeyPathSeparator?: string;
+  appParameterPrimaryColorHex?: string;
 };
 
 type SessionBase = {
@@ -36,12 +39,35 @@ type SessionBase = {
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;
+  appParameterPrimaryColorHex: string;
 };
 
 type ShellEnterPhase = "none" | "initial" | "animate";
 
 /** Matches `.app-shell-login-enter-active` transition (~540ms) plus a short settle. */
 const SHELL_ENTER_READY_MS = 620;
+
+function sessionFromMe(data: MeResponse): SessionBase {
+  const primary =
+    typeof data.appParameterPrimaryColorHex === "string" && data.appParameterPrimaryColorHex.trim()
+      ? data.appParameterPrimaryColorHex.trim()
+      : DEFAULT_PRIMARY_COLOR_HEX;
+  applyPrimaryColor(primary);
+  return {
+    user: data.user,
+    appParameterBooleans: data.appParameterBooleans ?? {},
+    appParameterAssetTypes: data.appParameterAssetTypes ?? null,
+    appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
+    appParameterDefaultShiftHours:
+      typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
+        ? data.appParameterDefaultShiftHours
+        : 8,
+    appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
+    appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
+    appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
+    appParameterPrimaryColorHex: primary,
+  };
+}
 
 export function RequireAuth() {
   const { t } = useTranslation();
@@ -55,19 +81,7 @@ export function RequireAuth() {
     if (!res.ok) return;
     const data = (await res.json()) as MeResponse;
     await applyUiTranslationOverrides();
-    setSessionBase({
-      user: data.user,
-      appParameterBooleans: data.appParameterBooleans ?? {},
-      appParameterAssetTypes: data.appParameterAssetTypes ?? null,
-      appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
-      appParameterDefaultShiftHours:
-        typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
-          ? data.appParameterDefaultShiftHours
-          : 8,
-      appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
-      appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
-      appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
-    });
+    setSessionBase(sessionFromMe(data));
   }, []);
 
   useEffect(() => {
@@ -81,19 +95,7 @@ export function RequireAuth() {
         }
         const data = (await r.json()) as MeResponse;
         await applyUiTranslationOverrides();
-        setSessionBase({
-          user: data.user,
-          appParameterBooleans: data.appParameterBooleans ?? {},
-          appParameterAssetTypes: data.appParameterAssetTypes ?? null,
-          appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
-          appParameterDefaultShiftHours:
-            typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
-              ? data.appParameterDefaultShiftHours
-              : 8,
-          appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
-          appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
-          appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
-        });
+        setSessionBase(sessionFromMe(data));
         setPhase("ok");
       })
       .catch(() => {
@@ -173,6 +175,7 @@ export function RequireAuth() {
     appParameterAssetKeyMode: sessionBase.appParameterAssetKeyMode,
     appParameterShowAssetKeyPath: sessionBase.appParameterShowAssetKeyPath,
     appParameterAssetKeyPathSeparator: sessionBase.appParameterAssetKeyPathSeparator,
+    appParameterPrimaryColorHex: sessionBase.appParameterPrimaryColorHex,
     refresh,
   };
 

@@ -58,6 +58,7 @@ export type TransactionRow = {
   costCenterId: string | null;
   costCenterKey: string | null;
   costCenterName: string | null;
+  unitPrice: string | null;
 };
 
 type SiteOption = {
@@ -78,11 +79,13 @@ type StockLineOption = {
   storageLocationId: string;
   label: string;
   available: number;
+  valuationPrice: number | null;
 };
 
-type CreateTransactionType = "IN" | "EX" | "RM" | "RT" | "IV";
+type CreateTransactionType = "IN" | "EX" | "RM" | "RT" | "IV" | "ZU";
 
-const CREATE_TYPES: CreateTransactionType[] = ["IN", "EX", "RM", "RT", "IV"];
+const CREATE_TYPES: CreateTransactionType[] = ["IN", "EX", "RM", "RT", "IV", "ZU"];
+const BOOKABLE_CREATE_TYPES = new Set<CreateTransactionType>(["RM", "ZU"]);
 
 const typeLabelKey: Record<string, string> = {
   IN: "transactions.typeIN",
@@ -90,6 +93,7 @@ const typeLabelKey: Record<string, string> = {
   RM: "transactions.typeRM",
   RT: "transactions.typeRT",
   IV: "transactions.typeIV",
+  ZU: "transactions.typeZU",
 };
 
 const actionNavItem =
@@ -106,10 +110,23 @@ function typeBadgeClass(type: string): string {
     case "RM":
     case "RT":
     case "IV":
+    case "ZU":
       return `app-tx-type-badge app-tx-type-badge--${type}`;
     default:
       return "app-tx-type-badge app-tx-type-badge--unknown";
   }
+}
+
+function computePreviewGld(
+  oldQty: number,
+  oldGld: number | null,
+  qty: number | null,
+  unitPrice: number | null,
+): number | null {
+  if (qty == null || qty <= 0 || unitPrice == null || unitPrice < 0) return null;
+  const gld = oldGld != null && Number.isFinite(oldGld) && oldGld >= 0 ? oldGld : 0;
+  if (oldQty <= 0) return unitPrice;
+  return Math.round(((oldQty * gld + qty * unitPrice) / (oldQty + qty)) * 10_000) / 10_000;
 }
 
 const typeToggleIdleClass =
@@ -173,6 +190,7 @@ export function TransactionsPage() {
   const [formStorageLocationId, setFormStorageLocationId] = useState<string | null>(null);
   const [formQuantity, setFormQuantity] = useState<number | null>(null);
   const [formQuantityInsufficient, setFormQuantityInsufficient] = useState(false);
+  const [formUnitPrice, setFormUnitPrice] = useState<number | null>(null);
   const [formRemark, setFormRemark] = useState("");
   const [formWorkOrderId, setFormWorkOrderId] = useState("");
   const [formWorkOrderNumber, setFormWorkOrderNumber] = useState("");
@@ -272,6 +290,10 @@ export function TransactionsPage() {
 
   const warnInsufficientQuantity = useCallback(
     (quantity: number | null): boolean => {
+      if (formType !== "RM") {
+        setFormQuantityInsufficient(false);
+        return false;
+      }
       const stockLine = selectedStockLineRef.current;
       if (quantity == null || !stockLine || quantity <= stockLine.available) {
         setFormQuantityInsufficient(false);
@@ -287,7 +309,7 @@ export function TransactionsPage() {
       });
       return true;
     },
-    [t],
+    [formType, t],
   );
 
   const handleQuantityBlur = useCallback(() => {
@@ -297,13 +319,20 @@ export function TransactionsPage() {
     });
   }, [warnInsufficientQuantity]);
 
-  const handleQuantityChange = useCallback((value: number | null) => {
-    setFormQuantity(value);
-    const stockLine = selectedStockLineRef.current;
-    setFormQuantityInsufficient(
-      value != null && stockLine != null && value > stockLine.available,
-    );
-  }, []);
+  const handleQuantityChange = useCallback(
+    (value: number | null) => {
+      setFormQuantity(value);
+      if (formType !== "RM") {
+        setFormQuantityInsufficient(false);
+        return;
+      }
+      const stockLine = selectedStockLineRef.current;
+      setFormQuantityInsufficient(
+        value != null && stockLine != null && value > stockLine.available,
+      );
+    },
+    [formType],
+  );
 
   const resetReferenceFields = useCallback(() => {
     setFormWorkOrderId("");
@@ -321,6 +350,7 @@ export function TransactionsPage() {
     setFormStorageLocationId(null);
     setFormQuantity(null);
     setFormQuantityInsufficient(false);
+    setFormUnitPrice(null);
     setFormRemark("");
     setStockLines([]);
     resetReferenceFields();
@@ -424,6 +454,7 @@ export function TransactionsPage() {
             warehouseKey: string;
             warehouseName: string;
             quantity: string;
+            valuationPrice: string | null;
           }>;
         };
         if (cancelled) return;
@@ -435,9 +466,14 @@ export function TransactionsPage() {
                 minimumFractionDigits: 0,
               }).format(available)
             : line.quantity;
+          const priceRaw =
+            line.valuationPrice != null && line.valuationPrice !== ""
+              ? Number(line.valuationPrice)
+              : null;
           return {
             storageLocationId: line.storageLocationId,
             available: Number.isFinite(available) ? available : 0,
+            valuationPrice: priceRaw != null && Number.isFinite(priceRaw) ? priceRaw : null,
             label: `${line.warehouseKey} · ${line.warehouseName} / ${line.storageLocationKey} (${qtyLabel})`,
           };
         });
@@ -464,8 +500,21 @@ export function TransactionsPage() {
     };
   }, [formSparePartId, i18n.language, t]);
 
+  const previewNewGld = useMemo(
+    () =>
+      formType === "ZU"
+        ? computePreviewGld(
+            selectedStockLine?.available ?? 0,
+            selectedStockLine?.valuationPrice ?? null,
+            formQuantity,
+            formUnitPrice,
+          )
+        : null,
+    [formQuantity, formType, formUnitPrice, selectedStockLine],
+  );
+
   const saveCreate = useCallback(async () => {
-    if (formType !== "RM") {
+    if (!BOOKABLE_CREATE_TYPES.has(formType)) {
       toastRef.current?.show({
         severity: "warn",
         summary: t("transactions.createNotBookable"),
@@ -482,19 +531,71 @@ export function TransactionsPage() {
       });
       return;
     }
+    if (formQuantity == null || formQuantity <= 0) {
+      toastRef.current?.show({
+        severity: "warn",
+        summary: t("transactions.createValidationQuantity"),
+        life: 4000,
+      });
+      return;
+    }
+
+    if (formType === "ZU") {
+      if (formUnitPrice == null || formUnitPrice < 0) {
+        toastRef.current?.show({
+          severity: "warn",
+          summary: t("transactions.createValidationUnitPrice"),
+          life: 4000,
+        });
+        return;
+      }
+      setCreateSaving(true);
+      try {
+        const res = await apiFetch("/api/transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "ZU",
+            sparePartId: formSparePartId,
+            storageLocationId: formStorageLocationId,
+            quantity: formQuantity,
+            unitPrice: formUnitPrice,
+            remark: formRemark.trim() || null,
+          }),
+        });
+        if (res.status === 201) {
+          setCreateVisible(false);
+          resetCreateForm();
+          await load();
+          toastRef.current?.show({
+            severity: "success",
+            summary: t("transactions.createdZu"),
+            life: 3000,
+          });
+          return;
+        }
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("transactions.createErrorZu"),
+          life: 6000,
+        });
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("transactions.createErrorZu"),
+          life: 6000,
+        });
+      } finally {
+        setCreateSaving(false);
+      }
+      return;
+    }
+
     if (!formCostCenterId) {
       setFormCostCenterForceInvalid(true);
       toastRef.current?.show({
         severity: "warn",
         summary: t("transactions.createValidationCostCenter"),
-        life: 4000,
-      });
-      return;
-    }
-    if (formQuantity == null || formQuantity <= 0) {
-      toastRef.current?.show({
-        severity: "warn",
-        summary: t("transactions.createValidationQuantity"),
         life: 4000,
       });
       return;
@@ -567,6 +668,7 @@ export function TransactionsPage() {
     formSparePartId,
     formStorageLocationId,
     formType,
+    formUnitPrice,
     formWorkOrderId,
     load,
     resetCreateForm,
@@ -688,6 +790,16 @@ export function TransactionsPage() {
     }).format(n);
   };
 
+  const formatPrice = (raw: string | null | undefined) => {
+    if (raw == null || raw === "") return "—";
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return raw;
+    return new Intl.NumberFormat(i18n.language, {
+      maximumFractionDigits: 4,
+      minimumFractionDigits: 0,
+    }).format(n);
+  };
+
   const remarkShort = (text: string | null, max = 72) => {
     if (!text) return "—";
     if (text.length <= max) return text;
@@ -729,7 +841,7 @@ export function TransactionsPage() {
         type="button"
         label={t("transactions.createSave")}
         loading={createSaving}
-        disabled={formType !== "RM"}
+        disabled={!BOOKABLE_CREATE_TYPES.has(formType)}
         onClick={() => void saveCreate()}
       />
     </div>
@@ -869,6 +981,8 @@ export function TransactionsPage() {
               <dd className="m-0">{formatDt(detail.bookedAt)}</dd>
               <dt className="text-on-surface-variant">{t("transactions.colQuantity")}</dt>
               <dd className="m-0">{formatQty(detail.quantity)}</dd>
+              <dt className="text-on-surface-variant">{t("transactions.colUnitPrice")}</dt>
+              <dd className="m-0">{formatPrice(detail.unitPrice)}</dd>
               <dt className="text-on-surface-variant">{t("transactions.colSparePart")}</dt>
               <dd className="m-0">{materialLabel(detail)}</dd>
               <dt className="text-on-surface-variant">{t("transactions.colStorageLocation")}</dt>
@@ -931,7 +1045,7 @@ export function TransactionsPage() {
             <p className="m-0 text-on-surface-variant">{t(`transactions.createHint${formType}`)}</p>
           </div>
 
-          {formType === "RM" ? (
+          {formType === "RM" || formType === "ZU" ? (
             <div className="flex flex-col gap-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1">
@@ -983,7 +1097,7 @@ export function TransactionsPage() {
                     disabled={!formSparePartId || stockLinesLoading}
                     appendTo={overlayAppendTo}
                   />
-                  {selectedStockLine ? (
+                  {selectedStockLine && formType === "RM" ? (
                     <span className="text-xs text-on-surface-variant">
                       {t("transactions.createAvailable", { available: selectedStockLine.available })}
                     </span>
@@ -1003,6 +1117,45 @@ export function TransactionsPage() {
                     disabled={!formStorageLocationId}
                   />
                 </label>
+                {formType === "ZU" ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-on-surface-variant">{t("transactions.colUnitPrice")}</span>
+                    <InputNumber
+                      value={formUnitPrice}
+                      onValueChange={(e) => setFormUnitPrice(e.value ?? null)}
+                      min={0}
+                      minFractionDigits={0}
+                      maxFractionDigits={4}
+                      className="w-full"
+                      inputClassName="w-full"
+                      disabled={!formStorageLocationId}
+                    />
+                  </label>
+                ) : null}
+                <label className="flex flex-col gap-1">
+                  <span className="text-on-surface-variant">{t("transactions.colCurrentGld")}</span>
+                  <InputNumber
+                    value={selectedStockLine?.valuationPrice ?? null}
+                    minFractionDigits={0}
+                    maxFractionDigits={4}
+                    className="w-full"
+                    inputClassName="w-full"
+                    disabled
+                  />
+                </label>
+                {formType === "ZU" ? (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-on-surface-variant">{t("transactions.colNewGld")}</span>
+                    <InputNumber
+                      value={previewNewGld}
+                      minFractionDigits={0}
+                      maxFractionDigits={4}
+                      className="w-full"
+                      inputClassName="w-full"
+                      disabled
+                    />
+                  </label>
+                ) : null}
                 <label className="flex flex-col gap-1 md:col-span-2">
                   <span className="text-on-surface-variant">{t("transactions.colRemark")}</span>
                   <InputTextarea
@@ -1016,59 +1169,61 @@ export function TransactionsPage() {
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="flex flex-col gap-1 md:col-span-2">
-                  <span className="font-medium text-on-surface">{t("transactions.createReferenceSection")}</span>
-                  <span className="text-xs text-on-surface-variant">{t("transactions.createReferenceHint")}</span>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-on-surface-variant">{t("transactions.colWorkOrder")}</span>
-                  <WorkOrderSelItem
-                    workOrderId={formWorkOrderId}
-                    orderNumberDisplay={formWorkOrderNumber}
-                    onSelect={handleWorkOrderSelect}
-                    onOrderNumberChange={setFormWorkOrderNumber}
-                    siteId={formSiteId ?? undefined}
-                    disabled={!formSiteId}
-                    placeholder={t("transactions.createWorkOrderPlaceholder")}
-                    className="w-full"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-on-surface-variant">{t("transactions.colAsset")}</span>
-                  <AssetSelItem
-                    assetId={formAssetId}
-                    assetKey={formAssetKey}
-                    onSelect={handleAssetSelect}
-                    onAssetKeyChange={setFormAssetKey}
-                    siteId={formSiteId ?? undefined}
-                    disabled={!formSiteId}
-                    placeholder={t("transactions.createAssetPlaceholder")}
-                    className="w-full"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 md:col-span-2">
-                  <span className="text-on-surface-variant">
-                    {t("transactions.colCostCenter")}{" "}
-                    <span className="text-red-400">*</span>
-                  </span>
-                  <Dropdown
-                    value={formCostCenterId}
-                    options={costCenterOptions}
-                    optionLabel="label"
-                    optionValue="value"
-                    onChange={(e) => {
-                      setFormCostCenterId(e.value as string | null);
-                      setFormCostCenterForceInvalid(false);
-                    }}
-                    placeholder={t("transactions.createCostCenterPlaceholder")}
-                    className={`w-full${formCostCenterForceInvalid ? " p-invalid" : ""}`}
-                    filter
-                    disabled={!formSiteId}
-                    appendTo={overlayAppendTo}
-                  />
-                </label>
-              </div>
+              {formType === "RM" ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="flex flex-col gap-1 md:col-span-2">
+                    <span className="font-medium text-on-surface">{t("transactions.createReferenceSection")}</span>
+                    <span className="text-xs text-on-surface-variant">{t("transactions.createReferenceHint")}</span>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-on-surface-variant">{t("transactions.colWorkOrder")}</span>
+                    <WorkOrderSelItem
+                      workOrderId={formWorkOrderId}
+                      orderNumberDisplay={formWorkOrderNumber}
+                      onSelect={handleWorkOrderSelect}
+                      onOrderNumberChange={setFormWorkOrderNumber}
+                      siteId={formSiteId ?? undefined}
+                      disabled={!formSiteId}
+                      placeholder={t("transactions.createWorkOrderPlaceholder")}
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-on-surface-variant">{t("transactions.colAsset")}</span>
+                    <AssetSelItem
+                      assetId={formAssetId}
+                      assetKey={formAssetKey}
+                      onSelect={handleAssetSelect}
+                      onAssetKeyChange={setFormAssetKey}
+                      siteId={formSiteId ?? undefined}
+                      disabled={!formSiteId}
+                      placeholder={t("transactions.createAssetPlaceholder")}
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 md:col-span-2">
+                    <span className="text-on-surface-variant">
+                      {t("transactions.colCostCenter")}{" "}
+                      <span className="text-red-400">*</span>
+                    </span>
+                    <Dropdown
+                      value={formCostCenterId}
+                      options={costCenterOptions}
+                      optionLabel="label"
+                      optionValue="value"
+                      onChange={(e) => {
+                        setFormCostCenterId(e.value as string | null);
+                        setFormCostCenterForceInvalid(false);
+                      }}
+                      placeholder={t("transactions.createCostCenterPlaceholder")}
+                      className={`w-full${formCostCenterForceInvalid ? " p-invalid" : ""}`}
+                      filter
+                      disabled={!formSiteId}
+                      appendTo={overlayAppendTo}
+                    />
+                  </label>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-sm border border-solid border-white/10 bg-white/5 px-4 py-8 text-center text-on-surface-variant">

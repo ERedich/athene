@@ -40,18 +40,10 @@ import type { WorkOrderType } from "../../lib/workOrderForm";
 import { formatOriginalWoOrderNumber } from "../../lib/workOrderTypes";
 import { workOrderStatusAllowsFeedbackTab } from "../../lib/workOrderStatus";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
+import { AppTabHeader } from "../tabs/AppTabHeader";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS } from "../../lib/tabs";
 
 export type WorkOrderEditDialogProps = ReturnType<typeof useWorkOrderEditDialogState>;
-
-function WoTabHeader({ label, count }: { label: string; count?: number | string | null }) {
-  const showBadge = count != null && count !== "" && count !== 0 && count !== "0";
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span>{label}</span>
-      {showBadge ? <span className="app-wo-tab-badge">{count}</span> : null}
-    </span>
-  );
-}
 
 function formatHoursForDurationInput(hours: number): string {
   if (!Number.isFinite(hours) || hours < 0) return "";
@@ -242,10 +234,10 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
   const { showPreview, clearPreview, previewPortal } = useDocumentImageHoverPreview();
 
   return (
-    <div ref={tabHostRef} className="app-tabview-with-ink app-wo-edit-tab-host">
+    <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
       {previewPortal}
       <TabView
-        className="app-sticky-tabs"
+        className={STANDARD_TAB_VIEW_CLASS}
         activeIndex={activeTabIndex}
         onTabChange={(e) => {
           const idx = e.index;
@@ -265,7 +257,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           }
         }}
       >
-        <TabPanel header={<WoTabHeader label={t("workOrders.tabGeneral")} />}>
+        <TabPanel header={<AppTabHeader label={t("workOrders.tabGeneral")} />}>
           <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6" style={{ margin: 0, display: "grid" }}>
             <div className="space-y-2 md:col-span-2">
               <label htmlFor="order-number" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
@@ -476,7 +468,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           </div>
         </TabPanel>
         <TabPanel
-          header={<WoTabHeader label={t("workOrders.tabPlandaten")} count={assignmentsTabCount} />}
+          header={<AppTabHeader label={t("workOrders.tabPlandaten")} count={assignmentsTabCount} />}
         >
           <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-2" style={{ margin: 0, display: "grid" }}>
             <div
@@ -613,12 +605,11 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                   {assignments.map((item, index) => (
                     <span
                       key={item.id}
-                      className="app-card-cascade inline-flex items-center gap-2 rounded-sm border border-solid app-wo-detail-outline-border px-2 py-1 text-xs"
+                      className="app-card-cascade app-wo-assignment-chip"
                       style={{ ["--app-cascade-index" as string]: index }}
                     >
-                      <span>
-                        {item.employeeKey} - {item.employeeName}
-                      </span>
+                      <span className="app-wo-assignment-chip__key">{item.employeeKey}</span>
+                      <span className="app-wo-assignment-chip__name">{item.employeeName}</span>
                       <Button
                         type="button"
                         text
@@ -639,7 +630,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
             </div>
           </div>
         </TabPanel>
-        <TabPanel header={<WoTabHeader label={t("workOrders.tabDocuments")} count={documentsTabCount} />}>
+        <TabPanel header={<AppTabHeader label={t("workOrders.tabDocuments")} count={documentsTabCount} />}>
           <div className="space-y-4 pt-1">
             <div className="grid grid-cols-[8fr_2fr] items-stretch gap-2">
               <Button
@@ -847,7 +838,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
         </TabPanel>
         <TabPanel
           header={
-            <WoTabHeader
+            <AppTabHeader
               label={t("workOrders.tabInspectionPoints")}
               count={
                 inspectionPoints.length > 0
@@ -873,7 +864,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           />
         </TabPanel>
         <TabPanel
-          header={<WoTabHeader label={t("workOrders.tabFeedback")} count={feedbackTabCount} />}
+          header={<AppTabHeader label={t("workOrders.tabFeedback")} count={feedbackTabCount} />}
           disabled={!editingId || !workOrderStatusAllowsFeedbackTab(editingMeta?.status)}
         >
           <WorkOrderFeedbackTabContent
@@ -908,7 +899,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           />
         </TabPanel>
         <TabPanel
-          header={<WoTabHeader label={t("workOrders.tabTransactions")} count={transactionsTabCount} />}
+          header={<AppTabHeader label={t("workOrders.tabTransactions")} count={transactionsTabCount} />}
           disabled={!editingId}
         >
           <div className="pt-1">
@@ -916,7 +907,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
           </div>
         </TabPanel>
         <TabPanel
-          header={<WoTabHeader label={t("workOrders.tabMessages")} count={messagesTabCount} />}
+          header={<AppTabHeader label={t("workOrders.tabMessages")} count={messagesTabCount} />}
           disabled={!editingId}
         >
           <div className="app-wo-messages-tab">

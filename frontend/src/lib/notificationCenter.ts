@@ -54,10 +54,10 @@ export async function sendWorkOrderMessage(
 
 export type NotificationInboxItem = {
   id: string;
-  kind: "subscription" | "chat";
-  workOrderId: string;
-  orderNumber: number;
-  workOrderName: string;
+  kind: "subscription" | "chat" | "stock";
+  workOrderId: string | null;
+  orderNumber: number | null;
+  workOrderName: string | null;
   siteKey: string;
   siteName: string;
   createdAt: string;
@@ -67,6 +67,14 @@ export type NotificationInboxItem = {
   messagePreview?: string;
   authorUserName?: string;
   isReply?: boolean;
+  sparePartId?: string | null;
+  sparePartKey?: string | null;
+  sparePartName?: string | null;
+  scopeType?: string | null;
+  warehouseKey?: string | null;
+  storageLocationKey?: string | null;
+  onHandQuantity?: string | null;
+  reorderLevel?: string | null;
 };
 
 type SubscriptionNotificationSource = {
@@ -92,6 +100,24 @@ type ChatNotificationSource = {
   messagePreview: string;
   authorUserName: string;
   isReply: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
+type StockNotificationSource = {
+  id: string;
+  sparePartId: string;
+  sparePartKey: string;
+  sparePartName: string;
+  siteKey: string;
+  siteName: string;
+  scopeType: string;
+  warehouseId: string | null;
+  storageLocationId: string | null;
+  warehouseKey: string | null;
+  storageLocationKey: string | null;
+  onHandQuantity: number;
+  reorderLevel: number;
   createdAt: string;
   readAt: string | null;
 };
@@ -135,6 +161,31 @@ export function inboxItemFromChatNotification(
   };
 }
 
+export function inboxItemFromStockNotification(
+  notification: StockNotificationSource,
+  options?: { readAt?: string | null },
+): NotificationInboxItem {
+  return {
+    id: notification.id,
+    kind: "stock",
+    workOrderId: null,
+    orderNumber: null,
+    workOrderName: null,
+    siteKey: notification.siteKey,
+    siteName: notification.siteName,
+    createdAt: notification.createdAt,
+    readAt: options?.readAt !== undefined ? options.readAt : notification.readAt,
+    sparePartId: notification.sparePartId,
+    sparePartKey: notification.sparePartKey,
+    sparePartName: notification.sparePartName,
+    scopeType: notification.scopeType,
+    warehouseKey: notification.warehouseKey,
+    storageLocationKey: notification.storageLocationKey,
+    onHandQuantity: String(notification.onHandQuantity),
+    reorderLevel: String(notification.reorderLevel),
+  };
+}
+
 type InboxResponse = {
   rows: NotificationInboxItem[];
   total: number;
@@ -145,7 +196,7 @@ type InboxResponse = {
 export async function fetchNotificationInbox(params?: {
   page?: number;
   limit?: number;
-  kind?: "subscription" | "chat";
+  kind?: "subscription" | "chat" | "stock";
 }): Promise<InboxResponse> {
   const search = new URLSearchParams();
   if (params?.page != null) search.set("page", String(params.page));

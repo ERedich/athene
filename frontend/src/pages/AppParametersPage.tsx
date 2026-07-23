@@ -1,11 +1,9 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { Check, Pencil, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -14,8 +12,8 @@ import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Card } from "primereact/card";
 import { Checkbox } from "primereact/checkbox";
-import { ColorPicker } from "primereact/colorpicker";
 import { AppDialog } from "../components/AppDialog";
+import { AppColorPicker } from "../components/AppColorPicker";
 import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
@@ -35,7 +33,9 @@ import {
   APP_PARAM_KEY_DEFAULT_WORKGROUP,
   APP_PARAM_KEY_DEFAULT_SHIFT_HOURS,
   APP_PARAM_KEY_GENERATE_WO_FROM_MP,
+  APP_PARAM_KEY_PRIMARY_COLOR,
   APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
+  DEFAULT_PRIMARY_COLOR_HEX,
   SITE_APP_PARAM_KEY_WO_PCR,
   type AppParameterAssetKeyMode,
 } from "../lib/appParameterKeys";
@@ -47,7 +47,9 @@ import {
   parseAssetTypeDisplayConfig,
 } from "../lib/assetTypeDisplay";
 import { apiFetch } from "../lib/api";
+import { storedFromPickerValue } from "../lib/colorHex";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 
 type AppParameterRow = {
   id: string;
@@ -99,19 +101,14 @@ const tabKey: Record<CategoryCode, string> = {
   SV: "appParameters.tabSV",
 };
 
-function pickerValueFromStored(hex: string): string {
-  return hex.replace(/^#/, "").toLowerCase();
-}
-
-function storedFromPickerValue(raw: string): string {
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/i.exec(withHash);
-  if (!m) return "#64748b";
-  let h = m[1]!.toLowerCase();
-  if (h.length === 3) {
-    h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+function primaryColorHexFromJson(raw: unknown): string {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    const colorHex = (raw as { colorHex?: unknown }).colorHex;
+    if (typeof colorHex === "string" && colorHex.trim()) {
+      return storedFromPickerValue(colorHex);
+    }
   }
-  return `#${h}`;
+  return DEFAULT_PRIMARY_COLOR_HEX;
 }
 
 function normalizeNumValue(raw: unknown): number {
@@ -185,25 +182,7 @@ export function AppParametersPage() {
     return [none, ...opts];
   }, [t, workgroupsForSite]);
 
-  const updateTabInk = useCallback(() => {
-    const host = tabHostRef.current;
-    if (!host) return;
-    const nav = host.querySelector<HTMLElement>(".p-tabview-nav");
-    const active = nav?.querySelector<HTMLElement>("li.p-highlight .p-tabview-nav-link");
-    if (!nav || !active) return;
-    nav.style.setProperty("--app-ink-x", `${active.offsetLeft}px`);
-    nav.style.setProperty("--app-ink-w", `${active.offsetWidth}px`);
-  }, []);
-
-  useLayoutEffect(() => {
-    const raf = requestAnimationFrame(updateTabInk);
-    return () => cancelAnimationFrame(raf);
-  }, [activeTab, loading, draftRows.length, updateTabInk]);
-
-  useEffect(() => {
-    window.addEventListener("resize", updateTabInk);
-    return () => window.removeEventListener("resize", updateTabInk);
-  }, [updateTabInk]);
+  useTabInk(tabHostRef, [activeTab, loading, draftRows.length]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -573,9 +552,11 @@ export function AppParametersPage() {
     [],
   );
 
-  const updateAssetTypeColor = useCallback((slug: AssetTypeSlug, raw: string) => {
-    const colorHex = storedFromPickerValue(raw);
-    setAssetTypesDraft((d) => ({ ...d, [slug]: { ...d[slug], colorHex } }));
+  const updateAssetTypeColor = useCallback((slug: AssetTypeSlug, colorHex: string) => {
+    setAssetTypesDraft((d) => ({
+      ...d,
+      [slug]: { ...d[slug], colorHex: storedFromPickerValue(colorHex) },
+    }));
   }, []);
 
   const assetKeyGenOptions = useMemo(
@@ -696,6 +677,19 @@ export function AppParametersPage() {
                       />
                     </div>
                   ) : null}
+                </div>
+              ) : row.key === APP_PARAM_KEY_PRIMARY_COLOR && row.valueType === "json" ? (
+                <div
+                  className="flex flex-wrap items-center gap-3"
+                  onClick={(ev) => ev.stopPropagation()}
+                  onKeyDown={(ev) => ev.stopPropagation()}
+                >
+                  <AppColorPicker
+                    inputId={`app-param-${row.key}`}
+                    value={primaryColorHexFromJson(row.jsonValue)}
+                    disabled={savingAll}
+                    onChange={(colorHex) => updateDraftJson(row.key, { colorHex })}
+                  />
                 </div>
               ) : row.key === APP_PARAM_KEY_ASSET_TYPES ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -965,32 +959,19 @@ export function AppParametersPage() {
                 >
                   {t("sites.color")}
                 </label>
-                <span
-                  className="app-atyp-color-swatch-wrap"
-                  style={{ "--atyp-swatch": assetTypesDraft[slug].colorHex } as CSSProperties}
-                >
-                  <ColorPicker
-                    inputId={`atyp-color-${slug}`}
-                    className="app-atyp-colorpicker"
-                    format="hex"
-                    value={pickerValueFromStored(assetTypesDraft[slug].colorHex)}
-                    onChange={(e) => {
-                      const v = e.value;
-                      const raw = typeof v === "string" ? v : "";
-                      updateAssetTypeColor(slug, raw);
-                    }}
-                    appendTo={overlayAppendTo}
-                  />
-                </span>
-                <span className="font-mono text-sm text-on-surface-variant">{assetTypesDraft[slug].colorHex}</span>
+                <AppColorPicker
+                  inputId={`atyp-color-${slug}`}
+                  value={assetTypesDraft[slug].colorHex}
+                  onChange={(colorHex) => updateAssetTypeColor(slug, colorHex)}
+                />
               </div>
             </div>
           ))}
         </div>
       </AppDialog>
       <div className="app-tabbed-page-shell min-h-0 flex flex-1 flex-col">
-        <div ref={tabHostRef} className="app-tabview-with-ink">
-          <TabView className="app-sticky-tabs" activeIndex={activeTab} onTabChange={handleTabChange}>
+        <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
+          <TabView className={STANDARD_TAB_VIEW_CLASS} activeIndex={activeTab} onTabChange={handleTabChange}>
             {panels}
           </TabView>
         </div>

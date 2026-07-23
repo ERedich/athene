@@ -162,13 +162,22 @@ Use these **background** colors for reference icon buttons (and matching border)
 
 ## Tab Handling
 
-- Use PrimeReact `TabView` / `TabPanel` for tabbed UI.
-- Keep tab state controlled via `activeIndex` and `onTabChange`.
-- Use named tab indexes instead of inline magic numbers.
-- Tabs in BMW should stay sticky at the top and sit close to the title, while preserving PrimeReact's default TabView styling and selected-tab highlight.
-- When a tab represents countable related data (for example documents, assignments, feedback entries/drafts), show the count directly in the tab label in both web and mobile, using the format `Label [n]` (example: `Dokumente [4]`).
+**Standard layout:** **LY_STANDARD_TABS** (system `appLayout` key `LY-STANDARD-TABS`, `appKey: design`). Source pattern: work-order edit tabs. Apply everywhere web uses `TabView`.
+
+| Rule | Detail |
+| --- | --- |
+| **Component** | PrimeReact `TabView` / `TabPanel`, controlled via `activeIndex` + `onTabChange`. Named tab indexes (no inline magic numbers). |
+| **Host classes** | Wrapper: **`app-tabview-with-ink app-standard-tabs`**. TabView: **`app-sticky-tabs`**. Legacy aliases `app-wo-edit-tab-host` / `app-sp-edit-tab-host` map to the same look. |
+| **Ink + sticky** | Sliding primary underline via `--app-ink-x` / `--app-ink-w` (hook: [`useTabInk`](frontend/src/lib/tabs/useTabInk.ts)). Sticky nav under the title in BMW / page shells. |
+| **Label typography** | Space Grotesk, 0.75rem, weight 500, letter-spacing 0.08em, uppercase. Inactive: `--color-on-surface-variant`; active: `--color-on-surface`. |
+| **Counts** | Primary-tinted square badge via [`AppTabHeader`](frontend/src/components/tabs/AppTabHeader.tsx) + **`app-tab-badge`** (alias `app-wo-tab-badge`). Hide when count is null/empty/`0`. Do **not** use plain `Label [n]` text. |
+| **Shells** | BMW: **`app-tabbed-modal-window`**. Full page: **`app-tabbed-page-shell`**. |
+| **Config** | Tokens live in `appLayout.tabs` (`TabsLayoutPayload`). Active design layout is applied as CSS variables on the app host. Layout Editor (`design` app) edits/previews the LY. |
+
+Sidebar / nested mini-tabs may keep local padding/background overrides but must use the same label, ink, and badge treatment.
 
 ---
+
 
 ## Internationalization (i18n)
 

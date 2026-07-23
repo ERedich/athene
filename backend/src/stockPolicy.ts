@@ -19,6 +19,7 @@ export type StockPolicyRecord = StockPolicyFields & {
 };
 
 export type ResolvedStockPolicy = StockPolicyFields & {
+  policyId: string | null;
   scopeType: StockPolicyScopeType;
   warehouseId: string | null;
   storageLocationId: string | null;
@@ -44,6 +45,7 @@ export function resolveEffectiveStockPolicy(
     );
     if (bin) {
       return {
+        policyId: bin.id ?? null,
         scopeType: "STORAGE_LOCATION",
         warehouseId: bin.warehouseId,
         storageLocationId: bin.storageLocationId,
@@ -60,6 +62,7 @@ export function resolveEffectiveStockPolicy(
     );
     if (warehouse) {
       return {
+        policyId: warehouse.id ?? null,
         scopeType: "WAREHOUSE",
         warehouseId: warehouse.warehouseId,
         storageLocationId: null,
@@ -73,6 +76,7 @@ export function resolveEffectiveStockPolicy(
   const site = policies.find((p) => p.scopeType === "SITE");
   if (site) {
     return {
+      policyId: site.id ?? null,
       scopeType: "SITE",
       warehouseId: null,
       storageLocationId: null,

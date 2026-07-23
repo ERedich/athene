@@ -16,6 +16,7 @@ import type {
   MaintenancePlanIntervalUnit,
 } from "../../hooks/useMaintenancePlanEditDialogState";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
+import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS } from "../../lib/tabs";
 
 const fieldLabelClass = "block text-[11px] text-outline uppercase tracking-[0.1em]";
 
@@ -83,9 +84,9 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
       resizable={false}
       appendTo={overlayAppendTo}
     >
-      <div ref={tabHostRef} className="app-tabview-with-ink app-wo-edit-tab-host">
+      <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
         <TabView
-          className="app-sticky-tabs"
+          className={STANDARD_TAB_VIEW_CLASS}
           activeIndex={activeTabIndex}
           onTabChange={(e) => setActiveTabIndex(e.index)}
         >
