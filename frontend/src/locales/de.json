@@ -120,6 +120,146 @@
     "loadError": "Stammdaten-Kennzahlen konnten nicht geladen werden.",
     "retry": "Erneut versuchen"
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "kicker": "Erste Schritte",
+    "hubTitle": "So startest du mit Athene",
+    "hubLead": "Wähle einen Guide. Jeder Guide zeigt die Reihenfolge der Stammdaten und Apps — von Pflicht bis sinnvoll optional.",
+    "openGuide": "Guide öffnen",
+    "backToHub": "Alle Guides",
+    "required": "Pflicht",
+    "optional": "Optional",
+    "requiredCount": "{{required}} von {{total}} Schritten sind Pflicht",
+    "tipLabel": "Tipp",
+    "links": {
+      "sites": "Buchungskreise",
+      "costCenters": "Kostenstellen",
+      "assets": "Assets",
+      "baumstruktur": "Baumstruktur",
+      "employees": "Mitarbeiter",
+      "workgroups": "Fachgruppen",
+      "auftragstypen": "Auftragstypen",
+      "classifications": "Klassifikationen",
+      "probleme": "Probleme",
+      "ursachen": "Ursachen",
+      "massnahmen": "Maßnahmen",
+      "orderCreation": "Auftragserstellung",
+      "workOrders": "Aufträge",
+      "monitoring": "Monitoring",
+      "kalendar": "Kalendar",
+      "transactions": "Buchungen",
+      "mitteilungszentrale": "Mitteilungszentrale",
+      "warehouses": "Lager",
+      "storageLocations": "Lagerorte",
+      "spareParts": "Ersatzteile",
+      "suppliers": "Lieferanten",
+      "users": "Benutzer",
+      "appParameters": "App-Parameter"
+    },
+    "guides": {
+      "auftragswesen": {
+        "title": "Auftragswesen",
+        "summary": "Assets und Kostenstellen zuerst — dann Aufträge. Für MA-Planung Fachgruppen mitdenken.",
+        "intro": "Das Auftragswesen braucht saubere Stammdaten im gleichen Buchungskreis. Ohne Asset und Kostenstelle kannst du keinen Auftrag anlegen.",
+        "tip": "Buchungskreis-Konsistenz: Die Kostenstelle eines Assets muss zum Asset-Buchungskreis passen. Verantwortliche müssen Fachgruppen-Leiter sein; zugewiesene MA müssen in der Fachgruppe sein.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Buchungskreis prüfen",
+            "body": "Jeder Auftrag, jedes Asset und jede Kostenstelle hängt an einem Buchungskreis. Lege fehlende Werke unter Administration → Buchungskreise an und markiere Werk-Buchungskreise."
+          },
+          "kostenstellen": {
+            "title": "Kostenstellen anlegen",
+            "body": "Kostenstellen sind Pflicht für Aufträge. Lege sie im passenden Buchungskreis an — sie steuern die Zuordnung von Aufwand und sind später am Auftrag und am Asset sichtbar."
+          },
+          "assets": {
+            "title": "Assets anlegen",
+            "body": "Assets (technische Objekte) sind die Anlagen, an denen gearbeitet wird. Weise jedem Asset eine Kostenstelle im gleichen Buchungskreis zu. Die Baumstruktur hilft bei Hierarchien."
+          },
+          "planung": {
+            "title": "Mitarbeiter & Fachgruppen (für Planung)",
+            "body": "Wenn du MA und Fachgruppen planen willst, lege beides vorher an:\n• Mitarbeiter in den Stammdaten\n• Fachgruppen mit Mitgliedern und Leitern\n\nOhne Fachgruppe kannst du Aufträge zwar anlegen, aber keine sinnvolle Zuweisung und Verantwortlichkeit steuern."
+          },
+          "stammdatenExtra": {
+            "title": "Auftragstypen & PCR-Stammdaten",
+            "body": "Optional, aber hilfreich: Auftragstypen, Klassifikationen sowie Probleme, Ursachen und Maßnahmen (PCR). Sie machen Auswertung und Rückmeldung strukturierter."
+          },
+          "auftraege": {
+            "title": "Ersten Auftrag anlegen",
+            "body": "Lege den Auftrag mit Asset und Kostenstelle an. Für Planung: Fachgruppe wählen, Verantwortliche (Leiter) und Zuweisungen setzen. Geplanten Start/Ende und Auftragstyp ergänzen."
+          },
+          "steuern": {
+            "title": "Steuern & verfolgen",
+            "body": "Monitoring für den Live-Überblick, Kalendar für Termine, Buchungen für Zeiten/Material, Mitteilungszentrale für Abos und Hinweise."
+          }
+        }
+      },
+      "materialwesen": {
+        "title": "Materialwesen",
+        "summary": "Lager → Lagerorte → Ersatzteile. Danach Material auf Aufträgen buchen.",
+        "intro": "Materialwesen steckt in der Lagerhaltung: Bestände leben in Lagern und Lagerorten. Ersatzteile brauchen Bestandslinien, bevor du Material sinnvoll buchen kannst.",
+        "tip": "Reihenfolge einhalten: Erst Lager, dann Lagerorte unter diesem Lager, dann Ersatzteile mit Bestandskontrolle. Materialbuchungen hängen an Auftrag, Ersatzteil, Lager und Lagerort.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Buchungskreis vorbereiten",
+            "body": "Lager und Ersatzteile sind buchungskreisbezogen. Nutze denselben Buchungskreis wie für Assets und Aufträge, damit Material und Auftrag zusammenpassen."
+          },
+          "lager": {
+            "title": "Lager anlegen",
+            "body": "Lege unter Lagerhaltung die physischen oder logischen Lager an (Schlüssel, Name, Buchungskreis, aktiv)."
+          },
+          "lagerorte": {
+            "title": "Lagerorte anlegen",
+            "body": "Jeder Lagerort gehört zu genau einem Lager. So findest du Teile im Regal/Fach wieder und steuerst Bestände fein genug."
+          },
+          "ersatzteile": {
+            "title": "Ersatzteile mit Bestand anlegen",
+            "body": "Lege Ersatzteile an und pflege Bestandskontrolle je Lager/Lagerort (Menge, optional Meldebestand). Ohne Bestandslinie siehst du später keine verfügbare Menge."
+          },
+          "lieferanten": {
+            "title": "Lieferanten (optional)",
+            "body": "Lieferanten-Stammdaten helfen bei Beschaffung und Zuordnung. Sinnvoll, sobald Einkauf oder Nachbestellung relevant wird."
+          },
+          "buchen": {
+            "title": "Material buchen",
+            "body": "Material fließt über Buchungen am Auftrag (Referenz Material) oder über die Buchungen-App. So sinkt der Bestand und der Verbrauch hängt am Auftrag."
+          }
+        }
+      },
+      "benutzermanagement": {
+        "title": "Benutzermanagement & Buchungskreise",
+        "summary": "Buchungskreise zuerst, dann Benutzer mit Werk-Haupt-BK und optional MA-Verknüpfung.",
+        "intro": "Benutzer steuern den Login und den Datenzugriff. Buchungskreise begrenzen, was jemand sieht und bearbeiten darf.",
+        "tip": "Der Haupt-Buchungskreis eines Benutzers muss ein Werk (isPlant) sein. Ein Benutzer kann mit höchstens einem Mitarbeiter verknüpft werden — und nur im gleichen Buchungskreis.",
+        "steps": {
+          "buchungskreise": {
+            "title": "Buchungskreise anlegen",
+            "body": "Lege Buchungskreise an, vergebe Farbe und markiere Werke. Nur Werk-Buchungskreise dürfen als Haupt-Buchungskreis eines Benutzers dienen."
+          },
+          "mitarbeiter": {
+            "title": "Mitarbeiter anlegen (optional, empfohlen)",
+            "body": "Mitarbeiter sind die Personen in der Instandhaltung (Zuweisung, Schicht, Fachgruppe). Lege sie an, bevor du Benutzer mit der Realität im Werk verknüpfst."
+          },
+          "benutzer": {
+            "title": "Benutzer anlegen",
+            "body": "Unter Administration → Benutzer: Anmeldename, Name, Passwort und Haupt-Buchungskreis setzen. Optional denselben Mitarbeiter verknüpfen."
+          },
+          "zugriff": {
+            "title": "Weitere Buchungskreise zuweisen",
+            "body": "Neben dem Haupt-Buchungskreis kannst du weitere Buchungskreise freigeben. Ohne Zugriff sieht der User die Daten dieses Kreises nicht."
+          },
+          "fachgruppen": {
+            "title": "Fachgruppen verknüpfen",
+            "body": "Für Auftragsplanung Mitarbeiter in Fachgruppen aufnehmen und Leiter kennzeichnen. Nur so greifen Verantwortlichkeit und Zuweisung sauber."
+          },
+          "parameter": {
+            "title": "App-Parameter prüfen",
+            "body": "Parameter wie GN-ASC (Wahl des Buchungskreises) steuern, ob Benutzer den Buchungskreis in Stammdaten wechseln dürfen. Bei Bedarf unter App-Parameter anpassen."
+          }
+        }
+      }
+    }
+  },
   "calculator": {
     "appName": "Taschenrechner",
     "navCalculator": "Taschenrechner",

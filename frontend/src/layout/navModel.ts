@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ClipboardCheck,
   Clock,
+  Compass,
   FilePlus,
   History,
   IdCard,
@@ -59,6 +60,14 @@ export const navGroups: NavGroup[] = [
     items: [],
     to: "/dashboard",
     end: true,
+  },
+  {
+    id: "getting-started",
+    labelKey: "gettingStarted.navGettingStarted",
+    Icon: Compass,
+    items: [],
+    to: "/getting-started",
+    end: false,
   },
   {
     id: "system",

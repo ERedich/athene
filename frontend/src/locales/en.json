@@ -120,6 +120,146 @@
     "loadError": "Could not load master data counts.",
     "retry": "Retry"
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "kicker": "First steps",
+    "hubTitle": "How to get started with Athene",
+    "hubLead": "Pick a guide. Each guide shows the order of master data and apps — from required to useful optional steps.",
+    "openGuide": "Open guide",
+    "backToHub": "All guides",
+    "required": "Required",
+    "optional": "Optional",
+    "requiredCount": "{{required}} of {{total}} steps are required",
+    "tipLabel": "Tip",
+    "links": {
+      "sites": "Sites",
+      "costCenters": "Cost centers",
+      "assets": "Assets",
+      "baumstruktur": "Tree structure",
+      "employees": "Employees",
+      "workgroups": "Work groups",
+      "auftragstypen": "Order types",
+      "classifications": "Classifications",
+      "probleme": "Problems",
+      "ursachen": "Causes",
+      "massnahmen": "Actions",
+      "orderCreation": "Order creation",
+      "workOrders": "Work orders",
+      "monitoring": "Monitoring",
+      "kalendar": "Calendar",
+      "transactions": "Transactions",
+      "mitteilungszentrale": "Message center",
+      "warehouses": "Warehouses",
+      "storageLocations": "Storage locations",
+      "spareParts": "Spare parts",
+      "suppliers": "Suppliers",
+      "users": "Users",
+      "appParameters": "App parameters"
+    },
+    "guides": {
+      "auftragswesen": {
+        "title": "Order management",
+        "summary": "Assets and cost centers first — then work orders. Add employees and work groups if you plan people.",
+        "intro": "Order management needs clean master data in the same site. Without an asset and cost center you cannot create a work order.",
+        "tip": "Site consistency: an asset’s cost center must match the asset’s site. Responsibles must be work-group leaders; assigned employees must belong to the work group.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Check the site",
+            "body": "Every work order, asset, and cost center belongs to a site. Create missing plants under Administration → Sites and mark plant sites."
+          },
+          "kostenstellen": {
+            "title": "Create cost centers",
+            "body": "Cost centers are required for work orders. Create them in the matching site — they drive cost assignment and appear on the order and asset."
+          },
+          "assets": {
+            "title": "Create assets",
+            "body": "Assets are the technical objects you work on. Assign each asset a cost center in the same site. Use the tree structure for hierarchies."
+          },
+          "planung": {
+            "title": "Employees & work groups (for planning)",
+            "body": "If you want to plan employees and work groups, create both first:\n• Employees in master data\n• Work groups with members and leaders\n\nWithout a work group you can still create orders, but assignment and responsibility will not work properly."
+          },
+          "stammdatenExtra": {
+            "title": "Order types & PCR master data",
+            "body": "Optional but useful: order types, classifications, plus problems, causes, and actions (PCR). They structure reporting and feedback."
+          },
+          "auftraege": {
+            "title": "Create the first work order",
+            "body": "Create the order with asset and cost center. For planning: pick a work group, set responsibles (leaders) and assignments. Add planned start/end and order type."
+          },
+          "steuern": {
+            "title": "Control & track",
+            "body": "Monitoring for the live overview, Calendar for dates, Transactions for time/material, Message center for subscriptions and alerts."
+          }
+        }
+      },
+      "materialwesen": {
+        "title": "Materials",
+        "summary": "Warehouse → storage locations → spare parts. Then book material on work orders.",
+        "intro": "Materials live under warehouse management: stock sits in warehouses and storage locations. Spare parts need stock lines before material booking makes sense.",
+        "tip": "Keep the order: warehouse first, then storage locations under that warehouse, then spare parts with stock control. Material bookings need order, spare part, warehouse, and storage location.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Prepare the site",
+            "body": "Warehouses and spare parts are site-scoped. Use the same site as assets and work orders so material and orders stay aligned."
+          },
+          "lager": {
+            "title": "Create warehouses",
+            "body": "Under Warehouse, create physical or logical warehouses (key, name, site, active)."
+          },
+          "lagerorte": {
+            "title": "Create storage locations",
+            "body": "Each storage location belongs to exactly one warehouse. That is how you find parts on the shelf and manage stock in enough detail."
+          },
+          "ersatzteile": {
+            "title": "Create spare parts with stock",
+            "body": "Create spare parts and maintain stock control per warehouse/storage location (quantity, optional reorder point). Without a stock line you will not see available quantity later."
+          },
+          "lieferanten": {
+            "title": "Suppliers (optional)",
+            "body": "Supplier master data helps with procurement and assignment. Useful once purchasing or replenishment matters."
+          },
+          "buchen": {
+            "title": "Book material",
+            "body": "Material flows via transactions on the work order (Material reference) or the Transactions app. Stock decreases and consumption is tied to the order."
+          }
+        }
+      },
+      "benutzermanagement": {
+        "title": "User management & sites",
+        "summary": "Sites first, then users with a plant primary site and optional employee link.",
+        "intro": "Users control login and data access. Sites limit what someone can see and edit.",
+        "tip": "A user’s primary site must be a plant (isPlant). A user can link to at most one employee — and only in the same site.",
+        "steps": {
+          "buchungskreise": {
+            "title": "Create sites",
+            "body": "Create sites, assign a color, and mark plants. Only plant sites may be used as a user’s primary site."
+          },
+          "mitarbeiter": {
+            "title": "Create employees (optional, recommended)",
+            "body": "Employees are the people in maintenance (assignment, shifts, work groups). Create them before you link users to real shop-floor people."
+          },
+          "benutzer": {
+            "title": "Create users",
+            "body": "Under Administration → Users: set login name, name, password, and primary site. Optionally link the matching employee."
+          },
+          "zugriff": {
+            "title": "Assign additional sites",
+            "body": "Besides the primary site you can grant more sites. Without access, the user cannot see that site’s data."
+          },
+          "fachgruppen": {
+            "title": "Link work groups",
+            "body": "For order planning, add employees to work groups and mark leaders. Only then responsibility and assignment work cleanly."
+          },
+          "parameter": {
+            "title": "Check app parameters",
+            "body": "Parameters such as GN-ASC (site selection) control whether users may change the site on master data. Adjust under App parameters if needed."
+          }
+        }
+      }
+    }
+  },
   "calculator": {
     "appName": "Calculator",
     "navCalculator": "Calculator",
