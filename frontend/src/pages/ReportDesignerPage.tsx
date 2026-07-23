@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ArrowRight, Download, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
@@ -250,7 +250,7 @@ export function ReportDesignerPage() {
   }, [elements, selectedElementId]);
 
   const draggableHandlers = (element: TextElement) => ({
-    onMouseDown: (event: React.MouseEvent<HTMLButtonElement>) => {
+    onMouseDown: (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       setSelectedElementId(element.id);
