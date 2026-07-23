@@ -63,6 +63,14 @@ export const navGroups: NavGroup[] = [
     end: true,
   },
   {
+    id: "report-designer",
+    labelKey: "reportDesigner.navReportDesigner",
+    Icon: FileText,
+    items: [],
+    to: "/report-designer",
+    end: false,
+  },
+  {
     id: "getting-started",
     labelKey: "gettingStarted.navGettingStarted",
     Icon: Compass,
@@ -109,11 +117,6 @@ export const navGroups: NavGroup[] = [
         to: "/layout-editor",
         Icon: LayoutTemplate,
         labelKey: "layoutEditor.navLayoutEditor",
-      },
-      {
-        to: "/report-designer",
-        Icon: FileText,
-        labelKey: "reportDesigner.navReportDesigner",
       },
       {
         to: "/suchkonfig",
