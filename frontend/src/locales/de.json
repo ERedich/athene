@@ -155,6 +155,65 @@
     "navOrderCreation": "Auftragserstellung",
     "hint": "Öffnet das Dialogfenster zum Anlegen eines neuen Auftrags — wie unter Aufträge und Monitoring."
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "introTitle": "Erste Schritte in Athene",
+    "introBody": "Diese App zeigt dir die schnellste Reihenfolge, um produktiv zu starten. Alle Guides sind praxisnah aufgebaut: zuerst Pflicht-Stammdaten, dann konkrete Schritte im Alltag, danach sinnvolle Erweiterungen.\n\nTipp: Nutze die verlinkten Apps direkt aus den Guides, um jeden Schritt sofort umzusetzen.",
+    "guides": {
+      "orderManagement": {
+        "title": "Die ersten Schritte zum Auftragswesen",
+        "summary": "Für einen stabilen Start im Auftragswesen brauchst du zuerst die Kern-Stammdaten. Ohne Assets und Kostenstellen können Aufträge in der Praxis nicht sauber geplant, zugeordnet und ausgewertet werden.",
+        "prerequisitesTitle": "Pflicht-Stammdaten",
+        "prereqAssets": "Assets anlegen: technische Plätze, Anlagen oder Aggregate als Grundlage für alle Aufträge.",
+        "prereqCostCenters": "Kostenstellen anlegen: notwendig für wirtschaftliche Zuordnung, Buchungen und Auswertungen.",
+        "prereqEmployeesWorkgroups": "Wenn du MA und Fachgruppen planen willst: Mitarbeiter und Fachgruppen (Workgroups) direkt mit aufbauen.",
+        "firstStepsTitle": "Erste Schritte",
+        "stepOrderTypes": "Auftragstypen definieren (z. B. Störung, Wartung, Inspektion), damit der Prozess klar strukturiert ist.",
+        "stepCreateOrders": "Erste Aufträge über Aufträge/Auftragserstellung anlegen und den passenden Assets zuordnen.",
+        "stepMonitoring": "Monitoring nutzen, um offene und laufende Aufträge mit Status und Priorität zentral zu steuern.",
+        "stepCalendar": "Im Kalendar planen und Termine mit verfügbaren Mitarbeitern/Fachgruppen abstimmen.",
+        "expansionTitle": "Sinnvolle Erweiterungen",
+        "expandFailures": "Probleme, Ursachen und Maßnahmen als Kataloge pflegen, damit Rückmeldungen standardisiert werden.",
+        "expandMaintenancePlans": "Wartungspläne und Inspektionsrunden ergänzen, um wiederkehrende Aufträge automatisch aufzubauen.",
+        "expandShiftsAndSubscriptions": "Schichtplanung und Abonnements kombinieren, um Verantwortliche zeitnah über Änderungen zu informieren."
+      },
+      "materialManagement": {
+        "title": "Getting Started: Materialwesen",
+        "summary": "Im Materialwesen geht es darum, Materialverfügbarkeit, Lagerorte und Buchungsfluss transparent zu machen. So wird jede Materialentnahme im Auftragskontext nachvollziehbar.",
+        "prerequisitesTitle": "Pflicht-Stammdaten",
+        "prereqWarehouses": "Lager anlegen und klar nach Verantwortungsbereich oder Standort strukturieren.",
+        "prereqStorageLocations": "Lagerplätze je Lager anlegen, damit Material physisch eindeutig auffindbar ist.",
+        "prereqSparePartsAndSuppliers": "Ersatzteile mit Lieferantenstamm pflegen, inklusive Teilenummern, Einheit und Grundbestandsdaten.",
+        "firstStepsTitle": "Erste Schritte",
+        "stepMinStock": "Mindestbestände und Meldebestände für kritische Teile definieren.",
+        "stepMaterialBookings": "Transaktionen für Zugänge/Entnahmen konsequent buchen, idealerweise aus dem Auftragsprozess heraus.",
+        "stepAssetLinks": "Wichtige Ersatzteile mit Assets verknüpfen, um typische Materialbedarfe je Anlage sichtbar zu machen.",
+        "stepCycleCounts": "Regelmäßige Bestandsprüfungen und Korrekturbuchungen als Standardprozess etablieren.",
+        "expansionTitle": "Sinnvolle Erweiterungen",
+        "expandReorderPolicies": "Nachbestelllogik je Teil ergänzen (z. B. Wiederbeschaffungszeit, Mindestlosgrößen, Sicherheitsbestand).",
+        "expandClassifications": "Materialklassifikationen einführen, um Suche, Filterung und Auswertung zu verbessern.",
+        "expandDashboard": "Material-KPIs im Dashboard ausrollen (kritische Fehlteile, Bestandswerte, Bewegungsrate)."
+      },
+      "userManagementAndSites": {
+        "title": "Getting Started: Benutzermanagement & Buchungskreise",
+        "summary": "Ein sauberes Benutzer- und Buchungskreis-Setup sorgt dafür, dass jeder nur relevante Daten sieht und korrekt im eigenen Verantwortungsbereich arbeitet.",
+        "prerequisitesTitle": "Pflicht-Stammdaten",
+        "prereqUsers": "Benutzerkonten für alle Rollen anlegen und Zuständigkeiten klar trennen.",
+        "prereqEmployeesLink": "Benutzer mit Mitarbeitern verknüpfen, damit Zuweisungen, Schichtplanung und Fachgruppen konsistent sind.",
+        "prereqSitesAndParameter": "Buchungskreise (Sites) pflegen und das Verhalten über App-Parameter (z. B. GN-ASC) definieren.",
+        "firstStepsTitle": "Erste Schritte",
+        "stepDefaultSiteFlow": "Prozess entscheiden: fester Arbeits-Buchungskreis oder aktive Buchungskreis-Auswahl durch den Benutzer.",
+        "stepSitePermissions": "Berechtigungen und Sichtbarkeit nach Buchungskreis prüfen, bevor produktive Daten angelegt werden.",
+        "stepAssignWorkgroups": "Mitarbeiter in Fachgruppen zuordnen, damit operative Planung und Eskalationen funktionieren.",
+        "stepPlanShifts": "Schichten und Schichtplaner aufsetzen, um Verfügbarkeit für Aufträge realistisch abzubilden.",
+        "expansionTitle": "Sinnvolle Erweiterungen",
+        "expandOnboarding": "Onboarding-Standards je Rolle definieren (Pflichtansichten, Touren, Trainingsdaten).",
+        "expandAuditAndTranslations": "Audit-Log und Übersetzungen nutzen, um Governance und Mehrsprachigkeit transparent zu steuern.",
+        "expandRoleProfiles": "Rollenprofile mit klaren Freigaben je App-Bereich dokumentieren und regelmäßig reviewen."
+      }
+    }
+  },
   "documentsUi": {
     "imagePreview": "Vorschau: {{name}}",
     "imagePreviewHint": "Vorschau beim Hovern · Klicken zum Öffnen"

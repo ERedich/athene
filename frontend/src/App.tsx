@@ -20,6 +20,7 @@ import { EmployeesPage } from "./pages/EmployeesPage";
 import { CalculatorPage } from "./pages/CalculatorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackPage } from "./pages/FeedbackPage";
+import { GettingStartedPage } from "./pages/GettingStartedPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { KalendarPage } from "./pages/KalendarPage";
@@ -49,6 +50,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="stammdaten-manager" element={<StammdatenManagerPage />} />

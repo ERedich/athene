@@ -40,6 +40,7 @@ function headerTitleKey(pathname: string): string {
   const seg = pathname.replace(/\/+$/, "").split("/").filter(Boolean)[0];
   const map: Record<string, string> = {
     dashboard: "dashboard.appName",
+    "getting-started": "gettingStarted.appName",
     calculator: "calculator.appName",
     feedback: "feedback.appName",
     "stammdaten-manager": "stammdatenManager.appName",

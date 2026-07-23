@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Box,
+  BookOpen,
   Briefcase,
   Calculator,
   CalendarDays,
@@ -59,6 +60,13 @@ export const navGroups: NavGroup[] = [
     items: [],
     to: "/dashboard",
     end: true,
+  },
+  {
+    id: "getting-started",
+    labelKey: "gettingStarted.navGettingStarted",
+    Icon: BookOpen,
+    items: [],
+    to: "/getting-started",
   },
   {
     id: "system",

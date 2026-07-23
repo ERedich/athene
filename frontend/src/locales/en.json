@@ -155,6 +155,65 @@
     "navOrderCreation": "Create order",
     "hint": "Opens the dialog to create a new work order — the same as in Orders and Monitoring."
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "introTitle": "First steps in Athene",
+    "introBody": "This app gives you the fastest sequence to become productive. Every guide follows a practical structure: required master data first, concrete day-to-day steps second, and useful extensions third.\n\nTip: use the linked apps directly from the guides to execute each step immediately.",
+    "guides": {
+      "orderManagement": {
+        "title": "First steps for order management",
+        "summary": "A stable order-management rollout starts with core master data. Without assets and cost centers, orders cannot be planned, assigned, and analyzed cleanly in practice.",
+        "prerequisitesTitle": "Required master data",
+        "prereqAssets": "Create assets: technical objects, equipment, or plant areas as the basis for all orders.",
+        "prereqCostCenters": "Create cost centers: required for financial assignment, postings, and reporting.",
+        "prereqEmployeesWorkgroups": "If you want to plan employees and work groups, set up both from day one.",
+        "firstStepsTitle": "First steps",
+        "stepOrderTypes": "Define order types (for example failure, maintenance, inspection) for a clear process structure.",
+        "stepCreateOrders": "Create first orders via Orders/Create order and assign them to the right assets.",
+        "stepMonitoring": "Use Monitoring to centrally control open and active orders by status and priority.",
+        "stepCalendar": "Plan in the calendar and align due dates with available employees and work groups.",
+        "expansionTitle": "Useful extensions",
+        "expandFailures": "Maintain problem, cause, and remedy catalogs to standardize feedback quality.",
+        "expandMaintenancePlans": "Add maintenance plans and inspection rounds to generate recurring orders automatically.",
+        "expandShiftsAndSubscriptions": "Combine shift planning and subscriptions to inform responsible teams quickly on changes."
+      },
+      "materialManagement": {
+        "title": "Getting Started: Material management",
+        "summary": "Material management is about transparent availability, storage locations, and posting flow. This makes every material issue traceable in the order context.",
+        "prerequisitesTitle": "Required master data",
+        "prereqWarehouses": "Create warehouses and structure them clearly by responsibility or site.",
+        "prereqStorageLocations": "Create storage locations per warehouse so material is physically traceable.",
+        "prereqSparePartsAndSuppliers": "Maintain spare parts and supplier master data, including part numbers, unit, and baseline stock data.",
+        "firstStepsTitle": "First steps",
+        "stepMinStock": "Define minimum stock and reorder levels for critical parts.",
+        "stepMaterialBookings": "Post goods receipts/issues consistently, ideally directly in order-driven workflows.",
+        "stepAssetLinks": "Link key spare parts to assets to make typical material demand visible per asset.",
+        "stepCycleCounts": "Establish recurring stock checks and adjustment postings as a standard process.",
+        "expansionTitle": "Useful extensions",
+        "expandReorderPolicies": "Add part-level replenishment policies (lead time, minimum lot size, safety stock).",
+        "expandClassifications": "Introduce material classifications to improve search, filtering, and analytics.",
+        "expandDashboard": "Roll out material KPIs in the dashboard (critical shortages, stock value, movement rate)."
+      },
+      "userManagementAndSites": {
+        "title": "Getting Started: User management & sites",
+        "summary": "A clean user and site setup ensures each person sees relevant data only and works correctly inside their responsibility scope.",
+        "prerequisitesTitle": "Required master data",
+        "prereqUsers": "Create user accounts for all roles and separate responsibilities clearly.",
+        "prereqEmployeesLink": "Link users to employees so assignments, shift planning, and work groups stay consistent.",
+        "prereqSitesAndParameter": "Maintain sites and define behavior via app parameters (for example GN-ASC).",
+        "firstStepsTitle": "First steps",
+        "stepDefaultSiteFlow": "Decide your process: fixed working site or active site selection by users.",
+        "stepSitePermissions": "Validate permissions and visibility by site before creating productive data.",
+        "stepAssignWorkgroups": "Assign employees to work groups so operational planning and escalation can work.",
+        "stepPlanShifts": "Set up shifts and the shift planner to reflect realistic order availability.",
+        "expansionTitle": "Useful extensions",
+        "expandOnboarding": "Define role-specific onboarding standards (mandatory views, tours, training data).",
+        "expandAuditAndTranslations": "Use audit log and translations to run governance and multilingual setup transparently.",
+        "expandRoleProfiles": "Document role profiles with clear app-area permissions and review them regularly."
+      }
+    }
+  },
   "documentsUi": {
     "imagePreview": "Preview: {{name}}",
     "imagePreviewHint": "Hover for preview · click to open"
