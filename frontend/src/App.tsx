@@ -41,6 +41,7 @@ import { LayoutEditorPage } from "./pages/LayoutEditorPage";
 import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
 import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
+import { ReportDesignerPage } from "./pages/ReportDesignerPage";
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="layout-editor" element={<LayoutEditorPage />} />
+          <Route path="report-designer" element={<ReportDesignerPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />

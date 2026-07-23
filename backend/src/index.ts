@@ -45,6 +45,7 @@ import { causesRouter } from "./causes.js";
 import { remediesRouter } from "./remedies.js";
 import { startMaintenancePlanDailyGenerate } from "./maintenancePlanGenerate.js";
 import { publicLoginKpisRouter } from "./publicLoginKpis.js";
+import { reportDesignerRouter } from "./reportDesigner.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -118,6 +119,7 @@ app.use("/api/app-feedback", requireAuth, appFeedbackRouter);
 app.use("/api/audit-log", requireAuth, auditLogRouter);
 app.use("/api/db-meta", requireAuth, dbMetaRouter);
 app.use("/api/assistant", requireAuth, assistantRouter);
+app.use("/api/report-designer", requireAuth, reportDesignerRouter);
 
 const server = createServer(app);
 const workOrdersWss = createWorkOrderWebSocketServer("/api/work-orders/events");
