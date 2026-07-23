@@ -54,6 +54,7 @@ function headerTitleKey(pathname: string): string {
     suchkonfig: "suchkonfig.appName",
     "kpi-builder": "kpiBuilder.appName",
     "layout-editor": "layoutEditor.appName",
+    "report-designer": "reportDesigner.appName",
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",
