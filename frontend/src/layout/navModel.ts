@@ -14,6 +14,7 @@ import {
   Languages,
   LayoutGrid,
   LayoutTemplate,
+  FileText,
   MapPin,
   MessageSquare,
   FolderTree,
@@ -99,6 +100,11 @@ export const navGroups: NavGroup[] = [
         to: "/layout-editor",
         Icon: LayoutTemplate,
         labelKey: "layoutEditor.navLayoutEditor",
+      },
+      {
+        to: "/report-designer",
+        Icon: FileText,
+        labelKey: "reportDesigner.navReportDesigner",
       },
       {
         to: "/suchkonfig",
