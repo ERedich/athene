@@ -12,9 +12,8 @@ const MAX_QUERY_LENGTH = 8000;
 const MAX_TEXT_LENGTH = 1000;
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
-const MIN_BAND_HEIGHT = 24;
-const MAX_HEADER_HEIGHT = 400;
-const MAX_DETAIL_HEIGHT = 400;
+const MIN_BAND_HEIGHT = 16;
+const MAX_BAND_HEIGHT = 400;
 
 const blockedSqlTokens = [
   "insert",
@@ -39,7 +38,7 @@ type QueryPreviewBody = {
   limit: number;
 };
 
-type ReportSection = "header" | "detail";
+type ReportSection = "header" | "groupHeader" | "detail" | "groupFooter" | "footer";
 
 type ReportElement = {
   id: string;
@@ -55,9 +54,19 @@ type ReportElement = {
   underline: boolean;
 };
 
+type BandConfig = { height: number };
+
 type ReportLayout = {
-  header: { height: number; firstPageOnly: boolean };
-  detail: { height: number };
+  header: BandConfig & { firstPageOnly: boolean };
+  groupHeader: BandConfig;
+  detail: BandConfig;
+  groupFooter: BandConfig;
+  footer: BandConfig;
+  grouping: {
+    enabled: boolean;
+    field: string;
+    sort: "asc" | "desc";
+  };
   elements: ReportElement[];
 };
 
@@ -66,6 +75,19 @@ type RenderPdfBody = {
   rows: Record<string, unknown>[];
   layout: ReportLayout;
 };
+
+type RowGroup = {
+  key: string;
+  rows: Record<string, unknown>[];
+};
+
+const REPORT_SECTIONS: ReportSection[] = [
+  "header",
+  "groupHeader",
+  "detail",
+  "groupFooter",
+  "footer",
+];
 
 function sanitizeSql(raw: string): string | null {
   const sql = raw.trim().replace(/;+$/g, "");
@@ -104,10 +126,15 @@ function toSafeText(value: unknown): string {
   }
 }
 
-function applyTemplate(text: string, row: Record<string, unknown>): string {
-  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) =>
-    toSafeText(row[key]),
-  );
+function applyTemplate(
+  text: string,
+  row: Record<string, unknown>,
+  extras: Record<string, string> = {},
+): string {
+  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => {
+    if (Object.prototype.hasOwnProperty.call(extras, key)) return extras[key] ?? "";
+    return toSafeText(row[key]);
+  });
 }
 
 function resolveFont(bold: boolean, italic: boolean): string {
@@ -117,15 +144,23 @@ function resolveFont(bold: boolean, italic: boolean): string {
   return "Helvetica";
 }
 
+function parseBandHeight(raw: unknown, fallback: number): number | null {
+  if (raw == null) return fallback;
+  const height = Number(raw);
+  if (!Number.isFinite(height)) return null;
+  if (height < MIN_BAND_HEIGHT || height > MAX_BAND_HEIGHT) return null;
+  return Math.round(height);
+}
+
 function parseReportElement(raw: unknown, bandHeight: number): ReportElement | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : "";
   const sectionRaw = typeof obj.section === "string" ? obj.section : "";
-  const section: ReportSection | null =
-    sectionRaw === "header" || sectionRaw === "detail" ? sectionRaw : null;
-  const text =
-    typeof obj.text === "string" ? obj.text.slice(0, MAX_TEXT_LENGTH) : "";
+  const section = REPORT_SECTIONS.includes(sectionRaw as ReportSection)
+    ? (sectionRaw as ReportSection)
+    : null;
+  const text = typeof obj.text === "string" ? obj.text.slice(0, MAX_TEXT_LENGTH) : "";
   const x = Number(obj.x);
   const y = Number(obj.y);
   const width = Number(obj.width);
@@ -159,25 +194,76 @@ function parseReportLayout(raw: unknown): ReportLayout | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
 
-  const headerRaw = obj.header && typeof obj.header === "object" ? (obj.header as Record<string, unknown>) : null;
-  const detailRaw = obj.detail && typeof obj.detail === "object" ? (obj.detail as Record<string, unknown>) : null;
+  const headerRaw =
+    obj.header && typeof obj.header === "object" ? (obj.header as Record<string, unknown>) : null;
+  const detailRaw =
+    obj.detail && typeof obj.detail === "object" ? (obj.detail as Record<string, unknown>) : null;
   if (!headerRaw || !detailRaw) return null;
 
-  const headerHeight = Number(headerRaw.height);
-  const detailHeight = Number(detailRaw.height);
-  if (!Number.isFinite(headerHeight) || !Number.isFinite(detailHeight)) return null;
-  if (headerHeight < MIN_BAND_HEIGHT || headerHeight > MAX_HEADER_HEIGHT) return null;
-  if (detailHeight < MIN_BAND_HEIGHT || detailHeight > MAX_DETAIL_HEIGHT) return null;
-  if (headerHeight + detailHeight > PAGE_HEIGHT) return null;
+  const groupHeaderRaw =
+    obj.groupHeader && typeof obj.groupHeader === "object"
+      ? (obj.groupHeader as Record<string, unknown>)
+      : {};
+  const groupFooterRaw =
+    obj.groupFooter && typeof obj.groupFooter === "object"
+      ? (obj.groupFooter as Record<string, unknown>)
+      : {};
+  const footerRaw =
+    obj.footer && typeof obj.footer === "object" ? (obj.footer as Record<string, unknown>) : {};
+  const groupingRaw =
+    obj.grouping && typeof obj.grouping === "object"
+      ? (obj.grouping as Record<string, unknown>)
+      : {};
+
+  const headerHeight = parseBandHeight(headerRaw.height, 80);
+  const groupHeaderHeight = parseBandHeight(groupHeaderRaw.height, 28);
+  const detailHeight = parseBandHeight(detailRaw.height, 36);
+  const groupFooterHeight = parseBandHeight(groupFooterRaw.height, 24);
+  const footerHeight = parseBandHeight(footerRaw.height, 28);
+  if (
+    headerHeight == null ||
+    groupHeaderHeight == null ||
+    detailHeight == null ||
+    groupFooterHeight == null ||
+    footerHeight == null
+  ) {
+    return null;
+  }
+
+  const groupingEnabled = Boolean(groupingRaw.enabled);
+  const groupingField =
+    typeof groupingRaw.field === "string" ? groupingRaw.field.trim().slice(0, 120) : "";
+  const sortRaw = typeof groupingRaw.sort === "string" ? groupingRaw.sort : "asc";
+  const groupingSort = sortRaw === "desc" ? "desc" : "asc";
+
+  if (groupingEnabled && !groupingField) return null;
+
+  const reserved =
+    headerHeight +
+    footerHeight +
+    detailHeight +
+    (groupingEnabled ? groupHeaderHeight + groupFooterHeight : 0);
+  if (reserved > PAGE_HEIGHT) return null;
 
   const elementsRaw = Array.isArray(obj.elements) ? obj.elements : [];
   if (elementsRaw.length === 0 || elementsRaw.length > MAX_TEXT_ELEMENTS) return null;
 
   const header = {
-    height: Math.round(headerHeight),
+    height: headerHeight,
     firstPageOnly: Boolean(headerRaw.firstPageOnly),
   };
-  const detail = { height: Math.round(detailHeight) };
+  const groupHeader = { height: groupHeaderHeight };
+  const detail = { height: detailHeight };
+  const groupFooter = { height: groupFooterHeight };
+  const footer = { height: footerHeight };
+
+  const bandHeightBySection: Record<ReportSection, number> = {
+    header: header.height,
+    groupHeader: groupHeader.height,
+    detail: detail.height,
+    groupFooter: groupFooter.height,
+    footer: footer.height,
+  };
 
   const elements: ReportElement[] = [];
   for (const rawElement of elementsRaw) {
@@ -185,13 +271,28 @@ function parseReportLayout(raw: unknown): ReportLayout | null {
       rawElement && typeof rawElement === "object"
         ? (rawElement as Record<string, unknown>).section
         : null;
-    const bandHeight = sectionGuess === "header" ? header.height : detail.height;
-    const parsed = parseReportElement(rawElement, bandHeight);
+    const section =
+      typeof sectionGuess === "string" && REPORT_SECTIONS.includes(sectionGuess as ReportSection)
+        ? (sectionGuess as ReportSection)
+        : "detail";
+    const parsed = parseReportElement(rawElement, bandHeightBySection[section]);
     if (!parsed) return null;
     elements.push(parsed);
   }
 
-  return { header, detail, elements };
+  return {
+    header,
+    groupHeader,
+    detail,
+    groupFooter,
+    footer,
+    grouping: {
+      enabled: groupingEnabled,
+      field: groupingField,
+      sort: groupingSort,
+    },
+    elements,
+  };
 }
 
 function parseRenderPdfBody(body: unknown): RenderPdfBody | null {
@@ -217,14 +318,50 @@ function parseRenderPdfBody(body: unknown): RenderPdfBody | null {
   };
 }
 
+function compareGroupValues(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function buildGroups(
+  rows: Record<string, unknown>[],
+  grouping: ReportLayout["grouping"],
+): RowGroup[] {
+  if (!grouping.enabled || !grouping.field) {
+    return [{ key: "", rows: [...rows] }];
+  }
+
+  const field = grouping.field;
+  const sorted = [...rows].sort((left, right) => {
+    const cmp = compareGroupValues(left[field], right[field]);
+    return grouping.sort === "desc" ? -cmp : cmp;
+  });
+
+  const groups: RowGroup[] = [];
+  for (const row of sorted) {
+    const key = toSafeText(row[field]);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.rows.push(row);
+    } else {
+      groups.push({ key, rows: [row] });
+    }
+  }
+  return groups;
+}
+
 function drawElements(
   doc: InstanceType<typeof PDFDocument>,
   elements: ReportElement[],
   row: Record<string, unknown>,
   offsetY: number,
+  extras: Record<string, string> = {},
 ) {
   for (const element of elements) {
-    const value = applyTemplate(element.text, row);
+    const value = applyTemplate(element.text, row, extras);
     doc.font(resolveFont(element.bold, element.italic));
     doc.fontSize(element.fontSize);
     doc.text(value, element.x, offsetY + element.y, {
@@ -257,36 +394,91 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
     doc.on("error", reject);
   });
 
-  const { header, detail, elements } = payload.layout;
-  const headerElements = elements.filter((element) => element.section === "header");
-  const detailElements = elements.filter((element) => element.section === "detail");
+  const { header, groupHeader, detail, groupFooter, footer, grouping, elements } = payload.layout;
+  const bySection = (section: ReportSection) =>
+    elements.filter((element) => element.section === section);
+
+  const headerElements = bySection("header");
+  const groupHeaderElements = bySection("groupHeader");
+  const detailElements = bySection("detail");
+  const groupFooterElements = bySection("groupFooter");
+  const footerElements = bySection("footer");
   const headerRow = payload.rows[0] ?? {};
+  const groups = buildGroups(payload.rows, grouping);
 
   let pageIndex = 0;
   let cursorY = 0;
+  let contentBottom = PAGE_HEIGHT;
+
+  const pageExtras = (): Record<string, string> => ({
+    _pageNumber: String(pageIndex),
+  });
+
+  const drawPageFooter = () => {
+    if (footer.height <= 0 || footerElements.length === 0) return;
+    drawElements(doc, footerElements, headerRow, PAGE_HEIGHT - footer.height, pageExtras());
+  };
 
   const startPage = () => {
+    if (pageIndex > 0) {
+      drawPageFooter();
+    }
     doc.addPage({ size: "A4", margin: 0 });
-    const showHeader = !(header.firstPageOnly && pageIndex > 0);
+    pageIndex += 1;
+    contentBottom = PAGE_HEIGHT - footer.height;
+    const showHeader = !(header.firstPageOnly && pageIndex > 1);
     if (showHeader) {
-      drawElements(doc, headerElements, headerRow, 0);
+      drawElements(doc, headerElements, headerRow, 0, pageExtras());
       cursorY = header.height;
     } else {
       cursorY = 0;
     }
-    pageIndex += 1;
+  };
+
+  const ensureSpace = (needed: number) => {
+    if (cursorY + needed > contentBottom) {
+      startPage();
+    }
   };
 
   startPage();
 
-  for (const row of payload.rows) {
-    if (cursorY + detail.height > PAGE_HEIGHT) {
-      startPage();
+  for (const group of groups) {
+    const groupExtras: Record<string, string> = {
+      ...pageExtras(),
+      _groupValue: group.key,
+      _groupCount: String(group.rows.length),
+    };
+
+    if (grouping.enabled) {
+      ensureSpace(groupHeader.height);
+      drawElements(doc, groupHeaderElements, group.rows[0] ?? {}, cursorY, {
+        ...groupExtras,
+        ...pageExtras(),
+      });
+      cursorY += groupHeader.height;
     }
-    drawElements(doc, detailElements, row, cursorY);
-    cursorY += detail.height;
+
+    for (const row of group.rows) {
+      ensureSpace(detail.height);
+      drawElements(doc, detailElements, row, cursorY, {
+        ...groupExtras,
+        ...pageExtras(),
+      });
+      cursorY += detail.height;
+    }
+
+    if (grouping.enabled) {
+      ensureSpace(groupFooter.height);
+      drawElements(doc, groupFooterElements, group.rows[0] ?? {}, cursorY, {
+        ...groupExtras,
+        ...pageExtras(),
+      });
+      cursorY += groupFooter.height;
+    }
   }
 
+  drawPageFooter();
   doc.end();
   return done;
 }
@@ -338,3 +530,11 @@ router.post("/render-pdf", async (req: Request, res: Response) => {
 });
 
 export const reportDesignerRouter = router;
+
+/** Test helpers (used by local smoke checks). */
+export const __test__ = {
+  parseReportLayout,
+  parseRenderPdfBody,
+  buildGroups,
+  renderReportPdf,
+};
