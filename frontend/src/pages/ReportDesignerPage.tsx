@@ -16,11 +16,13 @@ import {
   ArrowUpAZ,
   Bold,
   Download,
+  Grid3x3,
   Italic,
   Layers,
   Plus,
   Sparkles,
   Trash2,
+  Type,
   Underline,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -93,6 +95,9 @@ const BAND_GUTTER_WIDTH = 118;
 const MIN_BAND_HEIGHT = 16;
 const MAX_BAND_HEIGHT = 400;
 const FIELD_DND_MIME = "application/x-report-field";
+const POOL_DND_MIME = "application/x-report-pool-item";
+const GRID_SIZES = [5, 10, 20] as const;
+type GridSize = (typeof GRID_SIZES)[number];
 
 const BAND_META: BandMeta[] = [
   {
@@ -150,15 +155,24 @@ const BAND_META: BandMeta[] = [
 const actionNavItem =
   "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
+const createActionNavItem =
+  "inline-flex h-10 items-center gap-2 rounded-sm border border-emerald-600/40 bg-emerald-500/15 px-3 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-500/25 disabled:pointer-events-none disabled:opacity-40 dark:text-emerald-300";
+const deleteActionNavItem =
+  "inline-flex h-10 items-center gap-2 rounded-sm border border-red-500/40 bg-red-500/10 px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:pointer-events-none disabled:opacity-40";
 const toolbarBtn =
-  "inline-flex h-10 w-10 items-center justify-center rounded-sm border border-outline-variant text-on-surface transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40";
-const toolbarBtnActive = "border-primary bg-primary/10 text-primary";
+  "inline-flex h-11 w-11 items-center justify-center rounded-sm border-2 border-outline bg-surface text-on-surface shadow-sm transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40";
+const toolbarBtnActive = "border-primary bg-primary text-white hover:bg-primary";
 const ribbonGroup =
-  "flex min-w-0 flex-col justify-center gap-1.5 border-r border-outline-variant px-3 py-2 last:border-r-0";
-const ribbonIconClass = "h-5 w-5";
-const ribbonIconStroke = 2.25;
+  "relative flex min-w-0 flex-col justify-center gap-1.5 border border-outline-variant bg-surface-container-low px-3 py-2 first:rounded-l-sm last:rounded-r-sm [&:not(:first-child)]:-ml-px";
+const ribbonIconClass = "h-6 w-6";
+const ribbonIconStroke = 2.5;
+const panelBand =
+  "flex min-h-0 flex-col overflow-auto border border-outline-variant bg-surface-container-low";
+
+function snapValue(value: number, gridSize: number, enabled: boolean): number {
+  if (!enabled || gridSize <= 0) return Math.round(value);
+  return Math.round(value / gridSize) * gridSize;
+}
 
 function toPreviewText(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -329,6 +343,9 @@ export function ReportDesignerPage() {
   const [layout, setLayout] = useState<ReportLayout>(createDefaultLayout);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [dropTarget, setDropTarget] = useState<ReportSection | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [gridSize, setGridSize] = useState<GridSize>(10);
 
   const selectedElement = useMemo(
     () => layout.elements.find((element) => element.id === selectedElementId) ?? null,
@@ -412,6 +429,9 @@ export function ReportDesignerPage() {
         if (element.id !== selectedElementId) return element;
         const next = { ...element, ...patch };
         const bandHeight = bandHeightOf(current, next.section);
+        if (patch.x != null) next.x = snapValue(next.x, gridSize, snapToGrid);
+        if (patch.y != null) next.y = snapValue(next.y, gridSize, snapToGrid);
+        if (patch.width != null) next.width = snapValue(next.width, gridSize, snapToGrid);
         next.x = clamp(next.x, 0, a4Size.width - 20);
         next.y = clamp(next.y, 0, Math.max(bandHeight - 8, 0));
         next.width = clamp(next.width, 20, 560);
@@ -662,16 +682,16 @@ export function ReportDesignerPage() {
       const bandHeight = bandHeightOf(layout, element.section);
 
       const onMove = (moveEvent: MouseEvent) => {
-        const nextX = originX + (moveEvent.clientX - startX);
-        const nextY = originY + (moveEvent.clientY - startY);
+        const nextX = snapValue(originX + (moveEvent.clientX - startX), gridSize, snapToGrid);
+        const nextY = snapValue(originY + (moveEvent.clientY - startY), gridSize, snapToGrid);
         setLayout((current) => ({
           ...current,
           elements: current.elements.map((entry) =>
             entry.id === element.id
               ? {
                   ...entry,
-                  x: clamp(Math.round(nextX), 0, a4Size.width - 20),
-                  y: clamp(Math.round(nextY), 0, Math.max(bandHeight - 8, 0)),
+                  x: clamp(nextX, 0, a4Size.width - 20),
+                  y: clamp(nextY, 0, Math.max(bandHeight - 8, 0)),
                 }
               : entry,
           ),
@@ -690,7 +710,24 @@ export function ReportDesignerPage() {
 
   const onFieldDragStart = (columnName: string, event: ReactDragEvent) => {
     event.dataTransfer.setData(FIELD_DND_MIME, columnName);
+    event.dataTransfer.setData(POOL_DND_MIME, JSON.stringify({ type: "field", name: columnName }));
     event.dataTransfer.setData("text/plain", columnName);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
+  const onPoolItemDragStart = (
+    item: { type: "field"; name: string } | { type: "token"; token: string } | { type: "text" },
+    event: ReactDragEvent,
+  ) => {
+    event.dataTransfer.setData(POOL_DND_MIME, JSON.stringify(item));
+    if (item.type === "field") {
+      event.dataTransfer.setData(FIELD_DND_MIME, item.name);
+      event.dataTransfer.setData("text/plain", item.name);
+    } else if (item.type === "token") {
+      event.dataTransfer.setData("text/plain", item.token);
+    } else {
+      event.dataTransfer.setData("text/plain", "Text");
+    }
     event.dataTransfer.effectAllowed = "copy";
   };
 
@@ -707,28 +744,80 @@ export function ReportDesignerPage() {
   const onBandDrop = (section: ReportSection, event: ReactDragEvent) => {
     event.preventDefault();
     setDropTarget(null);
-    const columnName =
-      event.dataTransfer.getData(FIELD_DND_MIME) || event.dataTransfer.getData("text/plain");
-    if (!columnName) return;
+
+    let text = "";
+    let width = 220;
+    let bold = section === "header" || section === "groupHeader";
+    let italic = false;
+    let fontSize = section === "header" ? 14 : section === "footer" ? 10 : 12;
+
+    const poolRaw = event.dataTransfer.getData(POOL_DND_MIME);
+    if (poolRaw) {
+      try {
+        const item = JSON.parse(poolRaw) as
+          | { type: "field"; name: string }
+          | { type: "token"; token: string }
+          | { type: "text" };
+        if (item.type === "field") {
+          text = `{{${item.name}}}`;
+        } else if (item.type === "token") {
+          text = item.token;
+          width = item.token.includes("page") ? 140 : 180;
+          italic = item.token.includes("Count");
+        } else {
+          text = "Text";
+          width = 160;
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    if (!text) {
+      const columnName =
+        event.dataTransfer.getData(FIELD_DND_MIME) || event.dataTransfer.getData("text/plain");
+      if (!columnName) return;
+      text =
+        columnName.startsWith("{{") || columnName === "Text" ? columnName : `{{${columnName}}}`;
+    }
 
     const bandEl = event.currentTarget as HTMLElement;
     const rect = bandEl.getBoundingClientRect();
     const bandHeight = bandHeightOf(layout, section);
-    const x = clamp(Math.round(event.clientX - rect.left), 0, a4Size.width - 20);
-    const y = clamp(Math.round(event.clientY - rect.top), 0, Math.max(bandHeight - 8, 0));
+    const x = clamp(
+      snapValue(event.clientX - rect.left, gridSize, snapToGrid),
+      0,
+      a4Size.width - 20,
+    );
+    const y = clamp(
+      snapValue(event.clientY - rect.top, gridSize, snapToGrid),
+      0,
+      Math.max(bandHeight - 8, 0),
+    );
 
     const element = createElement(section, {
-      text: `{{${columnName}}}`,
+      text,
       x,
       y,
-      width: Math.min(220, a4Size.width - x - 8),
-      fontSize: section === "header" ? 14 : section === "footer" ? 10 : 12,
-      bold: section === "header" || section === "groupHeader",
+      width: Math.min(width, a4Size.width - x - 8),
+      fontSize,
+      bold,
+      italic,
     });
     setLayout((current) => ({ ...current, elements: [...current.elements, element] }));
     setSelectedElementId(element.id);
     setSelectedSection(section);
   };
+
+  const gridOverlayStyle = showGrid
+    ? {
+        backgroundImage: `
+          linear-gradient(to right, rgba(100, 116, 139, 0.22) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(100, 116, 139, 0.22) 1px, transparent 1px)
+        `,
+        backgroundSize: `${gridSize}px ${gridSize}px`,
+        backgroundPosition: "0 0",
+      }
+    : undefined;
 
   const renderElementButton = (
     element: ReportElement,
@@ -785,7 +874,11 @@ export function ReportDesignerPage() {
   }, [designSampleRow, layout.grouping.field, t]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+    <div
+      className={`flex min-h-0 flex-1 flex-col ${
+        step === 2 ? "gap-0 p-0" : "gap-4 p-4"
+      }`}
+    >
       <Toast ref={toastRef} />
 
       {step === 1 ? (
@@ -850,10 +943,10 @@ export function ReportDesignerPage() {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap items-stretch rounded-sm border border-outline-variant bg-surface-container-low">
+        <div className="flex min-h-0 flex-1 flex-col gap-0">
+          <div className="flex flex-wrap items-stretch gap-0">
             <div className={ribbonGroup}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface">
                 {t("reportDesigner.ribbonClipboard")}
               </div>
               <div className="flex items-center gap-1.5">
@@ -868,14 +961,14 @@ export function ReportDesignerPage() {
                   disabled={!selectedElement}
                   title={`${t("reportDesigner.deleteText")} (Entf)`}
                 >
-                  <Trash2 className={`${ribbonIconClass} text-red-500`} strokeWidth={ribbonIconStroke} />
-                  <span className="text-red-500">{t("reportDesigner.deleteText")}</span>
+                  <Trash2 className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
+                  <span>{t("reportDesigner.deleteText")}</span>
                 </button>
               </div>
             </div>
 
             <div className={`${ribbonGroup} min-w-[220px] flex-1`}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface">
                 {t("reportDesigner.ribbonText")}
               </div>
               <InputText
@@ -888,7 +981,7 @@ export function ReportDesignerPage() {
             </div>
 
             <div className={ribbonGroup}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface">
                 {t("reportDesigner.ribbonFont")}
               </div>
               <div className="flex items-center gap-1.5">
@@ -934,7 +1027,7 @@ export function ReportDesignerPage() {
             </div>
 
             <div className={ribbonGroup}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface">
                 {t("reportDesigner.ribbonAlign")}
               </div>
               <div className="flex items-center gap-1.5">
@@ -969,40 +1062,59 @@ export function ReportDesignerPage() {
             </div>
 
             <div className={ribbonGroup}>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface">
+                <Grid3x3 className="h-3.5 w-3.5" strokeWidth={2.25} />
+                {t("reportDesigner.ribbonGrid")}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-on-surface">
+                  <Checkbox
+                    inputId="showGrid"
+                    checked={showGrid}
+                    onChange={(e) => setShowGrid(Boolean(e.checked))}
+                  />
+                  <span>{t("reportDesigner.showGrid")}</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-on-surface">
+                  <Checkbox
+                    inputId="snapToGrid"
+                    checked={snapToGrid}
+                    onChange={(e) => setSnapToGrid(Boolean(e.checked))}
+                  />
+                  <span>{t("reportDesigner.snapToGrid")}</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  {GRID_SIZES.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      className={`${toolbarBtn} h-9 w-auto px-2 text-xs font-semibold ${
+                        gridSize === size ? toolbarBtnActive : ""
+                      }`}
+                      onClick={() => setGridSize(size)}
+                      title={`${size}px`}
+                    >
+                      {size}px
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className={ribbonGroup}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface">
                 {t("reportDesigner.ribbonBand")}
               </div>
-              <div className="text-sm text-on-surface">
+              <div className="text-sm font-medium text-on-surface">
                 {sectionLabel(selectedSection)}
                 {selectedElement ? ` · #${layout.elements.findIndex((el) => el.id === selectedElement.id) + 1}` : ""}
               </div>
             </div>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[320px_1fr]">
-            <div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-sm bg-surface-container-low p-4">
-              <div>
-                <div className="mb-2 text-sm font-semibold">{t("reportDesigner.queryFields")}</div>
-                <div className="mb-2 text-xs text-on-surface-variant">{t("reportDesigner.dndHint")}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(preview?.columns ?? []).map((columnName) => (
-                    <span
-                      key={columnName}
-                      draggable
-                      onDragStart={(event) => onFieldDragStart(columnName, event)}
-                      className="cursor-grab rounded-sm border border-outline-variant bg-surface px-2 py-1 font-mono text-xs active:cursor-grabbing"
-                    >
-                      {columnName}
-                    </span>
-                  ))}
-                  {(preview?.columns ?? []).length === 0 ? (
-                    <span className="text-xs text-on-surface-variant">{t("reportDesigner.noFields")}</span>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="border-t border-outline-variant pt-3">
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+          <div className="grid min-h-0 flex-1 gap-0 xl:grid-cols-[280px_minmax(0,1fr)_260px]">
+            <div className={`${panelBand} border-t-0 p-3 xl:border-r-0`}>
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                   <Layers className="h-4 w-4" strokeWidth={1.75} />
                   {t("reportDesigner.groupAndSort")}
                 </div>
@@ -1079,9 +1191,8 @@ export function ReportDesignerPage() {
                   </div>
                   <div className="text-xs text-on-surface-variant">{t("reportDesigner.groupHint")}</div>
                 </div>
-              </div>
 
-              <div className="border-t border-outline-variant pt-3">
+              <div className="mt-3 border-t border-outline-variant pt-3">
                 <div className="mb-2 text-sm font-semibold">{t("reportDesigner.sections")}</div>
                 <div className="mb-2 flex flex-wrap gap-1">
                   {visibleBands.map((band) => (
@@ -1212,9 +1323,11 @@ export function ReportDesignerPage() {
               ) : null}
             </div>
 
-            <div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-sm bg-surface-container-low p-4">
-              <div className="text-sm font-semibold">{t("reportDesigner.canvasPreview")}</div>
-              <div className="overflow-auto rounded-sm border border-outline-variant bg-[color-mix(in_srgb,var(--color-surface-container-high)_55%,transparent)] p-6">
+            <div className={`${panelBand} min-h-0 border-t-0`}>
+              <div className="border-b border-outline-variant px-3 py-2 text-sm font-semibold">
+                {t("reportDesigner.canvasPreview")}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-[color-mix(in_srgb,var(--color-surface-container-high)_55%,transparent)] p-4">
                 <div
                   className="relative mx-auto"
                   style={{
@@ -1225,7 +1338,11 @@ export function ReportDesignerPage() {
                 >
                   <div
                     className="relative border border-slate-300 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.12)]"
-                    style={{ width: `${a4Size.width}px`, height: `${a4Size.height}px` }}
+                    style={{
+                      width: `${a4Size.width}px`,
+                      height: `${a4Size.height}px`,
+                      ...gridOverlayStyle,
+                    }}
                     aria-label="DIN A4"
                   >
                     {(() => {
@@ -1403,6 +1520,80 @@ export function ReportDesignerPage() {
                     })()}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className={`${panelBand} border-t-0 p-3`}>
+              <div className="mb-1 text-sm font-semibold">{t("reportDesigner.itemPool")}</div>
+              <div className="mb-3 text-xs text-on-surface-variant">{t("reportDesigner.itemPoolHint")}</div>
+
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                {t("reportDesigner.poolBasics")}
+              </div>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  draggable
+                  onDragStart={(event) => onPoolItemDragStart({ type: "text" }, event)}
+                  className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left text-sm text-on-surface active:cursor-grabbing"
+                >
+                  <Type className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                  <span>{t("reportDesigner.poolTextItem")}</span>
+                </button>
+                <button
+                  type="button"
+                  draggable
+                  onDragStart={(event) =>
+                    onPoolItemDragStart({ type: "token", token: "{{_pageNumber}}" }, event)
+                  }
+                  className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left font-mono text-xs text-on-surface active:cursor-grabbing"
+                >
+                  <span>{"{{_pageNumber}}"}</span>
+                </button>
+                {layout.grouping.enabled ? (
+                  <>
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(event) =>
+                        onPoolItemDragStart({ type: "token", token: "{{_groupValue}}" }, event)
+                      }
+                      className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left font-mono text-xs text-on-surface active:cursor-grabbing"
+                    >
+                      <span>{"{{_groupValue}}"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(event) =>
+                        onPoolItemDragStart({ type: "token", token: "{{_groupCount}}" }, event)
+                      }
+                      className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left font-mono text-xs text-on-surface active:cursor-grabbing"
+                    >
+                      <span>{"{{_groupCount}}"}</span>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                {t("reportDesigner.queryFields")}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {(preview?.columns ?? []).map((columnName) => (
+                  <button
+                    key={columnName}
+                    type="button"
+                    draggable
+                    onDragStart={(event) => onFieldDragStart(columnName, event)}
+                    className="cursor-grab rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left font-mono text-xs text-on-surface active:cursor-grabbing"
+                  >
+                    {columnName}
+                  </button>
+                ))}
+                {(preview?.columns ?? []).length === 0 ? (
+                  <span className="text-xs text-on-surface-variant">{t("reportDesigner.noFields")}</span>
+                ) : null}
               </div>
             </div>
           </div>
