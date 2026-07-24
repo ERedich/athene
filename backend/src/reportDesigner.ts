@@ -530,3 +530,11 @@ router.post("/render-pdf", async (req: Request, res: Response) => {
 });
 
 export const reportDesignerRouter = router;
+
+/** Test helpers (used by local smoke checks). */
+export const __test__ = {
+  parseReportLayout,
+  parseRenderPdfBody,
+  buildGroups,
+  renderReportPdf,
+};
