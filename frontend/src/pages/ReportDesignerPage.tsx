@@ -298,36 +298,6 @@ function bandHeightOf(layout: ReportLayout, section: ReportSection): number {
   }
 }
 
-function compareGroupValues(a: unknown, b: unknown): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return -1;
-  if (b == null) return 1;
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
-}
-
-function buildPreviewGroups(
-  rows: Record<string, unknown>[],
-  grouping: ReportLayout["grouping"],
-): { key: string; rows: Record<string, unknown>[] }[] {
-  if (!grouping.enabled || !grouping.field) {
-    return [{ key: "", rows }];
-  }
-  const field = grouping.field;
-  const sorted = [...rows].sort((left, right) => {
-    const cmp = compareGroupValues(left[field], right[field]);
-    return grouping.sort === "desc" ? -cmp : cmp;
-  });
-  const groups: { key: string; rows: Record<string, unknown>[] }[] = [];
-  for (const row of sorted) {
-    const key = toPreviewText(row[field]);
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) last.rows.push(row);
-    else groups.push({ key, rows: [row] });
-  }
-  return groups;
-}
-
 function defaultTextForSection(section: ReportSection): string {
   switch (section) {
     case "header":
@@ -373,11 +343,6 @@ export function ReportDesignerPage() {
       return true;
     });
   }, [layout.grouping.enabled]);
-
-  const previewGroups = useMemo(() => {
-    const groups = buildPreviewGroups(preview?.rows ?? [], layout.grouping);
-    return groups.slice(0, 3);
-  }, [layout.grouping, preview?.rows]);
 
   const fieldOptions = useMemo(
     () => (preview?.columns ?? []).map((column) => ({ label: column, value: column })),
@@ -750,9 +715,7 @@ export function ReportDesignerPage() {
     const rect = bandEl.getBoundingClientRect();
     const bandHeight = bandHeightOf(layout, section);
     const x = clamp(Math.round(event.clientX - rect.left), 0, a4Size.width - 20);
-    const rawY = Math.round(event.clientY - rect.top);
-    const yInBand = section === "detail" && bandHeight > 0 ? rawY % bandHeight : rawY;
-    const y = clamp(yInBand, 0, Math.max(bandHeight - 8, 0));
+    const y = clamp(Math.round(event.clientY - rect.top), 0, Math.max(bandHeight - 8, 0));
 
     const element = createElement(section, {
       text: `{{${columnName}}}`,
@@ -771,11 +734,9 @@ export function ReportDesignerPage() {
     element: ReportElement,
     row: Record<string, unknown> | null,
     extras: Record<string, string>,
-    keySuffix = "",
-    interactive = true,
   ) => (
     <button
-      key={`${element.id}${keySuffix}`}
+      key={element.id}
       type="button"
       style={{
         position: "absolute",
@@ -787,25 +748,17 @@ export function ReportDesignerPage() {
         fontWeight: element.bold ? 700 : 400,
         fontStyle: element.italic ? "italic" : "normal",
         textDecoration: element.underline ? "underline" : "none",
-        border:
-          interactive && element.id === selectedElementId
-            ? "1px dashed #f97316"
-            : "1px dashed transparent",
+        border: element.id === selectedElementId ? "1px dashed #f97316" : "1px dashed transparent",
         color: "#111827",
         background: "transparent",
         padding: "2px",
-        cursor: interactive ? "move" : "default",
-        pointerEvents: interactive ? "auto" : "none",
+        cursor: "move",
       }}
-      onClick={
-        interactive
-          ? () => {
-              setSelectedElementId(element.id);
-              setSelectedSection(element.section);
-            }
-          : undefined
-      }
-      {...(interactive ? draggableHandlers(element) : {})}
+      onClick={() => {
+        setSelectedElementId(element.id);
+        setSelectedSection(element.section);
+      }}
+      {...draggableHandlers(element)}
     >
       {row ? applyTemplate(element.text, row, extras) : element.text}
     </button>
@@ -819,20 +772,17 @@ export function ReportDesignerPage() {
     return meta ? t(meta.labelKey) : section;
   };
 
-  const canvasContentHeight = useMemo(() => {
-    let height = layout.header.height + layout.footer.height;
-    if (layout.grouping.enabled) {
-      for (const group of previewGroups.length > 0 ? previewGroups : [{ key: "", rows: [{}] }]) {
-        height += layout.groupHeader.height;
-        height += Math.max(group.rows.length, 1) * layout.detail.height;
-        height += layout.groupFooter.height;
-      }
-    } else {
-      const rowCount = Math.max((preview?.rows ?? []).slice(0, 12).length, 1);
-      height += rowCount * layout.detail.height;
-    }
-    return Math.min(a4Size.height, Math.max(height, 320));
-  }, [layout, preview?.rows, previewGroups]);
+  const designSampleRow = preview?.rows[0] ?? null;
+  const designExtras = useMemo(() => {
+    const field = layout.grouping.field;
+    const groupValue =
+      designSampleRow && field ? toPreviewText(designSampleRow[field]) : t("reportDesigner.sampleGroup");
+    return {
+      _groupValue: groupValue || t("reportDesigner.sampleGroup"),
+      _groupCount: "1",
+      _pageNumber: "1",
+    };
+  }, [designSampleRow, layout.grouping.field, t]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
@@ -1264,18 +1214,19 @@ export function ReportDesignerPage() {
 
             <div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-sm bg-surface-container-low p-4">
               <div className="text-sm font-semibold">{t("reportDesigner.canvasPreview")}</div>
-              <div className="overflow-auto rounded-sm border border-outline-variant bg-surface p-4">
+              <div className="overflow-auto rounded-sm border border-outline-variant bg-[color-mix(in_srgb,var(--color-surface-container-high)_55%,transparent)] p-6">
                 <div
                   className="relative mx-auto"
                   style={{
                     width: `${BAND_GUTTER_WIDTH + a4Size.width}px`,
-                    height: `${canvasContentHeight}px`,
+                    height: `${a4Size.height}px`,
                     paddingLeft: `${BAND_GUTTER_WIDTH}px`,
                   }}
                 >
                   <div
-                    className="relative border border-slate-300 bg-white shadow-sm"
-                    style={{ width: `${a4Size.width}px`, height: `${canvasContentHeight}px` }}
+                    className="relative border border-slate-300 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.12)]"
+                    style={{ width: `${a4Size.width}px`, height: `${a4Size.height}px` }}
+                    aria-label="DIN A4"
                   >
                     {(() => {
                       let offset = 0;
@@ -1311,18 +1262,24 @@ export function ReportDesignerPage() {
                         section: ReportSection,
                         height: number,
                         content: ReactNode,
-                        options?: { resizable?: boolean; labelExtra?: string; showLabel?: boolean },
+                        options?: {
+                          resizable?: boolean;
+                          labelExtra?: string;
+                          pinBottom?: boolean;
+                        },
                       ) => {
                         const meta = BAND_META.find((band) => band.section === section)!;
-                        const top = offset;
-                        offset += height;
-                        if (options?.showLabel !== false) {
-                          pushGutterLabel(section, top, height, options?.labelExtra);
+                        const top = options?.pinBottom
+                          ? a4Size.height - height
+                          : offset;
+                        if (!options?.pinBottom) {
+                          offset += height;
                         }
+                        pushGutterLabel(section, top, height, options?.labelExtra);
                         nodes.push(
                           <div
                             key={`${section}-${top}`}
-                            className={`absolute inset-x-0 ${
+                            className={`absolute inset-x-0 border-b border-dashed border-black/10 ${
                               dropTarget === section ? meta.dropTint : meta.tint
                             } ${selectedSection === section ? meta.tintStrong : ""}`}
                             style={{ top: `${top}px`, height: `${height}px` }}
@@ -1334,8 +1291,28 @@ export function ReportDesignerPage() {
                             {content}
                             {options?.resizable !== false ? (
                               <div
-                                className={`absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize ${meta.resizeTint}`}
-                                onMouseDown={(event) => startBandResize(section, event)}
+                                className={`absolute inset-x-0 z-10 h-1.5 cursor-row-resize ${meta.resizeTint} ${
+                                  options?.pinBottom ? "top-0" : "bottom-0"
+                                }`}
+                                onMouseDown={(event) => {
+                                  if (options?.pinBottom) {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    const startY = event.clientY;
+                                    const origin = height;
+                                    const onMove = (moveEvent: MouseEvent) => {
+                                      setBandHeight(section, origin - (moveEvent.clientY - startY));
+                                    };
+                                    const onUp = () => {
+                                      window.removeEventListener("mousemove", onMove);
+                                      window.removeEventListener("mouseup", onUp);
+                                    };
+                                    window.addEventListener("mousemove", onMove);
+                                    window.addEventListener("mouseup", onUp);
+                                    return;
+                                  }
+                                  startBandResize(section, event);
+                                }}
                               />
                             ) : null}
                           </div>,
@@ -1346,7 +1323,7 @@ export function ReportDesignerPage() {
                         "header",
                         layout.header.height,
                         elementsFor("header").map((element) =>
-                          renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
+                          renderElementButton(element, designSampleRow, designExtras),
                         ),
                         {
                           labelExtra: layout.header.firstPageOnly
@@ -1356,165 +1333,57 @@ export function ReportDesignerPage() {
                       );
 
                       if (layout.grouping.enabled) {
-                        const groups =
-                          previewGroups.length > 0
-                            ? previewGroups
-                            : [{ key: t("reportDesigner.sampleGroup"), rows: [{} as Record<string, unknown>] }];
-
-                        groups.forEach((group, groupIndex) => {
-                          const extras = {
-                            _groupValue: group.key || t("reportDesigner.sampleGroup"),
-                            _groupCount: String(Math.max(group.rows.length, 1)),
-                            _pageNumber: "1",
-                          };
-                          pushBand(
-                            "groupHeader",
-                            layout.groupHeader.height,
-                            elementsFor("groupHeader").map((element) =>
-                              renderElementButton(
-                                element,
-                                group.rows[0] ?? null,
-                                extras,
-                                `-gh-${groupIndex}`,
-                                groupIndex === 0,
-                              ),
-                            ),
-                            { resizable: groupIndex === 0, showLabel: groupIndex === 0 },
-                          );
-
-                          const detailRows =
-                            group.rows.length > 0 ? group.rows.slice(0, 8) : [{} as Record<string, unknown>];
-                          detailRows.forEach((row, rowIndex) => {
-                            const detailTop = offset;
-                            offset += layout.detail.height;
-                            if (groupIndex === 0 && rowIndex === 0) {
-                              pushGutterLabel("detail", detailTop, layout.detail.height);
-                            }
-                            nodes.push(
-                              <div
-                                key={`detail-${groupIndex}-${rowIndex}`}
-                                className={`absolute inset-x-0 border-b border-dashed border-amber-200/80 ${
-                                  dropTarget === "detail" ? "bg-amber-100/70" : "bg-amber-50/40"
-                                }`}
-                                style={{ top: `${detailTop}px`, height: `${layout.detail.height}px` }}
-                                onDragOver={(event) => onBandDragOver("detail", event)}
-                                onDragLeave={() => onBandDragLeave("detail")}
-                                onDrop={(event) => onBandDrop("detail", event)}
-                                onClick={() => setSelectedSection("detail")}
-                              >
-                                {elementsFor("detail").map((element) =>
-                                  renderElementButton(
-                                    element,
-                                    row,
-                                    extras,
-                                    `-g${groupIndex}-r${rowIndex}`,
-                                    groupIndex === 0 && rowIndex === 0,
-                                  ),
-                                )}
-                                {groupIndex === 0 && rowIndex === 0 ? (
-                                  <div
-                                    className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize bg-amber-400/50 hover:bg-amber-500"
-                                    onMouseDown={(event) => startBandResize("detail", event)}
-                                  />
-                                ) : null}
-                              </div>,
-                            );
-                          });
-
-                          pushBand(
-                            "groupFooter",
-                            layout.groupFooter.height,
-                            elementsFor("groupFooter").map((element) =>
-                              renderElementButton(
-                                element,
-                                group.rows[0] ?? null,
-                                extras,
-                                `-gf-${groupIndex}`,
-                                groupIndex === 0,
-                              ),
-                            ),
-                            { resizable: groupIndex === 0, showLabel: groupIndex === 0 },
-                          );
-                        });
-                      } else {
-                        const detailRows =
-                          (preview?.rows ?? []).length > 0
-                            ? (preview?.rows ?? []).slice(0, 12)
-                            : [{} as Record<string, unknown>];
-                        detailRows.forEach((row, rowIndex) => {
-                          const detailTop = offset;
-                          offset += layout.detail.height;
-                          if (rowIndex === 0) {
-                            pushGutterLabel("detail", detailTop, layout.detail.height);
-                          }
-                          nodes.push(
-                            <div
-                              key={`detail-plain-${rowIndex}`}
-                              className={`absolute inset-x-0 border-b border-dashed border-amber-200/80 ${
-                                dropTarget === "detail" ? "bg-amber-100/70" : "bg-amber-50/40"
-                              }`}
-                              style={{ top: `${detailTop}px`, height: `${layout.detail.height}px` }}
-                              onDragOver={(event) => onBandDragOver("detail", event)}
-                              onDragLeave={() => onBandDragLeave("detail")}
-                              onDrop={(event) => onBandDrop("detail", event)}
-                              onClick={() => setSelectedSection("detail")}
-                            >
-                              {elementsFor("detail").map((element) =>
-                                renderElementButton(
-                                  element,
-                                  Object.keys(row).length ? row : null,
-                                  { _pageNumber: "1" },
-                                  `-r${rowIndex}`,
-                                  rowIndex === 0,
-                                ),
-                              )}
-                              {rowIndex === 0 ? (
-                                <div
-                                  className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize bg-amber-400/50 hover:bg-amber-500"
-                                  onMouseDown={(event) => startBandResize("detail", event)}
-                                />
-                              ) : null}
-                            </div>,
-                          );
-                        });
+                        pushBand(
+                          "groupHeader",
+                          layout.groupHeader.height,
+                          elementsFor("groupHeader").map((element) =>
+                            renderElementButton(element, designSampleRow, designExtras),
+                          ),
+                        );
                       }
 
-                      const footerTop = Math.max(offset, canvasContentHeight - layout.footer.height);
-                      pushGutterLabel("footer", footerTop, layout.footer.height);
-                      nodes.push(
-                        <div
-                          key="footer-band"
-                          className={`absolute inset-x-0 ${
-                            dropTarget === "footer" ? "bg-slate-100/90" : "bg-slate-50/70"
-                          }`}
-                          style={{ top: `${footerTop}px`, height: `${layout.footer.height}px` }}
-                          onDragOver={(event) => onBandDragOver("footer", event)}
-                          onDragLeave={() => onBandDragLeave("footer")}
-                          onDrop={(event) => onBandDrop("footer", event)}
-                          onClick={() => setSelectedSection("footer")}
-                        >
-                          {elementsFor("footer").map((element) =>
-                            renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
-                          )}
+                      pushBand(
+                        "detail",
+                        layout.detail.height,
+                        elementsFor("detail").map((element) =>
+                          renderElementButton(element, designSampleRow, designExtras),
+                        ),
+                      );
+
+                      if (layout.grouping.enabled) {
+                        pushBand(
+                          "groupFooter",
+                          layout.groupFooter.height,
+                          elementsFor("groupFooter").map((element) =>
+                            renderElementButton(element, designSampleRow, designExtras),
+                          ),
+                        );
+                      }
+
+                      // Empty printable body between band stack and page footer.
+                      const bodyTop = offset;
+                      const bodyHeight = Math.max(a4Size.height - layout.footer.height - bodyTop, 0);
+                      if (bodyHeight > 0) {
+                        nodes.push(
                           <div
-                            className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-row-resize bg-slate-400/50 hover:bg-slate-500"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              const startY = event.clientY;
-                              const origin = layout.footer.height;
-                              const onMove = (moveEvent: MouseEvent) => {
-                                setBandHeight("footer", origin - (moveEvent.clientY - startY));
-                              };
-                              const onUp = () => {
-                                window.removeEventListener("mousemove", onMove);
-                                window.removeEventListener("mouseup", onUp);
-                              };
-                              window.addEventListener("mousemove", onMove);
-                              window.addEventListener("mouseup", onUp);
-                            }}
-                          />
-                        </div>,
+                            key="page-body"
+                            className="pointer-events-none absolute inset-x-0 flex items-center justify-center"
+                            style={{ top: `${bodyTop}px`, height: `${bodyHeight}px` }}
+                          >
+                            <div className="rounded-sm border border-dashed border-slate-300/80 bg-slate-50/40 px-3 py-1 text-[11px] uppercase tracking-wide text-slate-400">
+                              {t("reportDesigner.pageBodyHint")}
+                            </div>
+                          </div>,
+                        );
+                      }
+
+                      pushBand(
+                        "footer",
+                        layout.footer.height,
+                        elementsFor("footer").map((element) =>
+                          renderElementButton(element, designSampleRow, designExtras),
+                        ),
+                        { pinBottom: true },
                       );
 
                       return (
