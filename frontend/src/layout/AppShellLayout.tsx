@@ -149,6 +149,7 @@ export function AppShellLayout() {
   }, []);
 
   useEffect(() => {
+    setHeaderActions(null);
     setHeaderRowCount(null);
   }, [pathname]);
 

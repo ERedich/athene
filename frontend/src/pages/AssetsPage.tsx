@@ -25,6 +25,7 @@ import {
   Pencil,
   Plus,
   Presentation,
+  Printer,
   Trash2,
   TriangleAlert,
   Upload,
@@ -714,6 +715,13 @@ export function AssetsPage() {
   const [limit, setLimit] = useState(ASSETS_TABLE_ROWS_PER_PAGE);
   const [sortField, setSortField] = useState<string>("key");
   const [sortOrder, setSortOrder] = useState<1 | -1>(1);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [printTarget, setPrintTarget] = useState<Asset | null>(null);
+  const [printReports, setPrintReports] = useState<
+    Array<{ id: string; key: string; name: string }>
+  >([]);
+  const [printReportsLoading, setPrintReportsLoading] = useState(false);
+  const [printRenderingId, setPrintRenderingId] = useState<string | null>(null);
   const debouncedSearchTerm = useDebouncedValue(searchTermInput, 180);
 
   const dateTimeFormatter = useMemo(
@@ -1852,6 +1860,77 @@ export function AssetsPage() {
     [athene, t],
   );
 
+  const openPrintDialog = useCallback(
+    async (row: Asset) => {
+      setPrintTarget(row);
+      setPrintDialogOpen(true);
+      setPrintReportsLoading(true);
+      setPrintReports([]);
+      try {
+        const params = new URLSearchParams({
+          siteId: user.workingSiteId,
+          targetAppKey: "assets",
+        });
+        const res = await apiFetch(`/api/report-designer/definitions?${params}`);
+        if (!res.ok) throw new Error("load");
+        const data = (await res.json()) as {
+          items: Array<{ id: string; key: string; name: string }>;
+        };
+        setPrintReports(data.items ?? []);
+      } catch {
+        setPrintReports([]);
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("assets.printError"),
+          life: 4000,
+        });
+      } finally {
+        setPrintReportsLoading(false);
+      }
+    },
+    [t, user.workingSiteId],
+  );
+
+  const renderSavedReport = useCallback(
+    async (definitionId: string) => {
+      if (!printTarget) return;
+      setPrintRenderingId(definitionId);
+      try {
+        const res = await apiFetch("/api/report-designer/render-saved", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            definitionId,
+            recordId: printTarget.id,
+          }),
+        });
+        if (!res.ok) throw new Error("pdf");
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        const report = printReports.find((r) => r.id === definitionId);
+        const base =
+          report?.name?.toLowerCase().replace(/[^a-z0-9-_]+/g, "-") || "report";
+        anchor.download = `${base}-${printTarget.key || "asset"}.pdf`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        setPrintDialogOpen(false);
+      } catch {
+        toastRef.current?.show({
+          severity: "error",
+          summary: t("assets.printError"),
+          life: 5000,
+        });
+      } finally {
+        setPrintRenderingId(null);
+      }
+    },
+    [printReports, printTarget, t],
+  );
+
   const tableCtx = useTableContextMenu<Asset>({
     labels: {
       new: t("assets.new"),
@@ -1866,6 +1945,18 @@ export function AssetsPage() {
     selection: selectedAsset,
     setSelection: setSelectedAsset,
     leadingItems: atheneContextMenuItems,
+    extraItems: (row) => {
+      if (!row) return [];
+      return [
+        {
+          label: t("assets.print"),
+          icon: <Printer className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+          command: () => {
+            void openPrintDialog(row);
+          },
+        },
+      ];
+    },
   });
 
   useEffect(() => {
@@ -2222,6 +2313,49 @@ export function AssetsPage() {
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
       {tableCtx.ContextMenuEl}
+      <AppDialog
+        visible={printDialogOpen}
+        onHide={() => {
+          if (printRenderingId) return;
+          setPrintDialogOpen(false);
+        }}
+        header={t("assets.printPickReport")}
+        style={{ width: "min(28rem, 94vw)" }}
+        modal
+      >
+        <div className="flex flex-col gap-2">
+          {printTarget ? (
+            <div className="mb-1 text-xs text-on-surface-variant">
+              {printTarget.key} — {printTarget.name}
+            </div>
+          ) : null}
+          {printReportsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <LucideSpinner className="h-4 w-4" />
+              {t("assets.printLoading")}
+            </div>
+          ) : printReports.length === 0 ? (
+            <div className="text-sm text-on-surface-variant">{t("assets.printEmpty")}</div>
+          ) : (
+            printReports.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                disabled={printRenderingId != null}
+                className="flex w-full items-center justify-between gap-2 rounded-sm border border-outline-variant bg-surface px-3 py-2 text-left text-sm hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] disabled:opacity-50"
+                onClick={() => void renderSavedReport(report.id)}
+              >
+                <span className="font-semibold text-on-surface">{report.name}</span>
+                {printRenderingId === report.id ? (
+                  <LucideSpinner className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Printer className="h-4 w-4 shrink-0 text-on-surface-variant" strokeWidth={1.75} />
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      </AppDialog>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <div
