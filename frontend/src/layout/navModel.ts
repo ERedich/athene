@@ -8,6 +8,7 @@ import {
   CircleAlert,
   ClipboardCheck,
   Clock,
+  Compass,
   FilePlus,
   History,
   IdCard,
@@ -62,6 +63,22 @@ export const navGroups: NavGroup[] = [
     end: true,
   },
   {
+    id: "report-designer",
+    labelKey: "reportDesigner.navReportDesigner",
+    Icon: FileText,
+    items: [],
+    to: "/report-designer",
+    end: false,
+  },
+  {
+    id: "getting-started",
+    labelKey: "gettingStarted.navGettingStarted",
+    Icon: Compass,
+    items: [],
+    to: "/getting-started",
+    end: false,
+  },
+  {
     id: "system",
     labelKey: "shell.navSystem",
     Icon: Settings,
@@ -100,11 +117,6 @@ export const navGroups: NavGroup[] = [
         to: "/layout-editor",
         Icon: LayoutTemplate,
         labelKey: "layoutEditor.navLayoutEditor",
-      },
-      {
-        to: "/report-designer",
-        Icon: FileText,
-        labelKey: "reportDesigner.navReportDesigner",
       },
       {
         to: "/suchkonfig",

@@ -38,10 +38,11 @@ import { MitteilungszentralePage } from "./pages/MitteilungszentralePage";
 import { AbonnementsPage } from "./pages/AbonnementsPage";
 import { KpiBuilderPage } from "./pages/KpiBuilderPage";
 import { LayoutEditorPage } from "./pages/LayoutEditorPage";
-import { ReportDesignerPage } from "./pages/ReportDesignerPage";
 import { MaintenancePlansPage } from "./pages/MaintenancePlansPage";
 import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
+import { GettingStartedPage } from "./pages/GettingStartedPage";
+import { ReportDesignerPage } from "./pages/ReportDesignerPage";
 
 export default function App() {
   return (
@@ -50,6 +51,8 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShellLayout />}>
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="getting-started" element={<GettingStartedPage />} />
+          <Route path="getting-started/:guideId" element={<GettingStartedPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="stammdaten-manager" element={<StammdatenManagerPage />} />

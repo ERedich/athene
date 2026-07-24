@@ -120,6 +120,149 @@
     "loadError": "Could not load master data counts.",
     "retry": "Retry"
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "kicker": "First steps",
+    "hubTitle": "How to get started with Athene",
+    "hubLead": "Pick a guide. Each guide shows the order of master data and apps — from required to useful optional steps.",
+    "openGuide": "Open guide",
+    "backToHub": "All guides",
+    "required": "Required",
+    "optional": "Optional",
+    "complete": "Done",
+    "completeHint": "Prerequisites met — guide still available to open",
+    "progress": "{{done}} / {{total}} required prerequisites met",
+    "requiredCount": "{{required}} of {{total}} steps are required",
+    "tipLabel": "Tip",
+    "links": {
+      "sites": "Sites",
+      "costCenters": "Cost centers",
+      "assets": "Assets",
+      "baumstruktur": "Tree structure",
+      "employees": "Employees",
+      "workgroups": "Work groups",
+      "auftragstypen": "Order types",
+      "classifications": "Classifications",
+      "probleme": "Problems",
+      "ursachen": "Causes",
+      "massnahmen": "Actions",
+      "orderCreation": "Order creation",
+      "workOrders": "Work orders",
+      "monitoring": "Monitoring",
+      "kalendar": "Calendar",
+      "transactions": "Transactions",
+      "mitteilungszentrale": "Message center",
+      "warehouses": "Warehouses",
+      "storageLocations": "Storage locations",
+      "spareParts": "Spare parts",
+      "suppliers": "Suppliers",
+      "users": "Users",
+      "appParameters": "App parameters"
+    },
+    "guides": {
+      "auftragswesen": {
+        "title": "Order management",
+        "summary": "Assets and cost centers first — then work orders. Add employees and work groups if you plan people.",
+        "intro": "Order management needs clean master data in the same site. Without an asset and cost center you cannot create a work order.",
+        "tip": "Site consistency: an asset’s cost center must match the asset’s site. Responsibles must be work-group leaders; assigned employees must belong to the work group.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Check the site",
+            "body": "Every work order, asset, and cost center belongs to a site. Create missing plants under Administration → Sites and mark plant sites."
+          },
+          "kostenstellen": {
+            "title": "Create cost centers",
+            "body": "Cost centers are required for work orders. Create them in the matching site — they drive cost assignment and appear on the order and asset."
+          },
+          "assets": {
+            "title": "Create assets",
+            "body": "Assets are the technical objects you work on. Assign each asset a cost center in the same site. Use the tree structure for hierarchies."
+          },
+          "planung": {
+            "title": "Employees & work groups (for planning)",
+            "body": "If you want to plan employees and work groups, create both first:\n• Employees in master data\n• Work groups with members and leaders\n\nWithout a work group you can still create orders, but assignment and responsibility will not work properly."
+          },
+          "stammdatenExtra": {
+            "title": "Order types & PCR master data",
+            "body": "Optional but useful: order types, classifications, plus problems, causes, and actions (PCR). They structure reporting and feedback."
+          },
+          "auftraege": {
+            "title": "Create the first work order",
+            "body": "Create the order with asset and cost center. For planning: pick a work group, set responsibles (leaders) and assignments. Add planned start/end and order type."
+          },
+          "steuern": {
+            "title": "Control & track",
+            "body": "Monitoring for the live overview, Calendar for dates, Transactions for time/material, Message center for subscriptions and alerts."
+          }
+        }
+      },
+      "materialwesen": {
+        "title": "Materials",
+        "summary": "Warehouse → storage locations → spare parts. Then book material on work orders.",
+        "intro": "Materials live under warehouse management: stock sits in warehouses and storage locations. Spare parts need stock lines before material booking makes sense.",
+        "tip": "Keep the order: warehouse first, then storage locations under that warehouse, then spare parts with stock control. Material bookings need order, spare part, warehouse, and storage location.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Prepare the site",
+            "body": "Warehouses and spare parts are site-scoped. Use the same site as assets and work orders so material and orders stay aligned."
+          },
+          "lager": {
+            "title": "Create warehouses",
+            "body": "Under Warehouse, create physical or logical warehouses (key, name, site, active)."
+          },
+          "lagerorte": {
+            "title": "Create storage locations",
+            "body": "Each storage location belongs to exactly one warehouse. That is how you find parts on the shelf and manage stock in enough detail."
+          },
+          "ersatzteile": {
+            "title": "Create spare parts with stock",
+            "body": "Create spare parts and maintain stock control per warehouse/storage location (quantity, optional reorder point). Without a stock line you will not see available quantity later."
+          },
+          "lieferanten": {
+            "title": "Suppliers (optional)",
+            "body": "Supplier master data helps with procurement and assignment. Useful once purchasing or replenishment matters."
+          },
+          "buchen": {
+            "title": "Book material",
+            "body": "Material flows via transactions on the work order (Material reference) or the Transactions app. Stock decreases and consumption is tied to the order."
+          }
+        }
+      },
+      "benutzermanagement": {
+        "title": "User management & sites",
+        "summary": "Sites first, then users with a plant primary site and optional employee link.",
+        "intro": "Users control login and data access. Sites limit what someone can see and edit.",
+        "tip": "A user’s primary site must be a plant (isPlant). A user can link to at most one employee — and only in the same site.",
+        "steps": {
+          "buchungskreise": {
+            "title": "Create sites",
+            "body": "Create sites, assign a color, and mark plants. Only plant sites may be used as a user’s primary site."
+          },
+          "mitarbeiter": {
+            "title": "Create employees (optional, recommended)",
+            "body": "Employees are the people in maintenance (assignment, shifts, work groups). Create them before you link users to real shop-floor people."
+          },
+          "benutzer": {
+            "title": "Create users",
+            "body": "Under Administration → Users: set login name, name, password, and primary site. Optionally link the matching employee."
+          },
+          "zugriff": {
+            "title": "Assign additional sites",
+            "body": "Besides the primary site you can grant more sites. Without access, the user cannot see that site’s data."
+          },
+          "fachgruppen": {
+            "title": "Link work groups",
+            "body": "For order planning, add employees to work groups and mark leaders. Only then responsibility and assignment work cleanly."
+          },
+          "parameter": {
+            "title": "Check app parameters",
+            "body": "Parameters such as GN-ASC (site selection) control whether users may change the site on master data. Adjust under App parameters if needed."
+          }
+        }
+      }
+    }
+  },
   "calculator": {
     "appName": "Calculator",
     "navCalculator": "Calculator",
@@ -2304,6 +2447,91 @@
       "invalidKey": "This order number is invalid or not accessible."
     }
   },
+  "reportDesigner": {
+    "appName": "Report Designer",
+    "navReportDesigner": "Report Designer",
+    "hint": "Step 1: Load rows from a SQL query. Step 2: design bands (header, group, detail, footer), format text in the ribbon, and generate a PDF.",
+    "stepQuery": "Query",
+    "stepDesigner": "Designer",
+    "queryLabel": "SQL query (SELECT/WITH only)",
+    "limitLabel": "Row limit",
+    "reportTitle": "Report name",
+    "runQuery": "Run query",
+    "loading": "Loading…",
+    "queryError": "Could not execute query.",
+    "queryInvalid": "Invalid query (SELECT/WITH only, no write statements).",
+    "queryFailed": "Query failed (SQL error or missing table/column).",
+    "queryAuthError": "Not authorized for the report API. Please sign in again.",
+    "queryUnavailable": "Report API unavailable. Check the backend deployment.",
+    "previewRows": "Rows loaded: {{count}}",
+    "emptyPreview": "No rows loaded.",
+    "step2Hint": "Continue to step 2 to design bands, groupings, and fields.",
+    "queryFields": "Query fields",
+    "dndHint": "Drag fields onto a band (header, group, detail, or footer).",
+    "noFields": "No columns available.",
+    "sections": "Bands",
+    "headerSection": "Page header",
+    "groupHeaderSection": "Group header",
+    "detailSection": "Detail",
+    "groupFooterSection": "Group footer",
+    "footerSection": "Page footer",
+    "headerShort": "Hdr",
+    "groupHeaderShort": "G-Hdr",
+    "detailShort": "Dtl",
+    "groupFooterShort": "G-Ftr",
+    "footerShort": "Ftr",
+    "bandHeight": "Band height",
+    "firstPageOnly": "Show on first page only",
+    "firstPageOnlyShort": "1st page only",
+    "groupAndSort": "Group & Sort",
+    "enableGrouping": "Enable grouping",
+    "groupByField": "Group by",
+    "groupByPlaceholder": "Select field",
+    "sortAsc": "A→Z",
+    "sortDesc": "Z→A",
+    "groupHint": "Group header/footer print before and after each group. Tokens: {_groupValue}, {_groupCount}, {_pageNumber}.",
+    "groupingFieldRequired": "Please choose a grouping field.",
+    "sampleGroup": "Sample group",
+    "ribbonClipboard": "Insert",
+    "ribbonText": "Text",
+    "ribbonFont": "Font",
+    "ribbonAlign": "Align",
+    "ribbonGrid": "Grid",
+    "showGrid": "Show grid",
+    "snapToGrid": "Snap to grid",
+    "ribbonBand": "Selection",
+    "itemPool": "Item pool",
+    "itemPoolHint": "Drag items onto a band.",
+    "poolBasics": "Basic items",
+    "poolTextItem": "Text",
+    "addText": "Text",
+    "deleteText": "Delete",
+    "properties": "Properties",
+    "section": "Band",
+    "textElements": "Text elements",
+    "textTemplate": "Text template",
+    "tokenHint": "Placeholders in double curly braces: columnName, _groupValue, _groupCount, _pageNumber",
+    "emptyText": "Empty text element",
+    "width": "Width",
+    "fontSize": "Font size",
+    "align": "Alignment",
+    "style": "Style",
+    "left": "Left",
+    "center": "Center",
+    "right": "Right",
+    "regular": "Regular",
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "canvasPreview": "Design surface (DIN A4)",
+    "pageBodyHint": "Page body · filled with data rows when printing",
+    "previewRowLabel": "Preview row",
+    "generatePdf": "Generate PDF",
+    "generatingPdf": "Generating PDF…",
+    "pdfReady": "PDF generated.",
+    "pdfError": "Could not generate PDF.",
+    "noRows": "Please load rows first."
+  },
   "probleme": {
     "appName": "Problems",
     "navProbleme": "Problems",
@@ -2429,198 +2657,5 @@
     "createdBy": "Created by",
     "updatedBy": "Updated by",
     "causesCount": "Causes"
-  },
-  "reportDesigner": {
-    "appName": "Report Designer",
-    "navReportDesigner": "Report Designer",
-    "searchPlaceholder": "Search reports…",
-    "create": "New report",
-    "edit": "Edit",
-    "delete": "Delete",
-    "cancel": "Cancel",
-    "save": "Save",
-    "saving": "Saving…",
-    "next": "Next",
-    "back": "Back",
-    "backToList": "Back to list",
-    "openPdf": "Open PDF",
-    "previewPdf": "PDF preview",
-    "pdfLoading": "Generating PDF…",
-    "loadError": "Failed to load reports.",
-    "saveSuccess": "Report saved.",
-    "saveError": "Failed to save report.",
-    "deleteSuccess": "Report deleted.",
-    "deleteError": "Delete failed.",
-    "confirmDeleteTitle": "Delete report",
-    "confirmDelete": "Really delete \"{{name}}\"?",
-    "empty": "No reports yet. Create a new report.",
-    "columnKey": "Key",
-    "columnName": "Name",
-    "columnSite": "Site",
-    "columnEntity": "Data source",
-    "columnDataMode": "Data mode",
-    "columnActive": "Active",
-    "stepGeneral": "General",
-    "stepQuery": "Query",
-    "stepDesign": "Design",
-    "generalHint": "Step 1: master data. Then define the data query and design the PDF layout in the WYSIWYG designer (text elements).",
-    "fieldKey": "Key",
-    "fieldName": "Name",
-    "fieldSite": "Site",
-    "sitePlaceholder": "Select site…",
-    "fieldActive": "Active",
-    "fieldEntity": "Entity",
-    "fieldFields": "Fields",
-    "fieldsPlaceholder": "Select fields…",
-    "fieldRowLimit": "Row limit",
-    "fieldSort": "Sort by",
-    "fieldSortDir": "Direction",
-    "sortAsc": "Ascending",
-    "sortDesc": "Descending",
-    "filters": "Filters",
-    "filtersEmpty": "No filters set.",
-    "addFilter": "Add filter",
-    "removeFilter": "Remove filter",
-    "filterValue": "Value",
-    "filterListPlaceholder": "Comma-separated values",
-    "queryPreview": "Data preview",
-    "runPreview": "Run preview",
-    "previewLoading": "Loading…",
-    "previewEmpty": "No preview yet. Run the query.",
-    "previewError": "Data preview failed.",
-    "pdfError": "Failed to generate PDF.",
-    "keyRequired": "Please enter a key.",
-    "nameRequired": "Please enter a name.",
-    "siteRequired": "Please select a site.",
-    "fieldsRequired": "Please select at least one field.",
-    "addLabel": "Text",
-    "addField": "Data field",
-    "newLabel": "Label",
-    "fieldPageSize": "Page size",
-    "fieldOrientation": "Orientation",
-    "fieldDataMode": "Data mode",
-    "elementProps": "Element",
-    "selectElementHint": "Select an element on the page.",
-    "elementLabel": "Static text",
-    "elementField": "Data field",
-    "fieldText": "Text",
-    "fieldBind": "Field binding",
-    "fieldFontSize": "Font size",
-    "fieldBold": "Bold",
-    "fieldAlign": "Alignment",
-    "fieldColor": "Color",
-    "deleteElement": "Delete element",
-    "margin": {
-      "top": "Top margin (mm)",
-      "right": "Right margin (mm)",
-      "bottom": "Bottom margin (mm)",
-      "left": "Left margin (mm)"
-    },
-    "geom": {
-      "x": "X (mm)",
-      "y": "Y (mm)",
-      "width": "Width (mm)",
-      "height": "Height (mm)"
-    },
-    "pageSize": {
-      "A4": "A4",
-      "A5": "A5",
-      "Letter": "Letter"
-    },
-    "orientation": {
-      "portrait": "Portrait",
-      "landscape": "Landscape"
-    },
-    "dataMode": {
-      "onePagePerRow": "One page per record",
-      "list": "List / table"
-    },
-    "align": {
-      "left": "Left",
-      "center": "Center",
-      "right": "Right"
-    },
-    "filterOp": {
-      "eq": "equals",
-      "neq": "not equals",
-      "in": "in list",
-      "notIn": "not in list",
-      "isNull": "is empty",
-      "gt": "greater than",
-      "gte": "greater or equal",
-      "lt": "less than",
-      "lte": "less or equal",
-      "contains": "contains"
-    },
-    "entity": {
-      "workOrder": "Work orders",
-      "asset": "Assets",
-      "sparePart": "Spare parts",
-      "transaction": "Transactions",
-      "employee": "Employees",
-      "costCenter": "Cost centers"
-    },
-    "field": {
-      "workOrder": {
-        "orderNumber": "Order number",
-        "name": "Name",
-        "description": "Description",
-        "status": "Status",
-        "orderType": "Order type",
-        "plannedStart": "Planned start",
-        "plannedEnd": "Planned end",
-        "plannedDurationMinutes": "Duration (min)",
-        "createdAt": "Created at",
-        "assetKey": "Asset key",
-        "assetName": "Asset name",
-        "costCenterKey": "Cost center key",
-        "costCenterName": "Cost center name",
-        "siteKey": "Site key",
-        "siteName": "Site name"
-      },
-      "asset": {
-        "key": "Key",
-        "name": "Name",
-        "type": "Type",
-        "createdAt": "Created at",
-        "siteKey": "Site key",
-        "siteName": "Site name",
-        "costCenterKey": "Cost center key",
-        "costCenterName": "Cost center name"
-      },
-      "sparePart": {
-        "key": "Key",
-        "name": "Name",
-        "isActive": "Active",
-        "manufacturer": "Manufacturer",
-        "createdAt": "Created at",
-        "siteKey": "Site key",
-        "siteName": "Site name"
-      },
-      "transaction": {
-        "type": "Type",
-        "quantity": "Quantity",
-        "bookedAt": "Booked at",
-        "createdAt": "Created at",
-        "sparePartKey": "Spare part key",
-        "sparePartName": "Spare part name",
-        "siteKey": "Site key",
-        "siteName": "Site name"
-      },
-      "employee": {
-        "key": "Key",
-        "name": "Name",
-        "createdAt": "Created at",
-        "siteKey": "Site key",
-        "siteName": "Site name"
-      },
-      "costCenter": {
-        "key": "Key",
-        "name": "Name",
-        "createdAt": "Created at",
-        "siteKey": "Site key",
-        "siteName": "Site name"
-      }
-    }
   }
 }

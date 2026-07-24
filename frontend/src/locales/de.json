@@ -120,6 +120,149 @@
     "loadError": "Stammdaten-Kennzahlen konnten nicht geladen werden.",
     "retry": "Erneut versuchen"
   },
+  "gettingStarted": {
+    "appName": "Getting Started",
+    "navGettingStarted": "Getting Started",
+    "kicker": "Erste Schritte",
+    "hubTitle": "So startest du mit Athene",
+    "hubLead": "Wähle einen Guide. Jeder Guide zeigt die Reihenfolge der Stammdaten und Apps — von Pflicht bis sinnvoll optional.",
+    "openGuide": "Guide öffnen",
+    "backToHub": "Alle Guides",
+    "required": "Pflicht",
+    "optional": "Optional",
+    "complete": "Erledigt",
+    "completeHint": "Voraussetzungen erfüllt — Guide weiterhin einsehbar",
+    "progress": "{{done}} / {{total}} Pflicht-Voraussetzungen erfüllt",
+    "requiredCount": "{{required}} von {{total}} Schritten sind Pflicht",
+    "tipLabel": "Tipp",
+    "links": {
+      "sites": "Buchungskreise",
+      "costCenters": "Kostenstellen",
+      "assets": "Assets",
+      "baumstruktur": "Baumstruktur",
+      "employees": "Mitarbeiter",
+      "workgroups": "Fachgruppen",
+      "auftragstypen": "Auftragstypen",
+      "classifications": "Klassifikationen",
+      "probleme": "Probleme",
+      "ursachen": "Ursachen",
+      "massnahmen": "Maßnahmen",
+      "orderCreation": "Auftragserstellung",
+      "workOrders": "Aufträge",
+      "monitoring": "Monitoring",
+      "kalendar": "Kalendar",
+      "transactions": "Buchungen",
+      "mitteilungszentrale": "Mitteilungszentrale",
+      "warehouses": "Lager",
+      "storageLocations": "Lagerorte",
+      "spareParts": "Ersatzteile",
+      "suppliers": "Lieferanten",
+      "users": "Benutzer",
+      "appParameters": "App-Parameter"
+    },
+    "guides": {
+      "auftragswesen": {
+        "title": "Auftragswesen",
+        "summary": "Assets und Kostenstellen zuerst — dann Aufträge. Für MA-Planung Fachgruppen mitdenken.",
+        "intro": "Das Auftragswesen braucht saubere Stammdaten im gleichen Buchungskreis. Ohne Asset und Kostenstelle kannst du keinen Auftrag anlegen.",
+        "tip": "Buchungskreis-Konsistenz: Die Kostenstelle eines Assets muss zum Asset-Buchungskreis passen. Verantwortliche müssen Fachgruppen-Leiter sein; zugewiesene MA müssen in der Fachgruppe sein.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Buchungskreis prüfen",
+            "body": "Jeder Auftrag, jedes Asset und jede Kostenstelle hängt an einem Buchungskreis. Lege fehlende Werke unter Administration → Buchungskreise an und markiere Werk-Buchungskreise."
+          },
+          "kostenstellen": {
+            "title": "Kostenstellen anlegen",
+            "body": "Kostenstellen sind Pflicht für Aufträge. Lege sie im passenden Buchungskreis an — sie steuern die Zuordnung von Aufwand und sind später am Auftrag und am Asset sichtbar."
+          },
+          "assets": {
+            "title": "Assets anlegen",
+            "body": "Assets (technische Objekte) sind die Anlagen, an denen gearbeitet wird. Weise jedem Asset eine Kostenstelle im gleichen Buchungskreis zu. Die Baumstruktur hilft bei Hierarchien."
+          },
+          "planung": {
+            "title": "Mitarbeiter & Fachgruppen (für Planung)",
+            "body": "Wenn du MA und Fachgruppen planen willst, lege beides vorher an:\n• Mitarbeiter in den Stammdaten\n• Fachgruppen mit Mitgliedern und Leitern\n\nOhne Fachgruppe kannst du Aufträge zwar anlegen, aber keine sinnvolle Zuweisung und Verantwortlichkeit steuern."
+          },
+          "stammdatenExtra": {
+            "title": "Auftragstypen & PCR-Stammdaten",
+            "body": "Optional, aber hilfreich: Auftragstypen, Klassifikationen sowie Probleme, Ursachen und Maßnahmen (PCR). Sie machen Auswertung und Rückmeldung strukturierter."
+          },
+          "auftraege": {
+            "title": "Ersten Auftrag anlegen",
+            "body": "Lege den Auftrag mit Asset und Kostenstelle an. Für Planung: Fachgruppe wählen, Verantwortliche (Leiter) und Zuweisungen setzen. Geplanten Start/Ende und Auftragstyp ergänzen."
+          },
+          "steuern": {
+            "title": "Steuern & verfolgen",
+            "body": "Monitoring für den Live-Überblick, Kalendar für Termine, Buchungen für Zeiten/Material, Mitteilungszentrale für Abos und Hinweise."
+          }
+        }
+      },
+      "materialwesen": {
+        "title": "Materialwesen",
+        "summary": "Lager → Lagerorte → Ersatzteile. Danach Material auf Aufträgen buchen.",
+        "intro": "Materialwesen steckt in der Lagerhaltung: Bestände leben in Lagern und Lagerorten. Ersatzteile brauchen Bestandslinien, bevor du Material sinnvoll buchen kannst.",
+        "tip": "Reihenfolge einhalten: Erst Lager, dann Lagerorte unter diesem Lager, dann Ersatzteile mit Bestandskontrolle. Materialbuchungen hängen an Auftrag, Ersatzteil, Lager und Lagerort.",
+        "steps": {
+          "buchungskreis": {
+            "title": "Buchungskreis vorbereiten",
+            "body": "Lager und Ersatzteile sind buchungskreisbezogen. Nutze denselben Buchungskreis wie für Assets und Aufträge, damit Material und Auftrag zusammenpassen."
+          },
+          "lager": {
+            "title": "Lager anlegen",
+            "body": "Lege unter Lagerhaltung die physischen oder logischen Lager an (Schlüssel, Name, Buchungskreis, aktiv)."
+          },
+          "lagerorte": {
+            "title": "Lagerorte anlegen",
+            "body": "Jeder Lagerort gehört zu genau einem Lager. So findest du Teile im Regal/Fach wieder und steuerst Bestände fein genug."
+          },
+          "ersatzteile": {
+            "title": "Ersatzteile mit Bestand anlegen",
+            "body": "Lege Ersatzteile an und pflege Bestandskontrolle je Lager/Lagerort (Menge, optional Meldebestand). Ohne Bestandslinie siehst du später keine verfügbare Menge."
+          },
+          "lieferanten": {
+            "title": "Lieferanten (optional)",
+            "body": "Lieferanten-Stammdaten helfen bei Beschaffung und Zuordnung. Sinnvoll, sobald Einkauf oder Nachbestellung relevant wird."
+          },
+          "buchen": {
+            "title": "Material buchen",
+            "body": "Material fließt über Buchungen am Auftrag (Referenz Material) oder über die Buchungen-App. So sinkt der Bestand und der Verbrauch hängt am Auftrag."
+          }
+        }
+      },
+      "benutzermanagement": {
+        "title": "Benutzermanagement & Buchungskreise",
+        "summary": "Buchungskreise zuerst, dann Benutzer mit Werk-Haupt-BK und optional MA-Verknüpfung.",
+        "intro": "Benutzer steuern den Login und den Datenzugriff. Buchungskreise begrenzen, was jemand sieht und bearbeiten darf.",
+        "tip": "Der Haupt-Buchungskreis eines Benutzers muss ein Werk (isPlant) sein. Ein Benutzer kann mit höchstens einem Mitarbeiter verknüpft werden — und nur im gleichen Buchungskreis.",
+        "steps": {
+          "buchungskreise": {
+            "title": "Buchungskreise anlegen",
+            "body": "Lege Buchungskreise an, vergebe Farbe und markiere Werke. Nur Werk-Buchungskreise dürfen als Haupt-Buchungskreis eines Benutzers dienen."
+          },
+          "mitarbeiter": {
+            "title": "Mitarbeiter anlegen (optional, empfohlen)",
+            "body": "Mitarbeiter sind die Personen in der Instandhaltung (Zuweisung, Schicht, Fachgruppe). Lege sie an, bevor du Benutzer mit der Realität im Werk verknüpfst."
+          },
+          "benutzer": {
+            "title": "Benutzer anlegen",
+            "body": "Unter Administration → Benutzer: Anmeldename, Name, Passwort und Haupt-Buchungskreis setzen. Optional denselben Mitarbeiter verknüpfen."
+          },
+          "zugriff": {
+            "title": "Weitere Buchungskreise zuweisen",
+            "body": "Neben dem Haupt-Buchungskreis kannst du weitere Buchungskreise freigeben. Ohne Zugriff sieht der User die Daten dieses Kreises nicht."
+          },
+          "fachgruppen": {
+            "title": "Fachgruppen verknüpfen",
+            "body": "Für Auftragsplanung Mitarbeiter in Fachgruppen aufnehmen und Leiter kennzeichnen. Nur so greifen Verantwortlichkeit und Zuweisung sauber."
+          },
+          "parameter": {
+            "title": "App-Parameter prüfen",
+            "body": "Parameter wie GN-ASC (Wahl des Buchungskreises) steuern, ob Benutzer den Buchungskreis in Stammdaten wechseln dürfen. Bei Bedarf unter App-Parameter anpassen."
+          }
+        }
+      }
+    }
+  },
   "calculator": {
     "appName": "Taschenrechner",
     "navCalculator": "Taschenrechner",
@@ -2304,6 +2447,91 @@
       "invalidKey": "Diese Auftragsnummer ist ungültig oder nicht zugänglich."
     }
   },
+  "reportDesigner": {
+    "appName": "Report Designer",
+    "navReportDesigner": "Report Designer",
+    "hint": "Schritt 1: Daten per SQL-Query laden. Schritt 2: Bänder (Kopf, Gruppe, Detail, Fuß) gestalten, Text im Menüband formatieren und PDF erzeugen.",
+    "stepQuery": "Query",
+    "stepDesigner": "Designer",
+    "queryLabel": "SQL Query (nur SELECT/WITH)",
+    "limitLabel": "Zeilenlimit",
+    "reportTitle": "Reportname",
+    "runQuery": "Query ausführen",
+    "loading": "Lade…",
+    "queryError": "Query konnte nicht ausgeführt werden.",
+    "queryInvalid": "Query ungültig (nur SELECT/WITH, keine Schreibbefehle).",
+    "queryFailed": "Query ist fehlgeschlagen (SQL-Fehler oder fehlende Tabelle/Spalte).",
+    "queryAuthError": "Keine Berechtigung für die Report-API. Bitte erneut anmelden.",
+    "queryUnavailable": "Report-API nicht erreichbar. Backend-Deployment prüfen.",
+    "previewRows": "Gefundene Datensätze: {{count}}",
+    "emptyPreview": "Keine Datensätze vorhanden.",
+    "step2Hint": "Weiter mit Schritt 2, um Bänder, Gruppierungen und Felder zu gestalten.",
+    "queryFields": "Query-Felder",
+    "dndHint": "Felder auf ein Band ziehen (Kopf, Gruppe, Detail oder Fuß).",
+    "noFields": "Keine Spalten verfügbar.",
+    "sections": "Bänder",
+    "headerSection": "Seitenkopf",
+    "groupHeaderSection": "Gruppenkopf",
+    "detailSection": "Detailbereich",
+    "groupFooterSection": "Gruppenfuß",
+    "footerSection": "Seitenfuß",
+    "headerShort": "Kopf",
+    "groupHeaderShort": "G-Kopf",
+    "detailShort": "Detail",
+    "groupFooterShort": "G-Fuß",
+    "footerShort": "Fuß",
+    "bandHeight": "Bandhöhe",
+    "firstPageOnly": "Nur auf erster Seite anzeigen",
+    "firstPageOnlyShort": "nur 1. Seite",
+    "groupAndSort": "Gruppieren & Sortieren",
+    "enableGrouping": "Gruppierung aktivieren",
+    "groupByField": "Gruppieren nach",
+    "groupByPlaceholder": "Feld wählen",
+    "sortAsc": "A→Z",
+    "sortDesc": "Z→A",
+    "groupHint": "Gruppenkopf/-fuß erscheinen vor bzw. nach jeder Gruppe. Platzhalter: {_groupValue}, {_groupCount}, {_pageNumber}.",
+    "groupingFieldRequired": "Bitte ein Gruppierungsfeld wählen.",
+    "sampleGroup": "Beispielgruppe",
+    "ribbonClipboard": "Einfügen",
+    "ribbonText": "Text",
+    "ribbonFont": "Schrift",
+    "ribbonAlign": "Ausrichtung",
+    "ribbonGrid": "Raster",
+    "showGrid": "Raster anzeigen",
+    "snapToGrid": "Am Raster ausrichten",
+    "ribbonBand": "Auswahl",
+    "itemPool": "Item-Pool",
+    "itemPoolHint": "Elemente auf ein Band ziehen.",
+    "poolBasics": "Basis-Elemente",
+    "poolTextItem": "Text",
+    "addText": "Text",
+    "deleteText": "Löschen",
+    "properties": "Eigenschaften",
+    "section": "Band",
+    "textElements": "Text-Elemente",
+    "textTemplate": "Textvorlage",
+    "tokenHint": "Platzhalter in doppelten geschweiften Klammern: Spaltenname, _groupValue, _groupCount, _pageNumber",
+    "emptyText": "Leeres Textelement",
+    "width": "Breite",
+    "fontSize": "Schriftgröße",
+    "align": "Ausrichtung",
+    "style": "Stil",
+    "left": "Links",
+    "center": "Zentriert",
+    "right": "Rechts",
+    "regular": "Normal",
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "underline": "Unterstrichen",
+    "canvasPreview": "Designfläche (DIN A4)",
+    "pageBodyHint": "Seitenkörper · wird beim Druck mit Datensätzen gefüllt",
+    "previewRowLabel": "Vorschau Datensatz",
+    "generatePdf": "PDF erzeugen",
+    "generatingPdf": "PDF wird erzeugt…",
+    "pdfReady": "PDF wurde erzeugt.",
+    "pdfError": "PDF konnte nicht erzeugt werden.",
+    "noRows": "Bitte zuerst Datensätze laden."
+  },
   "probleme": {
     "appName": "Probleme",
     "navProbleme": "Probleme",
@@ -2429,198 +2657,5 @@
     "createdBy": "Erstellt von",
     "updatedBy": "Aktualisiert von",
     "causesCount": "Ursachen"
-  },
-  "reportDesigner": {
-    "appName": "Report Designer",
-    "navReportDesigner": "Report Designer",
-    "searchPlaceholder": "Reports suchen…",
-    "create": "Neuer Report",
-    "edit": "Bearbeiten",
-    "delete": "Löschen",
-    "cancel": "Abbrechen",
-    "save": "Speichern",
-    "saving": "Speichern…",
-    "next": "Weiter",
-    "back": "Zurück",
-    "backToList": "Zurück zur Liste",
-    "openPdf": "PDF öffnen",
-    "previewPdf": "PDF-Vorschau",
-    "pdfLoading": "PDF wird erzeugt…",
-    "loadError": "Reports konnten nicht geladen werden.",
-    "saveSuccess": "Report gespeichert.",
-    "saveError": "Report konnte nicht gespeichert werden.",
-    "deleteSuccess": "Report gelöscht.",
-    "deleteError": "Löschen fehlgeschlagen.",
-    "confirmDeleteTitle": "Report löschen",
-    "confirmDelete": "„{{name}}“ wirklich löschen?",
-    "empty": "Keine Reports. Erstellen Sie einen neuen Report.",
-    "columnKey": "Schlüssel",
-    "columnName": "Name",
-    "columnSite": "Standort",
-    "columnEntity": "Datenquelle",
-    "columnDataMode": "Datenmodus",
-    "columnActive": "Aktiv",
-    "stepGeneral": "Allgemein",
-    "stepQuery": "Abfrage",
-    "stepDesign": "Design",
-    "generalHint": "Schritt 1: Stammdaten. Danach Datenabfrage definieren und das PDF-Layout im WYSIWYG-Designer gestalten (Textfelder).",
-    "fieldKey": "Schlüssel",
-    "fieldName": "Name",
-    "fieldSite": "Standort",
-    "sitePlaceholder": "Standort wählen…",
-    "fieldActive": "Aktiv",
-    "fieldEntity": "Entität",
-    "fieldFields": "Felder",
-    "fieldsPlaceholder": "Felder auswählen…",
-    "fieldRowLimit": "Zeilenlimit",
-    "fieldSort": "Sortierung",
-    "fieldSortDir": "Richtung",
-    "sortAsc": "Aufsteigend",
-    "sortDesc": "Absteigend",
-    "filters": "Filter",
-    "filtersEmpty": "Keine Filter gesetzt.",
-    "addFilter": "Filter hinzufügen",
-    "removeFilter": "Filter entfernen",
-    "filterValue": "Wert",
-    "filterListPlaceholder": "Werte, kommagetrennt",
-    "queryPreview": "Datenvorschau",
-    "runPreview": "Vorschau laden",
-    "previewLoading": "Lädt…",
-    "previewEmpty": "Noch keine Vorschau. Bitte Abfrage ausführen.",
-    "previewError": "Datenvorschau fehlgeschlagen.",
-    "pdfError": "PDF konnte nicht erzeugt werden.",
-    "keyRequired": "Bitte einen Schlüssel angeben.",
-    "nameRequired": "Bitte einen Namen angeben.",
-    "siteRequired": "Bitte einen Standort wählen.",
-    "fieldsRequired": "Bitte mindestens ein Feld auswählen.",
-    "addLabel": "Text",
-    "addField": "Datenfeld",
-    "newLabel": "Beschriftung",
-    "fieldPageSize": "Seitenformat",
-    "fieldOrientation": "Ausrichtung",
-    "fieldDataMode": "Datenmodus",
-    "elementProps": "Element",
-    "selectElementHint": "Element auf der Seite auswählen.",
-    "elementLabel": "Statischer Text",
-    "elementField": "Datenfeld",
-    "fieldText": "Text",
-    "fieldBind": "Feldbindung",
-    "fieldFontSize": "Schriftgröße",
-    "fieldBold": "Fett",
-    "fieldAlign": "Ausrichtung",
-    "fieldColor": "Farbe",
-    "deleteElement": "Element löschen",
-    "margin": {
-      "top": "Rand oben (mm)",
-      "right": "Rand rechts (mm)",
-      "bottom": "Rand unten (mm)",
-      "left": "Rand links (mm)"
-    },
-    "geom": {
-      "x": "X (mm)",
-      "y": "Y (mm)",
-      "width": "Breite (mm)",
-      "height": "Höhe (mm)"
-    },
-    "pageSize": {
-      "A4": "A4",
-      "A5": "A5",
-      "Letter": "Letter"
-    },
-    "orientation": {
-      "portrait": "Hochformat",
-      "landscape": "Querformat"
-    },
-    "dataMode": {
-      "onePagePerRow": "Eine Seite pro Datensatz",
-      "list": "Liste / Tabelle"
-    },
-    "align": {
-      "left": "Links",
-      "center": "Zentriert",
-      "right": "Rechts"
-    },
-    "filterOp": {
-      "eq": "gleich",
-      "neq": "ungleich",
-      "in": "in Liste",
-      "notIn": "nicht in Liste",
-      "isNull": "ist leer",
-      "gt": "größer",
-      "gte": "größer/gleich",
-      "lt": "kleiner",
-      "lte": "kleiner/gleich",
-      "contains": "enthält"
-    },
-    "entity": {
-      "workOrder": "Arbeitsaufträge",
-      "asset": "Assets",
-      "sparePart": "Ersatzteile",
-      "transaction": "Buchungen",
-      "employee": "Mitarbeiter",
-      "costCenter": "Kostenstellen"
-    },
-    "field": {
-      "workOrder": {
-        "orderNumber": "Auftragsnummer",
-        "name": "Bezeichnung",
-        "description": "Beschreibung",
-        "status": "Status",
-        "orderType": "Auftragstyp",
-        "plannedStart": "Geplant von",
-        "plannedEnd": "Geplant bis",
-        "plannedDurationMinutes": "Dauer (Min.)",
-        "createdAt": "Erstellt am",
-        "assetKey": "Asset-Schlüssel",
-        "assetName": "Asset-Name",
-        "costCenterKey": "KST-Schlüssel",
-        "costCenterName": "KST-Name",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name"
-      },
-      "asset": {
-        "key": "Schlüssel",
-        "name": "Name",
-        "type": "Typ",
-        "createdAt": "Erstellt am",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name",
-        "costCenterKey": "KST-Schlüssel",
-        "costCenterName": "KST-Name"
-      },
-      "sparePart": {
-        "key": "Schlüssel",
-        "name": "Name",
-        "isActive": "Aktiv",
-        "manufacturer": "Hersteller",
-        "createdAt": "Erstellt am",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name"
-      },
-      "transaction": {
-        "type": "Typ",
-        "quantity": "Menge",
-        "bookedAt": "Gebucht am",
-        "createdAt": "Erstellt am",
-        "sparePartKey": "Ersatzteil-Schlüssel",
-        "sparePartName": "Ersatzteil-Name",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name"
-      },
-      "employee": {
-        "key": "Schlüssel",
-        "name": "Name",
-        "createdAt": "Erstellt am",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name"
-      },
-      "costCenter": {
-        "key": "Schlüssel",
-        "name": "Name",
-        "createdAt": "Erstellt am",
-        "siteKey": "Standort-Schlüssel",
-        "siteName": "Standort-Name"
-      }
-    }
   }
 }

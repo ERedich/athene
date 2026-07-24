@@ -6542,3 +6542,437 @@ button.app-calendar-day__num:focus-visible {
   gap: 0.4rem;
 }
 
+/* Getting Started — guided setup hub */
+.app-getting-started-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(
+      120% 80% at 0% 0%,
+      color-mix(in srgb, var(--color-primary) 10%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-container-low, var(--surface-overlay)) 80%, transparent),
+      transparent 40%
+    );
+}
+
+.app-getting-started-intro,
+.app-getting-started-detail {
+  width: min(56rem, 100%);
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.app-getting-started-kicker {
+  margin: 0 0 0.35rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-heading {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.5rem, 2.2vw, 1.875rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-on-surface);
+}
+
+.app-getting-started-lead {
+  margin: 0.65rem 0 0;
+  max-width: 42rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--color-on-surface-variant);
+  white-space: pre-line;
+}
+
+.app-getting-started-meta {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-grid {
+  --getting-started-tile-border: color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+  display: grid;
+  gap: 0.75rem;
+  width: min(64rem, 100%);
+  margin: 0 auto;
+  padding: 0 1rem 1.5rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .app-getting-started-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.app-getting-started-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 12rem;
+  padding: 1.25rem;
+  border: 1px solid var(--getting-started-tile-border);
+  border-radius: 0.5rem;
+  background: var(--surface-overlay);
+  color: var(--color-on-surface);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.app-getting-started-tile--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 40%, var(--getting-started-tile-border));
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 14%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 4%, var(--surface-overlay))
+    );
+}
+
+.app-getting-started-tile:hover,
+.app-getting-started-tile:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--getting-started-tile-border));
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--surface-overlay));
+  outline: none;
+}
+
+.app-getting-started-tile--complete:hover,
+.app-getting-started-tile--complete:focus-visible {
+  border-color: color-mix(in srgb, rgb(34 197 94) 55%, var(--getting-started-tile-border));
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 18%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 6%, var(--surface-overlay))
+    );
+}
+
+.app-getting-started-tile:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.app-getting-started-tile--complete:focus-visible {
+  outline-color: rgb(34 197 94);
+}
+
+.app-getting-started-tile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.app-getting-started-tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-tile:hover .app-getting-started-tile-icon,
+.app-getting-started-tile:focus-visible .app-getting-started-tile-icon {
+  color: var(--color-primary);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-icon {
+  color: rgb(22 163 74);
+}
+
+.app-getting-started-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 22%, transparent);
+}
+
+.app-getting-started-tile-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-on-surface);
+}
+
+.app-getting-started-tile-summary {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-tile-progress {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-progress {
+  color: rgb(21 128 61);
+}
+
+.app-getting-started-tile-cta {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.app-getting-started-tile--complete .app-getting-started-tile-cta {
+  color: rgb(22 163 74);
+}
+
+.app-getting-started-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--color-on-surface-variant);
+  text-decoration: none;
+}
+
+.app-getting-started-back:hover,
+.app-getting-started-back:focus-visible {
+  color: var(--color-primary);
+  outline: none;
+}
+
+.app-getting-started-detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+  background: var(--surface-overlay);
+}
+
+.app-getting-started-detail-header--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 40%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 14%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 4%, var(--surface-overlay))
+    );
+}
+
+.app-getting-started-detail-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--surface-overlay));
+  color: var(--color-primary);
+}
+
+.app-getting-started-detail-header--complete .app-getting-started-detail-icon {
+  background: color-mix(in srgb, rgb(34 197 94) 20%, var(--surface-overlay));
+  color: rgb(22 163 74);
+}
+
+.app-getting-started-detail-titles {
+  min-width: 0;
+}
+
+.app-getting-started-detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+}
+
+.app-getting-started-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-getting-started-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.5rem;
+  background: var(--surface-overlay);
+  border: 1px solid color-mix(in srgb, var(--color-on-surface) 10%, transparent);
+}
+
+.app-getting-started-step--complete {
+  border-color: color-mix(in srgb, rgb(34 197 94) 35%, transparent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, rgb(34 197 94) 12%, transparent),
+      color-mix(in srgb, rgb(34 197 94) 3%, var(--surface-overlay))
+    );
+}
+
+.app-getting-started-step-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.app-getting-started-step-index--complete {
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 24%, transparent);
+}
+
+.app-getting-started-step-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.app-getting-started-step-title {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.app-getting-started-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 0.2rem;
+}
+
+.app-getting-started-badge--required {
+  color: color-mix(in srgb, var(--color-primary) 90%, var(--color-on-surface));
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.app-getting-started-badge--optional {
+  color: var(--color-on-surface-variant);
+  background: color-mix(in srgb, var(--color-on-surface) 8%, transparent);
+}
+
+.app-getting-started-badge--complete {
+  color: rgb(21 128 61);
+  background: color-mix(in srgb, rgb(34 197 94) 22%, transparent);
+}
+
+.app-getting-started-step-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--color-on-surface-variant);
+  white-space: pre-line;
+}
+
+.app-getting-started-step-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-getting-started-step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-on-surface);
+  background: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+  text-decoration: none;
+}
+
+.app-getting-started-step-link:hover,
+.app-getting-started-step-link:focus-visible {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  outline: none;
+}
+
+.app-getting-started-tip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.5rem;
+  border-left: 3px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--surface-overlay));
+  color: var(--color-on-surface-variant);
+}
+
+.app-getting-started-tip-label {
+  margin: 0 0 0.25rem;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-on-surface);
+}
+
+.app-getting-started-tip-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
