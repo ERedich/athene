@@ -61,6 +61,8 @@ export type WorkOrder = {
   assetDocumentCount: number;
   assignedEmployeeCount: number;
   transactionCount: number;
+  inspectionPointCount: number;
+  checkedInspectionPointCount: number;
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;

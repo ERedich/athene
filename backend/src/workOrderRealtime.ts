@@ -51,6 +51,8 @@ export type WorkOrderRealtimePayload = {
   assetDocumentCount: number;
   assignedEmployeeCount: number;
   transactionCount?: number;
+  inspectionPointCount?: number;
+  checkedInspectionPointCount?: number;
 };
 
 const sockets = new Map<WebSocket, string>();

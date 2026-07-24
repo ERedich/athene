@@ -126,6 +126,8 @@ type WorkOrderRow = {
   assetDocumentCount: number;
   assignedEmployeeCount: number;
   transactionCount: number;
+  inspectionPointCount: number;
+  checkedInspectionPointCount: number;
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   originalWoName: string | null;
@@ -550,7 +552,9 @@ const selectWorkOrdersSql = `
     COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
     COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
     COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
-    COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount"
+    COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount",
+    COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
+    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount"
   FROM "workOrder" w
   JOIN "site" s ON s."id" = w."siteId"
   JOIN "asset" a ON a."id" = w."assetId"
@@ -578,6 +582,14 @@ const selectWorkOrdersSql = `
     FROM "transaction"
     GROUP BY "workOrderId"
   ) tx_counts ON tx_counts."workOrderId" = w."id"
+  LEFT JOIN (
+    SELECT
+      "workOrderId",
+      COUNT(*)::int AS "inspectionPointCount",
+      COUNT(*) FILTER (WHERE "checked")::int AS "checkedInspectionPointCount"
+    FROM "workOrderInspectionPoint"
+    GROUP BY "workOrderId"
+  ) ip_counts ON ip_counts."workOrderId" = w."id"
 `;
 
 async function fetchWorkOrderRow(
@@ -2692,29 +2704,53 @@ router.get("/:id/inspection-points", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const access = await pool.query<{ id: string }>(
-      `
-      SELECT "id"
-      FROM "workOrder"
-      WHERE "id" = $1::uuid
-        AND ${siteAccessSql('"siteId"', "$2")}
-      `,
-      [id, userId],
-    );
-    if (!access.rows[0]) {
+    const meta = auditMeta(req);
+    const rows = await withAuditContext(meta, async (client) => {
+      const access = await client.query<{ id: string; inspectionRoundId: string | null }>(
+        `
+        SELECT "id", "inspectionRoundId"::text AS "inspectionRoundId"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      const wo = access.rows[0];
+      if (!wo) throw new Error("not_found");
+
+      let { rows: points } = await client.query<WorkOrderInspectionPointRow>(
+        `
+        ${selectWoInspectionPointSql}
+        WHERE p."workOrderId" = $1::uuid
+        ORDER BY p."pos" ASC
+        `,
+        [id],
+      );
+      // Heal missing snapshot when a round is linked but no points were copied yet.
+      if (points.length === 0 && wo.inspectionRoundId) {
+        await syncWorkOrderInspectionPointsSnapshot(client, id, wo.inspectionRoundId);
+        const refreshed = await client.query<WorkOrderInspectionPointRow>(
+          `
+          ${selectWoInspectionPointSql}
+          WHERE p."workOrderId" = $1::uuid
+          ORDER BY p."pos" ASC
+          `,
+          [id],
+        );
+        points = refreshed.rows;
+      }
+      return points;
+    });
+    res.json(rows);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    const { rows } = await pool.query<WorkOrderInspectionPointRow>(
-      `
-      ${selectWoInspectionPointSql}
-      WHERE p."workOrderId" = $1::uuid
-      ORDER BY p."pos" ASC
-      `,
-      [id],
-    );
-    res.json(rows);
-  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -2732,7 +2768,7 @@ router.patch("/:id/inspection-points/:pointId", async (req: Request, res: Respon
   }
   try {
     const meta = auditMeta(req);
-    const row = await withAuditContext(meta, async (client) => {
+    const result = await withAuditContext(meta, async (client) => {
       const access = await client.query<{ id: string }>(
         `
         SELECT "id"
@@ -2774,13 +2810,21 @@ router.patch("/:id/inspection-points/:pointId", async (req: Request, res: Respon
         `,
         [checked, meta.userId, pointId, id],
       );
-      return rows[0] ?? null;
+      const point = rows[0] ?? null;
+      if (!point) return null;
+      const order = await fetchWorkOrderRow(client, id);
+      return { point, order };
     });
-    if (!row) {
+    if (!result) {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(row);
+    if (result.order) {
+      void broadcastWorkOrderUpdated(result.order.siteId, result.order).catch((err) => {
+        console.error("[work-order-realtime] broadcast updated failed", err);
+      });
+    }
+    res.json(result.point);
   } catch (err) {
     if ((err as Error).message === "not_found") {
       res.status(404).json({ error: "not_found" });

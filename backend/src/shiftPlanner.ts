@@ -751,3 +751,17 @@ router.delete("/assignments/:id", async (req: Request, res: Response) => {
 });
 
 export const shiftPlannerRouter = router;
+
+export const __test__ = {
+  addDaysIso,
+  weekdayKeyForDate,
+  isAssignmentDateBeforeToday,
+  parseSegmentKind,
+  assignmentDateForBlock,
+  computeShiftWindowBounds,
+  parseAssignmentBody,
+  parseRolloutBody,
+  enumerateShiftAssignmentDates,
+  timeToMinutes,
+  normalizeTimeToHm,
+};

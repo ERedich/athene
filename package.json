@@ -14,7 +14,9 @@
     "migrate": "npm run migrate -w backend",
     "athene:reindex": "npm run athene:reindex-embeddings -w backend",
     "athene:reindex-embeddings": "npm run athene:reindex-embeddings -w backend",
-    "athene:bench-load": "npm run athene:bench-load -w backend"
+    "athene:bench-load": "npm run athene:bench-load -w backend",
+    "test": "npm run test -w frontend && npm run test -w backend",
+    "test:shift-planner": "npm run test -w frontend -- src/lib/shiftPlanner && npm run test -w backend -- src/shiftPlanner.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

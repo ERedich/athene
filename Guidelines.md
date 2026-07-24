@@ -124,11 +124,11 @@ Use these **background** colors for reference icon buttons (and matching border)
 | **Material** | Material / stock–related links | **`green-300`** | `app-ref-button--material` |
 | **Purchase (Einkauf)** | Procurement / purchasing links | **`pink-300`** | `app-ref-button--purchase` |
 | **Work orders (Aufträge)** | Asset has linked work orders (`workOrderCount > 0`), e.g. Baumstruktur Referenzen. | **`violet-300`** | `app-ref-button--work-orders` |
-| **Inspection points (Prüfpunkte)** | Asset has inspection points (`inspectionPointCount > 0`), e.g. Assets / Baumstruktur Referenzen. | **`amber-300`** | `app-ref-button--inspection-points` |
+| **Inspection points (Prüfpunkte)** | Asset has inspection points (`inspectionPointCount > 0`), e.g. Assets / Baumstruktur Referenzen. On **Work orders / Monitoring**: order has a snapshotted inspection checklist (`inspectionPointCount > 0`); badge may show progress `checked/total`. | **`amber-300`** | `app-ref-button--inspection-points` |
 
 - **Foreground**: keep icon and badge text **high contrast** on these pastel fills (the shared classes use a dark slate foreground; adjust only if documented here).
 - **Document colors are not permission states**: for work orders / monitoring, **green means only asset document references exist** (`documentCount = 0`, `assetDocumentCount > 0`), **cyan/blue means at least one work-order document reference exists** (`documentCount > 0`, regardless of whether asset documents also exist), and transparent/soft-blue means no documents (`documentCount = 0`, `assetDocumentCount = 0`). Current permission checks are enforced by API access rules, not by document icon color.
-- **Disabled / empty (other kinds)**: for **material**, **purchase**, and **work orders** (when count = 0), use neutral/transparent surface styling — **do not** use the strong green / pink / violet fills. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill). Work orders when empty: use **`app-ref-button--work-orders-empty`**.
+- **Disabled / empty (other kinds)**: for **material**, **purchase**, **work orders**, and **inspection points** (when count = 0), use the matching `app-ref-button--…-empty` class with the control **disabled** — **do not** use the strong green / pink / violet / amber fills on an enabled button. **Documents** when empty: use **`app-ref-button--documents-inactive`** (transparent chrome, bluish icon only — not a filled pill; on Assets the control is disabled). Work orders when empty: use **`app-ref-button--work-orders-empty`**. Inspection points when empty: use **`app-ref-button--inspection-points-empty`** (disabled).
 
 ---
 

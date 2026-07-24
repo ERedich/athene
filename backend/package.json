@@ -9,7 +9,9 @@
     "start": "node dist/index.js",
     "migrate": "tsx scripts/migrate.ts",
     "athene:reindex-embeddings": "tsx scripts/athene-reindex-embeddings.ts",
-    "athene:bench-load": "tsx scripts/benchmark-app-load.ts"
+    "athene:bench-load": "tsx scripts/benchmark-app-load.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@types/multer": "^2.1.0",
@@ -37,6 +39,7 @@
     "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.6",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
   }
 }

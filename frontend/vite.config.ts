@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 type PackageJson = {
   version?: string;
@@ -31,6 +31,10 @@ export default defineConfig({
     __GIT_COMMIT_HASH__: JSON.stringify(latestCommitHash),
     __GIT_COMMIT_TIMESTAMP__: JSON.stringify(latestCommitTimestamp),
     __GIT_BRANCH__: JSON.stringify(currentBranch),
+  },
+  test: {
+    include: ["src/**/*.test.ts"],
+    environment: "node",
   },
   server: {
     host: true,

@@ -174,6 +174,8 @@ function workOrderRowFromMeta(
     assetDocumentCount: meta.assetDocumentCount ?? 0,
     assignedEmployeeCount: 0,
     transactionCount: meta.transactionCount ?? 0,
+    inspectionPointCount: 0,
+    checkedInspectionPointCount: 0,
     workgroupId: (meta.workgroupId ?? form.workgroupId) || null,
     workgroupKey: null,
     workgroupName: null,

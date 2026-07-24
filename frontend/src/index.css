@@ -1876,6 +1876,9 @@ html.theme-crossfade-fallback #root {
   display: flex;
   flex-direction: column;
   overscroll-behavior: contain;
+  /* Prime default panels padding sits beside the panel scrollbar and reads as a
+     second vertical scrollbar track in fullscreen edit. Panel has its own padding. */
+  padding: 0 !important;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panel,
@@ -1933,6 +1936,7 @@ html.theme-crossfade-fallback #root {
   display: flex;
   flex-direction: column;
   overscroll-behavior: contain;
+  padding: 0 !important;
 }
 
 .app-sp-edit-page-view .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panel,

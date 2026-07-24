@@ -7,6 +7,7 @@ import {
   type PointerEvent,
 } from "react";
 import {
+  CheckSquare,
   CircleHelp,
   File,
   Pencil,
@@ -239,6 +240,8 @@ export function MonitoringPage() {
             assetDocumentCount: 0,
             assignedEmployeeCount: 0,
             transactionCount: 0,
+            inspectionPointCount: 0,
+            checkedInspectionPointCount: 0,
           }))
         : [],
     [loading, orders.length],
@@ -573,6 +576,13 @@ export function MonitoringPage() {
     [onDialogSaved, woDialog],
   );
 
+  const openInspectionPointsTab = useCallback(
+    (row: WorkOrder) => {
+      woDialog.openEdit(row, { tab: orderDialogTabs.InspectionPoints, onSaved: onDialogSaved });
+    },
+    [onDialogSaved, woDialog],
+  );
+
   const deleteRow = useCallback(
     async (id: string) => {
       try {
@@ -773,6 +783,25 @@ export function MonitoringPage() {
     const documentsTitle = hasDocuments
       ? t("workOrders.references")
       : t("workOrders.referencesOpenDocumentsTab");
+    const inspectionPointCount = row.inspectionPointCount ?? 0;
+    const checkedInspectionPointCount = row.checkedInspectionPointCount ?? 0;
+    const hasInspectionRound = Boolean(row.inspectionRoundId);
+    const hasInspectionPoints = inspectionPointCount > 0;
+    const inspectionActive = hasInspectionRound || hasInspectionPoints;
+    const inspectionBadge = hasInspectionPoints
+      ? `${checkedInspectionPointCount}/${inspectionPointCount}`
+      : hasInspectionRound
+        ? "0"
+        : " ";
+    const inspectionBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+      inspectionActive ? "" : " app-ref-badge--placeholder"
+    }`;
+    const inspectionTitle = hasInspectionPoints
+      ? t("workOrders.inspectionPointsReferenceTitle", {
+          checked: checkedInspectionPointCount,
+          total: inspectionPointCount,
+        })
+      : t("workOrders.inspectionPointsReference");
     return (
       <div className="flex items-center gap-1">
         <Button
@@ -802,6 +831,21 @@ export function MonitoringPage() {
           onClick={() => openPlanningTab(row)}
           aria-label={assignmentsTitle}
           title={assignmentsTitle}
+        />
+        <Button
+          type="button"
+          icon={<CheckSquare className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+          badge={inspectionBadge}
+          badgeClassName={inspectionBadgeClassName}
+          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
+            inspectionActive
+              ? "app-ref-button--inspection-points"
+              : "app-ref-button--inspection-points-empty"
+          }`}
+          disabled={!inspectionActive}
+          onClick={() => openInspectionPointsTab(row)}
+          aria-label={inspectionTitle}
+          title={inspectionTitle}
         />
       </div>
     );
