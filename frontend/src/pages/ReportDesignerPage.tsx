@@ -89,6 +89,7 @@ type BandMeta = {
 };
 
 const a4Size = { width: 595, height: 842 };
+const BAND_GUTTER_WIDTH = 118;
 const MIN_BAND_HEIGHT = 16;
 const MAX_BAND_HEIGHT = 400;
 const FIELD_DND_MIME = "application/x-report-field";
@@ -152,10 +153,12 @@ const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(-
 const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
 const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
 const toolbarBtn =
-  "inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-10 w-10 items-center justify-center rounded-sm border border-outline-variant text-on-surface transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40";
 const toolbarBtnActive = "border-primary bg-primary/10 text-primary";
 const ribbonGroup =
-  "flex min-w-0 flex-col gap-1 border-r border-outline-variant px-3 py-1 last:border-r-0";
+  "flex min-w-0 flex-col justify-center gap-1.5 border-r border-outline-variant px-3 py-2 last:border-r-0";
+const ribbonIconClass = "h-5 w-5";
+const ribbonIconStroke = 2.25;
 
 function toPreviewText(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -487,6 +490,42 @@ export function ReportDesignerPage() {
     });
   };
 
+  useEffect(() => {
+    if (step !== 2) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete") return;
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) {
+        return;
+      }
+      if (!selectedElementId) return;
+      event.preventDefault();
+      setLayout((current) => {
+        const nextElements = current.elements.filter((element) => element.id !== selectedElementId);
+        const fallback =
+          nextElements.length > 0
+            ? nextElements
+            : [
+                createElement("header", {
+                  text: "Report",
+                  y: 22,
+                  width: 500,
+                  fontSize: 18,
+                  bold: true,
+                }),
+              ];
+        setSelectedElementId(fallback[0]?.id ?? null);
+        return { ...current, elements: fallback };
+      });
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedElementId, step]);
+
   const downloadPdf = async () => {
     if (!preview || preview.rows.length === 0) {
       toastRef.current?.show({
@@ -799,10 +838,6 @@ export function ReportDesignerPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
       <Toast ref={toastRef} />
 
-      <div className="rounded-sm border border-outline-variant bg-surface-container-low p-3 text-sm text-on-surface-variant">
-        {t("reportDesigner.hint")}
-      </div>
-
       {step === 1 ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(360px,460px)_1fr]">
           <div className="flex flex-col gap-3 rounded-sm bg-surface-container-low p-4">
@@ -871,9 +906,9 @@ export function ReportDesignerPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                 {t("reportDesigner.ribbonClipboard")}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button type="button" className={createActionNavItem} onClick={addElement} title={t("reportDesigner.addText")}>
-                  <Plus className="h-4 w-4" strokeWidth={1.75} />
+                  <Plus className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                   <span>{t("reportDesigner.addText")}</span>
                 </button>
                 <button
@@ -881,9 +916,10 @@ export function ReportDesignerPage() {
                   className={deleteActionNavItem}
                   onClick={removeSelectedElement}
                   disabled={!selectedElement}
-                  title={t("reportDesigner.deleteText")}
+                  title={`${t("reportDesigner.deleteText")} (Entf)`}
                 >
-                  <Trash2 className="h-4 w-4 text-red-500" strokeWidth={1.75} />
+                  <Trash2 className={`${ribbonIconClass} text-red-500`} strokeWidth={ribbonIconStroke} />
+                  <span className="text-red-500">{t("reportDesigner.deleteText")}</span>
                 </button>
               </div>
             </div>
@@ -896,7 +932,7 @@ export function ReportDesignerPage() {
                 value={selectedElement?.text ?? ""}
                 onChange={(e) => updateSelectedElement({ text: e.target.value })}
                 disabled={!selectedElement}
-                className="w-full font-mono text-xs"
+                className="w-full font-mono text-sm"
                 placeholder={t("reportDesigner.textTemplate")}
               />
             </div>
@@ -905,7 +941,7 @@ export function ReportDesignerPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                 {t("reportDesigner.ribbonFont")}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <InputNumber
                   value={selectedElement?.fontSize ?? 12}
                   onValueChange={(e) => updateSelectedElement({ fontSize: e.value ?? 12 })}
@@ -914,8 +950,8 @@ export function ReportDesignerPage() {
                   max={48}
                   showButtons
                   buttonLayout="horizontal"
-                  className="w-[7.5rem]"
-                  inputClassName="w-12 text-center text-xs"
+                  className="w-[8.5rem]"
+                  inputClassName="w-14 text-center text-sm"
                 />
                 <button
                   type="button"
@@ -924,7 +960,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.bold ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ bold: !selectedElement?.bold })}
                 >
-                  <Bold className="h-4 w-4" strokeWidth={1.75} />
+                  <Bold className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
                 <button
                   type="button"
@@ -933,7 +969,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.italic ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ italic: !selectedElement?.italic })}
                 >
-                  <Italic className="h-4 w-4" strokeWidth={1.75} />
+                  <Italic className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
                 <button
                   type="button"
@@ -942,7 +978,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.underline ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ underline: !selectedElement?.underline })}
                 >
-                  <Underline className="h-4 w-4" strokeWidth={1.75} />
+                  <Underline className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
               </div>
             </div>
@@ -951,7 +987,7 @@ export function ReportDesignerPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                 {t("reportDesigner.ribbonAlign")}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   title={t("reportDesigner.left")}
@@ -959,7 +995,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.align === "left" ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ align: "left" })}
                 >
-                  <AlignLeft className="h-4 w-4" strokeWidth={1.75} />
+                  <AlignLeft className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
                 <button
                   type="button"
@@ -968,7 +1004,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.align === "center" ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ align: "center" })}
                 >
-                  <AlignCenter className="h-4 w-4" strokeWidth={1.75} />
+                  <AlignCenter className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
                 <button
                   type="button"
@@ -977,7 +1013,7 @@ export function ReportDesignerPage() {
                   className={`${toolbarBtn} ${selectedElement?.align === "right" ? toolbarBtnActive : ""}`}
                   onClick={() => updateSelectedElement({ align: "right" })}
                 >
-                  <AlignRight className="h-4 w-4" strokeWidth={1.75} />
+                  <AlignRight className={ribbonIconClass} strokeWidth={ribbonIconStroke} />
                 </button>
               </div>
             </div>
@@ -986,7 +1022,7 @@ export function ReportDesignerPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                 {t("reportDesigner.ribbonBand")}
               </div>
-              <div className="text-xs text-on-surface">
+              <div className="text-sm text-on-surface">
                 {sectionLabel(selectedSection)}
                 {selectedElement ? ` · #${layout.elements.findIndex((el) => el.id === selectedElement.id) + 1}` : ""}
               </div>
@@ -1230,99 +1266,190 @@ export function ReportDesignerPage() {
               <div className="text-sm font-semibold">{t("reportDesigner.canvasPreview")}</div>
               <div className="overflow-auto rounded-sm border border-outline-variant bg-surface p-4">
                 <div
-                  className="relative mx-auto border border-slate-300 bg-white shadow-sm"
-                  style={{ width: `${a4Size.width}px`, height: `${canvasContentHeight}px` }}
+                  className="relative mx-auto"
+                  style={{
+                    width: `${BAND_GUTTER_WIDTH + a4Size.width}px`,
+                    height: `${canvasContentHeight}px`,
+                    paddingLeft: `${BAND_GUTTER_WIDTH}px`,
+                  }}
                 >
-                  {(() => {
-                    let offset = 0;
-                    const nodes: ReactNode[] = [];
+                  <div
+                    className="relative border border-slate-300 bg-white shadow-sm"
+                    style={{ width: `${a4Size.width}px`, height: `${canvasContentHeight}px` }}
+                  >
+                    {(() => {
+                      let offset = 0;
+                      const nodes: ReactNode[] = [];
+                      const gutterLabels: ReactNode[] = [];
 
-                    const pushBand = (
-                      section: ReportSection,
-                      height: number,
-                      content: React.ReactNode,
-                      options?: { resizable?: boolean; labelExtra?: string },
-                    ) => {
-                      const meta = BAND_META.find((band) => band.section === section)!;
-                      const top = offset;
-                      offset += height;
-                      nodes.push(
-                        <div
-                          key={`${section}-${top}`}
-                          className={`absolute inset-x-0 ${
-                            dropTarget === section ? meta.dropTint : meta.tint
-                          } ${selectedSection === section ? meta.tintStrong : ""}`}
-                          style={{ top: `${top}px`, height: `${height}px` }}
-                          onDragOver={(event) => onBandDragOver(section, event)}
-                          onDragLeave={() => onBandDragLeave(section)}
-                          onDrop={(event) => onBandDrop(section, event)}
-                          onClick={() => setSelectedSection(section)}
-                        >
+                      const pushGutterLabel = (
+                        section: ReportSection,
+                        top: number,
+                        height: number,
+                        labelExtra?: string,
+                      ) => {
+                        const meta = BAND_META.find((band) => band.section === section)!;
+                        gutterLabels.push(
                           <div
-                            className={`pointer-events-none absolute left-1 top-1 z-10 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.labelTint}`}
+                            key={`gutter-${section}-${top}`}
+                            className={`pointer-events-none absolute right-2 flex items-start justify-end ${meta.labelTint} rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide`}
+                            style={{
+                              top: `${top + 2}px`,
+                              maxWidth: `${BAND_GUTTER_WIDTH - 10}px`,
+                              maxHeight: `${Math.max(height - 4, 14)}px`,
+                            }}
                           >
-                            {t(meta.labelKey)}
-                            {options?.labelExtra ? ` · ${options.labelExtra}` : ""}
-                          </div>
-                          {content}
-                          {options?.resizable !== false ? (
-                            <div
-                              className={`absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize ${meta.resizeTint}`}
-                              onMouseDown={(event) => startBandResize(section, event)}
-                            />
-                          ) : null}
-                        </div>,
-                      );
-                    };
-
-                    pushBand(
-                      "header",
-                      layout.header.height,
-                      elementsFor("header").map((element) =>
-                        renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
-                      ),
-                      {
-                        labelExtra: layout.header.firstPageOnly
-                          ? t("reportDesigner.firstPageOnlyShort")
-                          : undefined,
-                      },
-                    );
-
-                    if (layout.grouping.enabled) {
-                      const groups =
-                        previewGroups.length > 0
-                          ? previewGroups
-                          : [{ key: t("reportDesigner.sampleGroup"), rows: [{} as Record<string, unknown>] }];
-
-                      groups.forEach((group, groupIndex) => {
-                        const extras = {
-                          _groupValue: group.key || t("reportDesigner.sampleGroup"),
-                          _groupCount: String(Math.max(group.rows.length, 1)),
-                          _pageNumber: "1",
-                        };
-                        pushBand(
-                          "groupHeader",
-                          layout.groupHeader.height,
-                          elementsFor("groupHeader").map((element) =>
-                            renderElementButton(
-                              element,
-                              group.rows[0] ?? null,
-                              extras,
-                              `-gh-${groupIndex}`,
-                              groupIndex === 0,
-                            ),
-                          ),
-                          { resizable: groupIndex === 0 },
+                            <span className="truncate">
+                              {t(meta.labelKey)}
+                              {labelExtra ? ` · ${labelExtra}` : ""}
+                            </span>
+                          </div>,
                         );
+                      };
 
+                      const pushBand = (
+                        section: ReportSection,
+                        height: number,
+                        content: ReactNode,
+                        options?: { resizable?: boolean; labelExtra?: string; showLabel?: boolean },
+                      ) => {
+                        const meta = BAND_META.find((band) => band.section === section)!;
+                        const top = offset;
+                        offset += height;
+                        if (options?.showLabel !== false) {
+                          pushGutterLabel(section, top, height, options?.labelExtra);
+                        }
+                        nodes.push(
+                          <div
+                            key={`${section}-${top}`}
+                            className={`absolute inset-x-0 ${
+                              dropTarget === section ? meta.dropTint : meta.tint
+                            } ${selectedSection === section ? meta.tintStrong : ""}`}
+                            style={{ top: `${top}px`, height: `${height}px` }}
+                            onDragOver={(event) => onBandDragOver(section, event)}
+                            onDragLeave={() => onBandDragLeave(section)}
+                            onDrop={(event) => onBandDrop(section, event)}
+                            onClick={() => setSelectedSection(section)}
+                          >
+                            {content}
+                            {options?.resizable !== false ? (
+                              <div
+                                className={`absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize ${meta.resizeTint}`}
+                                onMouseDown={(event) => startBandResize(section, event)}
+                              />
+                            ) : null}
+                          </div>,
+                        );
+                      };
+
+                      pushBand(
+                        "header",
+                        layout.header.height,
+                        elementsFor("header").map((element) =>
+                          renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
+                        ),
+                        {
+                          labelExtra: layout.header.firstPageOnly
+                            ? t("reportDesigner.firstPageOnlyShort")
+                            : undefined,
+                        },
+                      );
+
+                      if (layout.grouping.enabled) {
+                        const groups =
+                          previewGroups.length > 0
+                            ? previewGroups
+                            : [{ key: t("reportDesigner.sampleGroup"), rows: [{} as Record<string, unknown>] }];
+
+                        groups.forEach((group, groupIndex) => {
+                          const extras = {
+                            _groupValue: group.key || t("reportDesigner.sampleGroup"),
+                            _groupCount: String(Math.max(group.rows.length, 1)),
+                            _pageNumber: "1",
+                          };
+                          pushBand(
+                            "groupHeader",
+                            layout.groupHeader.height,
+                            elementsFor("groupHeader").map((element) =>
+                              renderElementButton(
+                                element,
+                                group.rows[0] ?? null,
+                                extras,
+                                `-gh-${groupIndex}`,
+                                groupIndex === 0,
+                              ),
+                            ),
+                            { resizable: groupIndex === 0, showLabel: groupIndex === 0 },
+                          );
+
+                          const detailRows =
+                            group.rows.length > 0 ? group.rows.slice(0, 8) : [{} as Record<string, unknown>];
+                          detailRows.forEach((row, rowIndex) => {
+                            const detailTop = offset;
+                            offset += layout.detail.height;
+                            if (groupIndex === 0 && rowIndex === 0) {
+                              pushGutterLabel("detail", detailTop, layout.detail.height);
+                            }
+                            nodes.push(
+                              <div
+                                key={`detail-${groupIndex}-${rowIndex}`}
+                                className={`absolute inset-x-0 border-b border-dashed border-amber-200/80 ${
+                                  dropTarget === "detail" ? "bg-amber-100/70" : "bg-amber-50/40"
+                                }`}
+                                style={{ top: `${detailTop}px`, height: `${layout.detail.height}px` }}
+                                onDragOver={(event) => onBandDragOver("detail", event)}
+                                onDragLeave={() => onBandDragLeave("detail")}
+                                onDrop={(event) => onBandDrop("detail", event)}
+                                onClick={() => setSelectedSection("detail")}
+                              >
+                                {elementsFor("detail").map((element) =>
+                                  renderElementButton(
+                                    element,
+                                    row,
+                                    extras,
+                                    `-g${groupIndex}-r${rowIndex}`,
+                                    groupIndex === 0 && rowIndex === 0,
+                                  ),
+                                )}
+                                {groupIndex === 0 && rowIndex === 0 ? (
+                                  <div
+                                    className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize bg-amber-400/50 hover:bg-amber-500"
+                                    onMouseDown={(event) => startBandResize("detail", event)}
+                                  />
+                                ) : null}
+                              </div>,
+                            );
+                          });
+
+                          pushBand(
+                            "groupFooter",
+                            layout.groupFooter.height,
+                            elementsFor("groupFooter").map((element) =>
+                              renderElementButton(
+                                element,
+                                group.rows[0] ?? null,
+                                extras,
+                                `-gf-${groupIndex}`,
+                                groupIndex === 0,
+                              ),
+                            ),
+                            { resizable: groupIndex === 0, showLabel: groupIndex === 0 },
+                          );
+                        });
+                      } else {
                         const detailRows =
-                          group.rows.length > 0 ? group.rows.slice(0, 8) : [{} as Record<string, unknown>];
+                          (preview?.rows ?? []).length > 0
+                            ? (preview?.rows ?? []).slice(0, 12)
+                            : [{} as Record<string, unknown>];
                         detailRows.forEach((row, rowIndex) => {
                           const detailTop = offset;
                           offset += layout.detail.height;
+                          if (rowIndex === 0) {
+                            pushGutterLabel("detail", detailTop, layout.detail.height);
+                          }
                           nodes.push(
                             <div
-                              key={`detail-${groupIndex}-${rowIndex}`}
+                              key={`detail-plain-${rowIndex}`}
                               className={`absolute inset-x-0 border-b border-dashed border-amber-200/80 ${
                                 dropTarget === "detail" ? "bg-amber-100/70" : "bg-amber-50/40"
                               }`}
@@ -1332,21 +1459,16 @@ export function ReportDesignerPage() {
                               onDrop={(event) => onBandDrop("detail", event)}
                               onClick={() => setSelectedSection("detail")}
                             >
-                              {groupIndex === 0 && rowIndex === 0 ? (
-                                <div className="pointer-events-none absolute left-1 top-1 z-10 rounded-sm bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
-                                  {t("reportDesigner.detailSection")}
-                                </div>
-                              ) : null}
                               {elementsFor("detail").map((element) =>
                                 renderElementButton(
                                   element,
-                                  row,
-                                  extras,
-                                  `-g${groupIndex}-r${rowIndex}`,
-                                  groupIndex === 0 && rowIndex === 0,
+                                  Object.keys(row).length ? row : null,
+                                  { _pageNumber: "1" },
+                                  `-r${rowIndex}`,
+                                  rowIndex === 0,
                                 ),
                               )}
-                              {groupIndex === 0 && rowIndex === 0 ? (
+                              {rowIndex === 0 ? (
                                 <div
                                   className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize bg-amber-400/50 hover:bg-amber-500"
                                   onMouseDown={(event) => startBandResize("detail", event)}
@@ -1355,110 +1477,62 @@ export function ReportDesignerPage() {
                             </div>,
                           );
                         });
+                      }
 
-                        pushBand(
-                          "groupFooter",
-                          layout.groupFooter.height,
-                          elementsFor("groupFooter").map((element) =>
-                            renderElementButton(
-                              element,
-                              group.rows[0] ?? null,
-                              extras,
-                              `-gf-${groupIndex}`,
-                              groupIndex === 0,
-                            ),
-                          ),
-                          { resizable: groupIndex === 0 },
-                        );
-                      });
-                    } else {
-                      const detailRows =
-                        (preview?.rows ?? []).length > 0
-                          ? (preview?.rows ?? []).slice(0, 12)
-                          : [{} as Record<string, unknown>];
-                      detailRows.forEach((row, rowIndex) => {
-                        const detailTop = offset;
-                        offset += layout.detail.height;
-                        nodes.push(
-                          <div
-                            key={`detail-plain-${rowIndex}`}
-                            className={`absolute inset-x-0 border-b border-dashed border-amber-200/80 ${
-                              dropTarget === "detail" ? "bg-amber-100/70" : "bg-amber-50/40"
-                            }`}
-                            style={{ top: `${detailTop}px`, height: `${layout.detail.height}px` }}
-                            onDragOver={(event) => onBandDragOver("detail", event)}
-                            onDragLeave={() => onBandDragLeave("detail")}
-                            onDrop={(event) => onBandDrop("detail", event)}
-                            onClick={() => setSelectedSection("detail")}
-                          >
-                            {rowIndex === 0 ? (
-                              <div className="pointer-events-none absolute left-1 top-1 z-10 rounded-sm bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
-                                {t("reportDesigner.detailSection")}
-                              </div>
-                            ) : null}
-                            {elementsFor("detail").map((element) =>
-                              renderElementButton(
-                                element,
-                                Object.keys(row).length ? row : null,
-                                { _pageNumber: "1" },
-                                `-r${rowIndex}`,
-                                rowIndex === 0,
-                              ),
-                            )}
-                            {rowIndex === 0 ? (
-                              <div
-                                className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize bg-amber-400/50 hover:bg-amber-500"
-                                onMouseDown={(event) => startBandResize("detail", event)}
-                              />
-                            ) : null}
-                          </div>,
-                        );
-                      });
-                    }
-
-                    const footerTop = Math.max(offset, canvasContentHeight - layout.footer.height);
-                    nodes.push(
-                      <div
-                        key="footer-band"
-                        className={`absolute inset-x-0 ${
-                          dropTarget === "footer" ? "bg-slate-100/90" : "bg-slate-50/70"
-                        }`}
-                        style={{ top: `${footerTop}px`, height: `${layout.footer.height}px` }}
-                        onDragOver={(event) => onBandDragOver("footer", event)}
-                        onDragLeave={() => onBandDragLeave("footer")}
-                        onDrop={(event) => onBandDrop("footer", event)}
-                        onClick={() => setSelectedSection("footer")}
-                      >
-                        <div className="pointer-events-none absolute left-1 top-1 z-10 rounded-sm bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
-                          {t("reportDesigner.footerSection")}
-                        </div>
-                        {elementsFor("footer").map((element) =>
-                          renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
-                        )}
+                      const footerTop = Math.max(offset, canvasContentHeight - layout.footer.height);
+                      pushGutterLabel("footer", footerTop, layout.footer.height);
+                      nodes.push(
                         <div
-                          className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-row-resize bg-slate-400/50 hover:bg-slate-500"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            const startY = event.clientY;
-                            const origin = layout.footer.height;
-                            const onMove = (moveEvent: MouseEvent) => {
-                              // Dragging the top edge up increases height.
-                              setBandHeight("footer", origin - (moveEvent.clientY - startY));
-                            };
-                            const onUp = () => {
-                              window.removeEventListener("mousemove", onMove);
-                              window.removeEventListener("mouseup", onUp);
-                            };
-                            window.addEventListener("mousemove", onMove);
-                            window.addEventListener("mouseup", onUp);
-                          }}
-                        />
-                      </div>,
-                    );
+                          key="footer-band"
+                          className={`absolute inset-x-0 ${
+                            dropTarget === "footer" ? "bg-slate-100/90" : "bg-slate-50/70"
+                          }`}
+                          style={{ top: `${footerTop}px`, height: `${layout.footer.height}px` }}
+                          onDragOver={(event) => onBandDragOver("footer", event)}
+                          onDragLeave={() => onBandDragLeave("footer")}
+                          onDrop={(event) => onBandDrop("footer", event)}
+                          onClick={() => setSelectedSection("footer")}
+                        >
+                          {elementsFor("footer").map((element) =>
+                            renderElementButton(element, preview?.rows[0] ?? null, { _pageNumber: "1" }),
+                          )}
+                          <div
+                            className="absolute inset-x-0 top-0 z-10 h-1.5 cursor-row-resize bg-slate-400/50 hover:bg-slate-500"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              const startY = event.clientY;
+                              const origin = layout.footer.height;
+                              const onMove = (moveEvent: MouseEvent) => {
+                                setBandHeight("footer", origin - (moveEvent.clientY - startY));
+                              };
+                              const onUp = () => {
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                              };
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                          />
+                        </div>,
+                      );
 
-                    return nodes;
-                  })()}
+                      return (
+                        <>
+                          <div
+                            className="pointer-events-none absolute inset-y-0"
+                            style={{
+                              left: `-${BAND_GUTTER_WIDTH}px`,
+                              width: `${BAND_GUTTER_WIDTH}px`,
+                            }}
+                          >
+                            {gutterLabels}
+                          </div>
+                          {nodes}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
