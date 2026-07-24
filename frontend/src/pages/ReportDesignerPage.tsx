@@ -19,6 +19,7 @@ import {
   Grid3x3,
   Italic,
   Layers,
+  Minus,
   Plus,
   Sparkles,
   Trash2,
@@ -166,6 +167,9 @@ const ribbonGroup =
   "relative flex min-w-0 flex-col justify-center gap-1.5 border border-outline-variant bg-surface-container-low px-3 py-2 first:rounded-l-sm last:rounded-r-sm [&:not(:first-child)]:-ml-px";
 const ribbonIconClass = "h-6 w-6";
 const ribbonIconStroke = 2.5;
+const FONT_SIZE_MIN = 8;
+const FONT_SIZE_MAX = 48;
+const FONT_SIZE_PRESETS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48] as const;
 const panelBand =
   "flex min-h-0 flex-col overflow-auto border border-outline-variant bg-surface-container-low";
 
@@ -435,10 +439,20 @@ export function ReportDesignerPage() {
         next.x = clamp(next.x, 0, a4Size.width - 20);
         next.y = clamp(next.y, 0, Math.max(bandHeight - 8, 0));
         next.width = clamp(next.width, 20, 560);
-        next.fontSize = clamp(next.fontSize, 8, 48);
+        next.fontSize = clamp(next.fontSize, FONT_SIZE_MIN, FONT_SIZE_MAX);
         return next;
       }),
     }));
+  };
+
+  const setSelectedFontSize = (raw: number | null | undefined) => {
+    if (raw == null || Number.isNaN(raw)) return;
+    updateSelectedElement({ fontSize: clamp(Math.round(raw), FONT_SIZE_MIN, FONT_SIZE_MAX) });
+  };
+
+  const nudgeSelectedFontSize = (delta: number) => {
+    if (!selectedElement) return;
+    setSelectedFontSize(selectedElement.fontSize + delta);
   };
 
   const addElement = () => {
@@ -985,17 +999,61 @@ export function ReportDesignerPage() {
                 {t("reportDesigner.ribbonFont")}
               </div>
               <div className="flex items-center gap-1.5">
-                <InputNumber
-                  value={selectedElement?.fontSize ?? 12}
-                  onValueChange={(e) => updateSelectedElement({ fontSize: e.value ?? 12 })}
-                  disabled={!selectedElement}
-                  min={8}
-                  max={48}
-                  showButtons
-                  buttonLayout="horizontal"
-                  className="w-[8.5rem]"
-                  inputClassName="w-14 text-center text-sm"
-                />
+                <div
+                  className={`inline-flex h-11 items-stretch overflow-hidden rounded-sm border-2 border-outline bg-surface shadow-sm ${
+                    selectedElement ? "" : "opacity-40"
+                  }`}
+                  title={t("reportDesigner.fontSize")}
+                >
+                  <button
+                    type="button"
+                    aria-label={`${t("reportDesigner.fontSize")} −`}
+                    disabled={!selectedElement || (selectedElement?.fontSize ?? FONT_SIZE_MIN) <= FONT_SIZE_MIN}
+                    className="inline-flex w-9 items-center justify-center text-on-surface transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40"
+                    onClick={() => nudgeSelectedFontSize(-1)}
+                  >
+                    <Minus className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                  <div className="flex min-w-[4.25rem] items-center justify-center gap-0.5 border-x-2 border-outline bg-surface px-1.5">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={FONT_SIZE_MIN}
+                      max={FONT_SIZE_MAX}
+                      step={1}
+                      list="report-designer-font-sizes"
+                      disabled={!selectedElement}
+                      value={selectedElement?.fontSize ?? ""}
+                      placeholder="—"
+                      className="h-full w-8 appearance-none border-0 bg-transparent text-center text-sm font-semibold tabular-nums text-on-surface outline-none [appearance:textfield] disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      onChange={(e) => {
+                        const next = e.target.value === "" ? null : Number(e.target.value);
+                        if (next == null) return;
+                        setSelectedFontSize(next);
+                      }}
+                      onBlur={(e) => {
+                        if (!selectedElement) return;
+                        const next = Number(e.target.value);
+                        setSelectedFontSize(Number.isFinite(next) ? next : selectedElement.fontSize);
+                      }}
+                    />
+                    <span className="text-[10px] font-medium text-on-surface-variant">pt</span>
+                  </div>
+                  <datalist id="report-designer-font-sizes">
+                    {FONT_SIZE_PRESETS.map((size) => (
+                      <option key={size} value={size} />
+                    ))}
+                  </datalist>
+                  <button
+                    type="button"
+                    aria-label={`${t("reportDesigner.fontSize")} +`}
+                    disabled={!selectedElement || (selectedElement?.fontSize ?? FONT_SIZE_MAX) >= FONT_SIZE_MAX}
+                    className="inline-flex w-9 items-center justify-center text-on-surface transition-colors hover:bg-surface-container-high disabled:pointer-events-none disabled:opacity-40"
+                    onClick={() => nudgeSelectedFontSize(1)}
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </div>
                 <button
                   type="button"
                   title={t("reportDesigner.bold")}
