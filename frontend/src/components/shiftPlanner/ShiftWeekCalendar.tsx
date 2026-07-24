@@ -433,7 +433,7 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
             addingShiftId={addingShiftId}
             onRemoveBlock={handleRemoveBlock}
             onAddShift={handleAddShift}
-            onAssignEmployee={viewMode === "simple" ? handleAssignEmployee : undefined}
+            onAssignEmployee={handleAssignEmployee}
             onRequestRollout={viewMode === "complex" ? handleRequestRollout : undefined}
             onUnassignEmployee={handleUnassignEmployee}
             onEmployeeDragStart={setDraggingEmployeeId}

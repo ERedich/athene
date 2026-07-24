@@ -131,14 +131,17 @@ export function ShiftBlockBar({
     e.preventDefault();
     e.stopPropagation();
     setIsDropTarget(false);
-    const denied = !assignmentAllowed;
     setIsDropDenied(false);
     if (!onAssignEmployee && !onRequestRollout) return;
-    // Past dates: keep the drop-denied affordance only — do not call assign/rollout.
-    if (denied) return;
 
     const employeeId = readShiftEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
+
+    // Past dates: still notify via parent handlers (they toast + no-op); do not open rollout.
+    if (!assignmentAllowed) {
+      onAssignEmployee?.(block, employeeId);
+      return;
+    }
 
     if (layoutMode === "timeline" && onRequestRollout) {
       onRequestRollout(block, employeeId, e);
