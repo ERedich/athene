@@ -23,8 +23,9 @@ const MAX_TARGET_APP_KEY_LENGTH = 64;
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
 const MIN_BAND_HEIGHT = 16;
-const MAX_BAND_HEIGHT = 400;
-const ALLOWED_TARGET_APP_KEYS = new Set(["", "assets"]);
+/** Allows full-page single-record layouts (A4 ~842pt minus header/footer). */
+const MAX_BAND_HEIGHT = 720;
+const ALLOWED_TARGET_APP_KEYS = new Set(["", "assets", "workOrders"]);
 const RECORD_ID_PLACEHOLDER_RE = /\{\{\s*recordId\s*\}\}/g;
 const ANY_PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 
@@ -82,7 +83,7 @@ type ReportFilter = {
   value: string;
 };
 
-type ReportElementKind = "text" | "qr" | "barcode";
+type ReportElementKind = "text" | "qr" | "barcode" | "hline" | "vline";
 
 type ReportElement = {
   id: string;
@@ -97,12 +98,13 @@ type ReportElement = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  color: string;
   kind: ReportElementKind;
   sourceField: string;
   dateFormat: string;
 };
 
-type BandConfig = { height: number };
+type BandConfig = { height: number; backgroundColor: string };
 
 type ReportLayout = {
   header: BandConfig & { firstPageOnly: boolean };
@@ -372,9 +374,27 @@ function parseBandHeight(raw: unknown, fallback: number): number | null {
   return Math.round(height);
 }
 
-const REPORT_ELEMENT_KINDS: ReportElementKind[] = ["text", "qr", "barcode"];
+const REPORT_ELEMENT_KINDS: ReportElementKind[] = ["text", "qr", "barcode", "hline", "vline"];
 const MIN_ELEMENT_BOX_HEIGHT = 16;
 const MAX_ELEMENT_BOX_HEIGHT = 200;
+const MIN_LINE_STROKE = 1;
+const MAX_LINE_STROKE = 8;
+const MIN_VLINE_LENGTH = 8;
+const DEFAULT_TEXT_COLOR = "#111827";
+
+function normalizeTextColor(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_TEXT_COLOR;
+  const trimmed = raw.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : DEFAULT_TEXT_COLOR;
+}
+
+/** Empty string = transparent (no fill). */
+function normalizeBandBackgroundColor(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : "";
+}
 
 function parseReportElement(raw: unknown, bandHeight: number): ReportElement | null {
   if (!raw || typeof raw !== "object") return null;
@@ -387,13 +407,14 @@ function parseReportElement(raw: unknown, bandHeight: number): ReportElement | n
   const text = typeof obj.text === "string" ? obj.text.slice(0, MAX_TEXT_LENGTH) : "";
   const x = Number(obj.x);
   const y = Number(obj.y);
-  const width = Number(obj.width);
+  const widthRaw = Number(obj.width);
   const fontSize = Number(obj.fontSize ?? 12);
   const alignRaw = typeof obj.align === "string" ? obj.align : "left";
   const align = alignRaw === "center" || alignRaw === "right" ? alignRaw : "left";
   const bold = Boolean(obj.bold);
   const italic = Boolean(obj.italic);
   const underline = Boolean(obj.underline);
+  const color = normalizeTextColor(obj.color ?? DEFAULT_TEXT_COLOR);
   const kindRaw = typeof obj.kind === "string" ? obj.kind : "text";
   const kind = REPORT_ELEMENT_KINDS.includes(kindRaw as ReportElementKind)
     ? (kindRaw as ReportElementKind)
@@ -402,14 +423,29 @@ function parseReportElement(raw: unknown, bandHeight: number): ReportElement | n
     typeof obj.sourceField === "string" ? obj.sourceField.trim().slice(0, 120) : "";
   const dateFormat =
     typeof obj.dateFormat === "string" ? obj.dateFormat.trim().slice(0, 64) : "";
-  const heightFallback = kind === "qr" ? 72 : kind === "barcode" ? 40 : 16;
+  const heightFallback =
+    kind === "qr" ? 72 : kind === "barcode" ? 40 : kind === "hline" ? 1 : kind === "vline" ? 80 : 16;
   const heightRaw = Number(obj.height ?? heightFallback);
-  const height = Number.isFinite(heightRaw)
-    ? Math.max(MIN_ELEMENT_BOX_HEIGHT, Math.min(MAX_ELEMENT_BOX_HEIGHT, Math.round(heightRaw)))
-    : heightFallback;
+  let height = heightFallback;
+  if (Number.isFinite(heightRaw)) {
+    const rounded = Math.round(heightRaw);
+    if (kind === "hline") {
+      height = Math.max(MIN_LINE_STROKE, Math.min(MAX_LINE_STROKE, rounded));
+    } else if (kind === "vline") {
+      height = Math.max(MIN_VLINE_LENGTH, Math.min(MAX_ELEMENT_BOX_HEIGHT, rounded));
+    } else {
+      height = Math.max(MIN_ELEMENT_BOX_HEIGHT, Math.min(MAX_ELEMENT_BOX_HEIGHT, rounded));
+    }
+  }
 
   if (!id || !section || !Number.isFinite(x) || !Number.isFinite(y)) return null;
-  if (!Number.isFinite(width) || width < 20 || width > 560) return null;
+  if (!Number.isFinite(widthRaw)) return null;
+  const widthRounded = Math.round(widthRaw);
+  if (kind === "vline") {
+    if (widthRounded < MIN_LINE_STROKE || widthRounded > MAX_LINE_STROKE) return null;
+  } else if (widthRounded < 20 || widthRounded > 560) {
+    return null;
+  }
   if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 48) return null;
 
   return {
@@ -418,13 +454,14 @@ function parseReportElement(raw: unknown, bandHeight: number): ReportElement | n
     text,
     x: Math.max(0, Math.min(PAGE_WIDTH - 20, Math.round(x))),
     y: Math.max(0, Math.min(Math.max(bandHeight - 8, 0), Math.round(y))),
-    width: Math.round(width),
+    width: widthRounded,
     height,
     fontSize: Math.round(fontSize),
     align,
     bold,
     italic,
     underline,
+    color,
     kind,
     sourceField,
     dateFormat,
@@ -542,11 +579,24 @@ function parseReportLayout(raw: unknown): ReportLayout | null {
   const header = {
     height: headerHeight,
     firstPageOnly: Boolean(headerRaw.firstPageOnly),
+    backgroundColor: normalizeBandBackgroundColor(headerRaw.backgroundColor),
   };
-  const groupHeader = { height: groupHeaderHeight };
-  const detail = { height: detailHeight };
-  const groupFooter = { height: groupFooterHeight };
-  const footer = { height: footerHeight };
+  const groupHeader = {
+    height: groupHeaderHeight,
+    backgroundColor: normalizeBandBackgroundColor(groupHeaderRaw.backgroundColor),
+  };
+  const detail = {
+    height: detailHeight,
+    backgroundColor: normalizeBandBackgroundColor(detailRaw.backgroundColor),
+  };
+  const groupFooter = {
+    height: groupFooterHeight,
+    backgroundColor: normalizeBandBackgroundColor(groupFooterRaw.backgroundColor),
+  };
+  const footer = {
+    height: footerHeight,
+    backgroundColor: normalizeBandBackgroundColor(footerRaw.backgroundColor),
+  };
 
   const bandHeightBySection: Record<ReportSection, number> = {
     header: header.height,
@@ -841,9 +891,11 @@ async function renderCodeImage(
   value: string,
   width: number,
   height: number,
+  color: string,
 ): Promise<Buffer | null> {
   const text = value.trim();
   if (!text) return null;
+  const ink = normalizeTextColor(color);
   try {
     if (kind === "qr") {
       return await QRCode.toBuffer(text, {
@@ -851,6 +903,10 @@ async function renderCodeImage(
         width: Math.max(width, 32),
         margin: 1,
         errorCorrectionLevel: "M",
+        color: {
+          dark: ink,
+          light: "#00000000",
+        },
       });
     }
     return await bwipjs.toBuffer({
@@ -859,10 +915,23 @@ async function renderCodeImage(
       scale: 2,
       height: Math.max(8, Math.round(height / 3)),
       includetext: false,
+      barcolor: ink.slice(1),
     });
   } catch {
     return null;
   }
+}
+
+function fillBandBackground(
+  doc: InstanceType<typeof PDFDocument>,
+  offsetY: number,
+  height: number,
+  backgroundColor: string,
+) {
+  if (!backgroundColor || height <= 0) return;
+  doc.save();
+  doc.rect(0, offsetY, PAGE_WIDTH, height).fill(backgroundColor);
+  doc.restore();
 }
 
 async function drawElements(
@@ -874,6 +943,24 @@ async function drawElements(
 ) {
   for (const element of elements) {
     const top = offsetY + element.y;
+    if (element.kind === "hline" || element.kind === "vline") {
+      const stroke =
+        element.kind === "hline"
+          ? Math.max(MIN_LINE_STROKE, Math.min(MAX_LINE_STROKE, element.height))
+          : Math.max(MIN_LINE_STROKE, Math.min(MAX_LINE_STROKE, element.width));
+      doc.save();
+      doc.lineWidth(stroke);
+      doc.strokeColor(element.color || DEFAULT_TEXT_COLOR);
+      if (element.kind === "hline") {
+        const y = top + element.height / 2;
+        doc.moveTo(element.x, y).lineTo(element.x + element.width, y).stroke();
+      } else {
+        const x = element.x + element.width / 2;
+        doc.moveTo(x, top).lineTo(x, top + element.height).stroke();
+      }
+      doc.restore();
+      continue;
+    }
     if (element.kind === "qr" || element.kind === "barcode") {
       const raw = element.sourceField ? row[element.sourceField] : "";
       let value = toSafeText(raw);
@@ -881,13 +968,26 @@ async function drawElements(
         const date = toDateValue(raw);
         if (date) value = formatDateBucket(date, element.dateFormat.trim());
       }
-      const image = await renderCodeImage(element.kind, value, element.width, element.height);
+      const image = await renderCodeImage(
+        element.kind,
+        value,
+        element.width,
+        element.height,
+        element.color || DEFAULT_TEXT_COLOR,
+      );
       if (image) {
-        doc.image(image, element.x, top, {
-          width: element.width,
-          height: element.height,
+        const imageOpts: {
+          fit: [number, number];
+          align?: "center" | "right";
+          valign?: "center";
+        } = {
           fit: [element.width, element.height],
-        });
+          valign: "center",
+        };
+        if (element.align === "center" || element.align === "right") {
+          imageOpts.align = element.align;
+        }
+        doc.image(image, element.x, top, imageOpts);
       }
       continue;
     }
@@ -895,6 +995,7 @@ async function drawElements(
     const value = applyTemplate(element.text, row, extras, element.dateFormat);
     doc.font(resolveFont(element.bold, element.italic));
     doc.fontSize(element.fontSize);
+    doc.fillColor(element.color || DEFAULT_TEXT_COLOR);
     doc.text(value, element.x, top, {
       width: element.width,
       align: element.align,
@@ -948,8 +1049,11 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
   });
 
   const drawPageFooter = async () => {
-    if (footer.height <= 0 || footerElements.length === 0) return;
-    await drawElements(doc, footerElements, headerRow, PAGE_HEIGHT - footer.height, pageExtras());
+    if (footer.height <= 0) return;
+    const footerTop = PAGE_HEIGHT - footer.height;
+    fillBandBackground(doc, footerTop, footer.height, footer.backgroundColor);
+    if (footerElements.length === 0) return;
+    await drawElements(doc, footerElements, headerRow, footerTop, pageExtras());
   };
 
   const startPage = async () => {
@@ -961,6 +1065,7 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
     contentBottom = PAGE_HEIGHT - footer.height;
     const showHeader = !(header.firstPageOnly && pageIndex > 1);
     if (showHeader) {
+      fillBandBackground(doc, 0, header.height, header.backgroundColor);
       await drawElements(doc, headerElements, headerRow, 0, pageExtras());
       cursorY = header.height;
     } else {
@@ -986,6 +1091,7 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
 
     if (grouping.enabled) {
       await ensureSpace(groupHeader.height);
+      fillBandBackground(doc, cursorY, groupHeader.height, groupHeader.backgroundColor);
       await drawElements(doc, groupHeaderElements, group.rows[0] ?? {}, cursorY, {
         ...groupExtras,
         ...pageExtras(),
@@ -995,6 +1101,7 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
 
     for (const row of group.rows) {
       await ensureSpace(detail.height);
+      fillBandBackground(doc, cursorY, detail.height, detail.backgroundColor);
       await drawElements(doc, detailElements, row, cursorY, {
         ...groupExtras,
         ...pageExtras(),
@@ -1004,6 +1111,7 @@ async function renderReportPdf(payload: RenderPdfBody): Promise<Buffer> {
 
     if (grouping.enabled) {
       await ensureSpace(groupFooter.height);
+      fillBandBackground(doc, cursorY, groupFooter.height, groupFooter.backgroundColor);
       await drawElements(doc, groupFooterElements, group.rows[0] ?? {}, cursorY, {
         ...groupExtras,
         ...pageExtras(),

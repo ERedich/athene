@@ -45,7 +45,7 @@ export function SparePartEditPageView({
 
   return (
     <>
-      <div className="app-wo-edit-page-view app-sp-edit-page-view flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-hidden">
+      <div className="app-wo-edit-page-view app-sp-edit-page-view flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden">
         <header className="app-wo-edit-page-view__header flex shrink-0 items-center gap-3 border-b border-solid app-wo-detail-outline-border px-1 py-2">
           <Button
             type="button"

@@ -46,7 +46,7 @@ export function WorkOrderEditPageView(props: WorkOrderEditDialogProps) {
     <>
       <div
         ref={pageRootRef}
-        className={`app-wo-edit-page-view flex min-h-0 w-full flex-1 flex-col${!editingId ? " app-wo-create-surface" : ""}`}
+        className={`app-wo-edit-page-view flex min-h-0 w-full flex-1 flex-col overflow-hidden${!editingId ? " app-wo-create-surface" : ""}`}
       >
         <header className="app-wo-edit-page-view__header flex shrink-0 items-center gap-3 border-b border-solid app-wo-detail-outline-border px-1 py-2">
           <Button

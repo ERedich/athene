@@ -35,6 +35,7 @@ import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
+import { useWorkOrderReportPrint } from "../lib/useWorkOrderReportPrint";
 import { buildWorkOrderBigMenuModel } from "../lib/workOrderBigContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
@@ -120,10 +121,12 @@ export function MonitoringPage() {
   const { appParameterBooleans } = useAuth();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const { openPrintDialog, PrintDialogEl } = useWorkOrderReportPrint(toastRef);
   const overview = useWorkOrderOverviewPanel();
   const woDialog = useWorkOrderDialog();
   const subscriptions = useWorkOrderSubscriptions();
-  const refData = useWorkOrderSearchReferenceData();
+  /** Reference data only needed for the search panel — defer so the table shell can open immediately. */
+  const refData = useWorkOrderSearchReferenceData({ autoLoad: false });
   const [searchParams, setSearchParams] = useSearchParams();
   const helpTour = useAtheneTour({
     steps: MONITORING_HELP_STEPS,
@@ -141,6 +144,7 @@ export function MonitoringPage() {
   if (initialDeeplinkRef.current === undefined) {
     initialDeeplinkRef.current = parseWorkOrderDeeplinkParams(searchParams);
   }
+  const initialDeeplink = initialDeeplinkRef.current;
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [newlyCreatedOrderIds, setNewlyCreatedOrderIds] = useState<Record<string, number>>({});
@@ -148,14 +152,19 @@ export function MonitoringPage() {
   const [deletedOrderIds, setDeletedOrderIds] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [appliedAdvanced, setAppliedAdvanced] = useState<WorkOrderAdvancedSearchState>(() => emptyWorkOrderAdvancedSearch());
-  const [panelDraft, setPanelDraft] = useState<WorkOrderAdvancedSearchState>(() => emptyWorkOrderAdvancedSearch());
+  const [searchTerm, setSearchTerm] = useState(() => initialDeeplink?.quickSearch ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => initialDeeplink?.quickSearch.trim() ?? "");
+  const [appliedAdvanced, setAppliedAdvanced] = useState<WorkOrderAdvancedSearchState>(() =>
+    initialDeeplink ? coerceWorkOrderAdvancedSearch(initialDeeplink.advanced) : emptyWorkOrderAdvancedSearch(),
+  );
+  const [panelDraft, setPanelDraft] = useState<WorkOrderAdvancedSearchState>(() =>
+    initialDeeplink ? coerceWorkOrderAdvancedSearch(initialDeeplink.advanced) : emptyWorkOrderAdvancedSearch(),
+  );
   const [searchPanelVisible, setSearchPanelVisible] = useState(false);
   const [searchPresets, setSearchPresets] = useState<{ id: string; name: string; isOwner: boolean }[]>([]);
   const [headerPresetSelectionId, setHeaderPresetSelectionId] = useState<string | null>(null);
-  const [searchBootstrapDone, setSearchBootstrapDone] = useState(false);
+  /** With a deeplink, orders can load immediately; otherwise wait for default-preset bootstrap. */
+  const [searchBootstrapDone, setSearchBootstrapDone] = useState(() => Boolean(initialDeeplink));
 
   const cleverSearchEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_ENABLE_CLEVER_SEARCH]);
   const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
@@ -284,16 +293,19 @@ export function MonitoringPage() {
     }
   }, []);
 
+  const openSearchPanel = useCallback(() => {
+    setPanelDraft(appliedAdvanced);
+    setSearchPanelVisible(true);
+  }, [appliedAdvanced]);
+
+  /** Load sites/assets/… only when the advanced search panel is opened. */
+  useEffect(() => {
+    if (!searchPanelVisible || refData.loaded) return;
+    void refData.reload();
+  }, [refData.loaded, refData.reload, searchPanelVisible]);
+
   const bootstrapSearchPresets = useCallback(async () => {
     const deeplink = initialDeeplinkRef.current;
-    if (deeplink) {
-      setSearchTerm(deeplink.quickSearch);
-      setDebouncedSearch(deeplink.quickSearch.trim());
-      setAppliedAdvanced(deeplink.advanced);
-      setPanelDraft(deeplink.advanced);
-      setHeaderPresetSelectionId(null);
-      setSearchParams({}, { replace: true });
-    }
     try {
       const [rows, defaults] = await Promise.all([fetchWorkOrderSearchPresets(), fetchWorkOrderSearchPresetDefaults()]);
       setSearchPresets(rows);
@@ -313,6 +325,12 @@ export function MonitoringPage() {
       setSearchPresets([]);
     } finally {
       setSearchBootstrapDone(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialDeeplinkRef.current) {
+      setSearchParams({}, { replace: true });
     }
   }, [setSearchParams]);
 
@@ -369,7 +387,9 @@ export function MonitoringPage() {
     [resetSearchToUnconfiguredState, t],
   );
 
+  const loadDataGenRef = useRef(0);
   const loadData = useCallback(async () => {
+    const gen = ++loadDataGenRef.current;
     setLoading(true);
     try {
       const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
@@ -377,11 +397,13 @@ export function MonitoringPage() {
       const ordersRes = await apiFetch(ordersPath);
       if (!ordersRes.ok) throw new Error("load");
       const ordersData = (await ordersRes.json()) as WorkOrder[];
+      if (gen !== loadDataGenRef.current) return;
       setOrders(ordersData);
     } catch {
+      if (gen !== loadDataGenRef.current) return;
       toastRef.current?.show({ severity: "error", summary: t("workOrders.loadError"), life: 6000 });
     } finally {
-      setLoading(false);
+      if (gen === loadDataGenRef.current) setLoading(false);
     }
   }, [appliedAdvanced, debouncedSearch, t]);
 
@@ -637,10 +659,7 @@ export function MonitoringPage() {
             type="button"
             data-onboarding="mon-filter"
             className={primaryActionNavItem}
-            onClick={() => {
-              setPanelDraft(appliedAdvanced);
-              setSearchPanelVisible(true);
-            }}
+            onClick={openSearchPanel}
           >
             <Search className={`${primaryActionIcon} !h-4 !w-4 shrink-0`} size={16} strokeWidth={1.75} aria-hidden />
             <span>{t("workOrders.searchPanel.open")}</span>
@@ -689,7 +708,6 @@ export function MonitoringPage() {
       setHeaderActions(null);
     };
   }, [
-    appliedAdvanced,
     applyHeaderSearchPreset,
     confirmDelete,
     headerPresetDropdownOptions,
@@ -697,6 +715,7 @@ export function MonitoringPage() {
     helpTour.start,
     openCreate,
     openEdit,
+    openSearchPanel,
     searchPresets.length,
     searchTerm,
     selectedOrder,
@@ -964,6 +983,9 @@ export function MonitoringPage() {
         onCreateFeedback: (row) => openFeedbackTab(row, "create"),
         onCloseOrder: confirmCloseWorkOrder,
         onCancelOrder: confirmCancelWorkOrder,
+        onPrint: (row) => {
+          void openPrintDialog(row);
+        },
         subscription: {
           isSubscribed: (id) => subscriptions.isSubscribed(id),
           onToggle: (row) => {
@@ -996,6 +1018,7 @@ export function MonitoringPage() {
       openFeedbackTab,
       openFollowUpOrder,
       openPlanningTab,
+      openPrintDialog,
       selectedOrder,
       startOrder,
       subscriptions,
@@ -1067,6 +1090,7 @@ export function MonitoringPage() {
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       {helpTour.coachmark}
       <Toast ref={toastRef} position="top-right" />
+      {PrintDialogEl}
       <WorkOrderSearchPanel
         visible={searchPanelVisible}
         onHide={() => setSearchPanelVisible(false)}

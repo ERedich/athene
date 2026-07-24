@@ -10,7 +10,12 @@ import {
 import { flushSync } from "react-dom";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { ContextMenu } from "primereact/contextmenu";
-import type { DataTableContextMenuSingleSelectionChangeEvent, DataTableRowEvent } from "primereact/datatable";
+import type {
+  DataTableContextMenuMultipleSelectionChangeEvent,
+  DataTableContextMenuSingleSelectionChangeEvent,
+  DataTableRowEvent,
+  DataTableValueArray,
+} from "primereact/datatable";
 import type { MenuItem } from "primereact/menuitem";
 
 import { lucidePrimeBtnIcon } from "../icons/lucide";
@@ -34,26 +39,66 @@ function showContextMenu(cmRef: RefObject<ContextMenu | null>, originalEvent: Sy
   cmRef.current?.show(originalEvent);
 }
 
-type DataTableContextMenuOptions<T extends object> = {
+function rowKey<T extends object>(row: T): unknown {
+  return (row as { id?: unknown }).id ?? row;
+}
+
+type ContextMenuSharedOptions<T extends object> = {
   labels: { new: string; edit: string; delete: string };
   handlers: CrudHandlers<T>;
-  selection: T | null;
-  setSelection: (row: T | null) => void;
   leadingItems?: (row: T | null) => MenuItem[];
   extraItems?: (row: T | null) => MenuItem[];
 };
 
+type SingleSelectionOptions<T extends object> = ContextMenuSharedOptions<T> & {
+  selectionMode?: "single";
+  selection: T | null;
+  setSelection: (row: T | null) => void;
+};
+
+type MultipleSelectionOptions<T extends object> = ContextMenuSharedOptions<T> & {
+  selectionMode: "multiple";
+  selection: T[];
+  setSelection: (rows: T[]) => void;
+};
+
+export type DataTableContextMenuOptions<T extends object> =
+  | SingleSelectionOptions<T>
+  | MultipleSelectionOptions<T>;
+
 /**
  * PrimeReact DataTable + ContextMenu: CRUD entries and optional per-table extras.
  * Use `wrapperProps` on a div wrapping the table so empty-area right-clicks still open the menu (Neu only).
+ *
+ * With `selectionMode: "multiple"`, Edit/Delete require exactly one selected row.
+ * Right-click keeps the multi-selection when the clicked row is already selected.
  */
 export function useTableContextMenu<T extends object>(opts: DataTableContextMenuOptions<T>) {
-  const { labels, handlers, selection, setSelection, leadingItems, extraItems } = opts;
+  const { labels, handlers, leadingItems, extraItems } = opts;
+  const selectionMode = opts.selectionMode ?? "single";
+  const isMultiple = selectionMode === "multiple";
   const cmRef = useRef<ContextMenu>(null);
 
+  const selectionRef = useRef(opts.selection);
+  selectionRef.current = opts.selection;
+
+  const selectedRows = useMemo((): T[] => {
+    if (isMultiple) {
+      return opts.selection as T[];
+    }
+    const single = opts.selection as T | null;
+    return single != null ? [single] : [];
+  }, [isMultiple, opts.selection]);
+
+  /** Edit/Delete only when exactly one row is selected. */
+  const exactlyOne = selectedRows.length === 1;
+  const primaryRow: T | null = exactlyOne ? selectedRows[0]! : null;
+  /** Extras that need “any selection” (e.g. Print) still get a primary row when length >= 1. */
+  const menuPrimary: T | null = selectedRows[0] ?? null;
+
   const model = useMemo((): MenuItem[] => {
-    const hasRow = selection != null;
-    const leading = leadingItems?.(selection) ?? [];
+    // Leading (e.g. Athene): only when exactly one row — same rule as Edit/Delete.
+    const leading = leadingItems?.(exactlyOne ? primaryRow : null) ?? [];
     const base: MenuItem[] = [
       {
         label: labels.new,
@@ -63,21 +108,22 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
       {
         label: labels.edit,
         icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
+        disabled: !exactlyOne,
         command: () => {
-          if (selection != null) handlers.onEdit?.(selection);
+          if (exactlyOne && primaryRow != null) handlers.onEdit?.(primaryRow);
         },
       },
       {
         label: labels.delete,
         icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
+        disabled: !exactlyOne,
         command: () => {
-          if (selection != null) handlers.onDelete?.(selection);
+          if (exactlyOne && primaryRow != null) handlers.onDelete?.(primaryRow);
         },
       },
     ];
-    const extra = extraItems?.(selection) ?? [];
+    // Extras (e.g. Print): any non-empty selection.
+    const extra = extraItems?.(menuPrimary) ?? [];
     return [
       ...leading,
       ...(leading.length > 0
@@ -86,23 +132,57 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
       ...base,
       ...(extra.length > 0 ? [{ separator: true }, ...extra] : []),
     ];
-  }, [extraItems, handlers, labels.delete, labels.edit, labels.new, leadingItems, selection]);
+  }, [
+    exactlyOne,
+    extraItems,
+    handlers,
+    labels.delete,
+    labels.edit,
+    labels.new,
+    leadingItems,
+    menuPrimary,
+    primaryRow,
+  ]);
+
+  const setSingle = (opts as SingleSelectionOptions<T>).setSelection;
+  const setMultiple = (opts as MultipleSelectionOptions<T>).setSelection;
 
   const onContextMenuSelectionChange = useCallback(
-    (e: DataTableContextMenuSingleSelectionChangeEvent<T[]>) => {
-      setSelection((e.value as T | null) ?? null);
+    (
+      e:
+        | DataTableContextMenuSingleSelectionChangeEvent<DataTableValueArray>
+        | DataTableContextMenuMultipleSelectionChangeEvent<DataTableValueArray>,
+    ) => {
+      // Multi: PrimeReact reports only the right-clicked row — never collapse selection here.
+      // Selection updates for context menu happen in onContextMenu instead.
+      if (isMultiple) return;
+
+      const value = e.value;
+      setSingle(
+        (Array.isArray(value) ? (value[0] as T | undefined) : (value as T | null)) ?? null,
+      );
     },
-    [setSelection],
+    [isMultiple, setSingle],
   );
 
   const onContextMenu = useCallback(
     (e: DataTableRowEvent) => {
+      const row = e.data as T;
       flushSync(() => {
-        setSelection(e.data as T);
+        if (isMultiple) {
+          const current = selectionRef.current as T[];
+          const alreadySelected = current.some((r) => rowKey(r) === rowKey(row));
+          // Keep multi-selection when right-clicking an already selected row.
+          if (!alreadySelected) {
+            setMultiple([row]);
+          }
+        } else {
+          setSingle(row);
+        }
       });
       showContextMenu(cmRef, e.originalEvent);
     },
-    [setSelection],
+    [isMultiple, setMultiple, setSingle],
   );
 
   const wrapperProps = useMemo(
@@ -111,23 +191,35 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
         if (isPrimeTableBodyRowTarget(e.target)) return;
         e.preventDefault();
         flushSync(() => {
-          setSelection(null);
+          if (isMultiple) {
+            setMultiple([]);
+          } else {
+            setSingle(null);
+          }
         });
         cmRef.current?.show(e);
       },
     }),
-    [setSelection],
+    [isMultiple, setMultiple, setSingle],
   );
 
-  const tableProps = useMemo(
-    () => ({
+  const tableProps = useMemo(() => {
+    if (isMultiple) {
+      return {
+        cellSelection: false as const,
+        // Do not bind contextMenuSelection to the row selection: PrimeReact always
+        // reports a single right-clicked row and would collapse multi-select.
+        onContextMenuSelectionChange,
+        onContextMenu,
+      };
+    }
+    return {
       cellSelection: false as const,
-      contextMenuSelection: selection ?? undefined,
+      contextMenuSelection: (opts.selection as T | null) ?? undefined,
       onContextMenuSelectionChange,
       onContextMenu,
-    }),
-    [onContextMenu, onContextMenuSelectionChange, selection],
-  );
+    };
+  }, [isMultiple, onContextMenu, onContextMenuSelectionChange, opts.selection]);
 
   const ContextMenuEl: ReactElement = (
     <ContextMenu

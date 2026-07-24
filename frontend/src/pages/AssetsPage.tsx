@@ -527,9 +527,12 @@ type AssetInspectionPoint = {
   key: string;
   name: string;
   type: InspectionPointType;
-};type HeaderActionsProps = {
+}; 
+
+type HeaderActionsProps = {
   t: (key: string) => string;
-  selectedAsset: Asset | null;
+  /** Edit/Delete only when exactly one asset is selected. */
+  canEditOrDelete: boolean;
   onCreate: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -539,7 +542,7 @@ type AssetInspectionPoint = {
 
 function AssetsHeaderActions({
   t,
-  selectedAsset,
+  canEditOrDelete,
   onCreate,
   onEdit,
   onDelete,
@@ -562,7 +565,7 @@ function AssetsHeaderActions({
         <button
           type="button"
           className={primaryActionNavItem}
-          disabled={!selectedAsset}
+          disabled={!canEditOrDelete}
           onClick={onEdit}
         >
           <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
@@ -573,7 +576,7 @@ function AssetsHeaderActions({
         <button
           type="button"
           className={deleteActionNavItem}
-          disabled={!selectedAsset}
+          disabled={!canEditOrDelete}
           onClick={onDelete}
         >
           <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
@@ -679,7 +682,7 @@ export function AssetsPage() {
   const [costCenters, setCostCenters] = useState<CostCenterListRow[]>([]);
   const [classifications, setClassifications] = useState<ClassificationListRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [selectedAssets, setSelectedAssets] = useState<Asset[]>([]);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [activeTabIndex, setActiveTabIndex] = useState<AssetDialogTab>(
     assetDialogTabs.General,
@@ -716,7 +719,7 @@ export function AssetsPage() {
   const [sortField, setSortField] = useState<string>("key");
   const [sortOrder, setSortOrder] = useState<1 | -1>(1);
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
-  const [printTarget, setPrintTarget] = useState<Asset | null>(null);
+  const [printTargets, setPrintTargets] = useState<Asset[]>([]);
   const [printReports, setPrintReports] = useState<
     Array<{ id: string; key: string; name: string }>
   >([]);
@@ -1777,7 +1780,7 @@ export function AssetsPage() {
       try {
         const res = await apiFetch(`/api/assets/${id}`, { method: "DELETE" });
         if (res.status === 204) {
-          setSelectedAsset((cur) => (cur?.id === id ? null : cur));
+          setSelectedAssets((cur) => cur.filter((a) => a.id !== id));
           await loadData();
           toastRef.current?.show({
             severity: "success",
@@ -1861,8 +1864,9 @@ export function AssetsPage() {
   );
 
   const openPrintDialog = useCallback(
-    async (row: Asset) => {
-      setPrintTarget(row);
+    async (rows: Asset[]) => {
+      if (rows.length === 0) return;
+      setPrintTargets(rows);
       setPrintDialogOpen(true);
       setPrintReportsLoading(true);
       setPrintReports([]);
@@ -1893,30 +1897,32 @@ export function AssetsPage() {
 
   const renderSavedReport = useCallback(
     async (definitionId: string) => {
-      if (!printTarget) return;
+      if (printTargets.length === 0) return;
       setPrintRenderingId(definitionId);
       try {
-        const res = await apiFetch("/api/report-designer/render-saved", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            definitionId,
-            recordId: printTarget.id,
-          }),
-        });
-        if (!res.ok) throw new Error("pdf");
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
         const report = printReports.find((r) => r.id === definitionId);
         const base =
           report?.name?.toLowerCase().replace(/[^a-z0-9-_]+/g, "-") || "report";
-        anchor.download = `${base}-${printTarget.key || "asset"}.pdf`;
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(url);
+        for (const target of printTargets) {
+          const res = await apiFetch("/api/report-designer/render-saved", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              definitionId,
+              recordId: target.id,
+            }),
+          });
+          if (!res.ok) throw new Error("pdf");
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = `${base}-${target.key || "asset"}.pdf`;
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+          URL.revokeObjectURL(url);
+        }
         setPrintDialogOpen(false);
       } catch {
         toastRef.current?.show({
@@ -1928,10 +1934,11 @@ export function AssetsPage() {
         setPrintRenderingId(null);
       }
     },
-    [printReports, printTarget, t],
+    [printReports, printTargets, t],
   );
 
   const tableCtx = useTableContextMenu<Asset>({
+    selectionMode: "multiple",
     labels: {
       new: t("assets.new"),
       edit: t("assets.edit"),
@@ -1942,8 +1949,8 @@ export function AssetsPage() {
       onEdit: openEdit,
       onDelete: confirmDelete,
     },
-    selection: selectedAsset,
-    setSelection: setSelectedAsset,
+    selection: selectedAssets,
+    setSelection: setSelectedAssets,
     leadingItems: atheneContextMenuItems,
     extraItems: (row) => {
       if (!row) return [];
@@ -1952,7 +1959,7 @@ export function AssetsPage() {
           label: t("assets.print"),
           icon: <Printer className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
           command: () => {
-            void openPrintDialog(row);
+            void openPrintDialog(selectedAssets);
           },
         },
       ];
@@ -1960,13 +1967,13 @@ export function AssetsPage() {
   });
 
   useEffect(() => {
-    if (
-      selectedAsset &&
-      !assets.some((asset) => asset.id === selectedAsset.id)
-    ) {
-      setSelectedAsset(null);
-    }
-  }, [assets, selectedAsset]);
+    setSelectedAssets((prev) => {
+      const next = prev.filter((selected) =>
+        assets.some((asset) => asset.id === selected.id),
+      );
+      return next.length === prev.length ? prev : next;
+    });
+  }, [assets]);
 
   useEffect(() => {
     setHeaderRowCount(filteredAssets.length);
@@ -1975,23 +1982,25 @@ export function AssetsPage() {
     };
   }, [filteredAssets.length, setHeaderRowCount]);
 
+  const singleSelected = selectedAssets.length === 1 ? selectedAssets[0]! : null;
+
   const headerActionsNode = useMemo(
     () => (
       <AssetsHeaderActions
         t={t}
-        selectedAsset={selectedAsset}
+        canEditOrDelete={singleSelected != null}
         onCreate={openCreate}
         onEdit={() => {
-          if (selectedAsset) openEdit(selectedAsset);
+          if (singleSelected) openEdit(singleSelected);
         }}
         onDelete={() => {
-          if (selectedAsset) confirmDelete(selectedAsset);
+          if (singleSelected) confirmDelete(singleSelected);
         }}
         searchTermInput={searchTermInput}
         onSearchTermInputChange={setSearchTermInput}
       />
     ),
-    [confirmDelete, openCreate, openEdit, searchTermInput, selectedAsset, t],
+    [confirmDelete, openCreate, openEdit, searchTermInput, singleSelected, t],
   );
 
   useEffect(() => {
@@ -2324,9 +2333,13 @@ export function AssetsPage() {
         modal
       >
         <div className="flex flex-col gap-2">
-          {printTarget ? (
+          {printTargets.length === 1 ? (
             <div className="mb-1 text-xs text-on-surface-variant">
-              {printTarget.key} — {printTarget.name}
+              {printTargets[0]!.key} — {printTargets[0]!.name}
+            </div>
+          ) : printTargets.length > 1 ? (
+            <div className="mb-1 text-xs text-on-surface-variant">
+              {t("assets.printSelectedCount", { count: printTargets.length })}
             </div>
           ) : null}
           {printReportsLoading ? (
@@ -2367,14 +2380,14 @@ export function AssetsPage() {
             value={pagedAssets}
             loading={loading}
             dataKey="id"
-            selection={selectedAsset}
+            selection={selectedAssets}
             onSelectionChange={(e) =>
-              setSelectedAsset(e.value as Asset | null)
+              setSelectedAssets((e.value as Asset[] | null) ?? [])
             }
             onRowDoubleClick={(e) => openEdit(e.data as Asset)}
             {...tableCtx.tableProps}
-            selectionMode="single"
-            metaKeySelection={false}
+            selectionMode="multiple"
+            metaKeySelection
             stripedRows
             showGridlines
             scrollable

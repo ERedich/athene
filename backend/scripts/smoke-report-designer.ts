@@ -112,6 +112,40 @@ const layout = __test__.parseReportLayout({
       dateFormat: "",
     },
     {
+      id: "d-hline",
+      section: "detail",
+      text: "",
+      x: 40,
+      y: 72,
+      width: 220,
+      height: 1,
+      fontSize: 10,
+      align: "left",
+      bold: false,
+      italic: false,
+      underline: false,
+      kind: "hline",
+      sourceField: "",
+      dateFormat: "",
+    },
+    {
+      id: "d-vline",
+      section: "detail",
+      text: "",
+      x: 280,
+      y: 20,
+      width: 1,
+      height: 56,
+      fontSize: 10,
+      align: "left",
+      bold: false,
+      italic: false,
+      underline: false,
+      kind: "vline",
+      sourceField: "",
+      dateFormat: "",
+    },
+    {
       id: "gf1",
       section: "groupFooter",
       text: "Count {{_groupCount}} / Σ {{_groupSum_qty}} / Ø {{_groupAvg_qty}}",
@@ -162,6 +196,16 @@ if (!qrEl || qrEl.kind !== "qr" || qrEl.sourceField !== "name" || qrEl.height !=
 }
 if (!bcEl || bcEl.kind !== "barcode" || bcEl.sourceField !== "name") {
   console.error("barcode element parse unexpected", bcEl);
+  process.exit(1);
+}
+const hlineEl = layout.elements.find((el) => el.id === "d-hline");
+const vlineEl = layout.elements.find((el) => el.id === "d-vline");
+if (!hlineEl || hlineEl.kind !== "hline" || hlineEl.height !== 1 || hlineEl.width !== 220) {
+  console.error("hline element parse unexpected", hlineEl);
+  process.exit(1);
+}
+if (!vlineEl || vlineEl.kind !== "vline" || vlineEl.width !== 1 || vlineEl.height !== 56) {
+  console.error("vline element parse unexpected", vlineEl);
   process.exit(1);
 }
 if (!dateEl || dateEl.dateFormat !== "DD.MM.YYYY") {

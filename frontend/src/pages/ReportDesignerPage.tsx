@@ -16,19 +16,25 @@ import {
   ArrowRight,
   ArrowUpAZ,
   Bold,
+  ChevronRight,
   Download,
   Filter,
   FolderOpen,
   Italic,
+  Minus,
   Plus,
   QrCode,
+  RefreshCw,
   Save,
   ScanBarcode,
+  SeparatorVertical,
   Sparkles,
   Trash2,
   Type,
   Underline,
 } from "lucide-react";
+import { sql } from "@codemirror/lang-sql";
+import CodeMirror from "@uiw/react-codemirror";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
@@ -37,14 +43,15 @@ import { Column } from "primereact/column";
 import { DataTable } from "primereact/datatable";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
-import { InputTextarea } from "primereact/inputtextarea";
 import { Toast } from "primereact/toast";
 
 import { useAuth } from "../auth/AuthContext";
 import { AppDialog } from "../components/AppDialog";
+import { QueryDesignerModal } from "../components/reportDesigner/QueryDesignerModal";
 import { ReportCodePreview } from "../components/ReportCodePreview";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { useThemeSwitcher } from "../theme";
 
 type Step = 1 | 2;
 type ReportSection = "header" | "groupHeader" | "detail" | "groupFooter" | "footer";
@@ -77,6 +84,7 @@ type QueryPreviewResponse = {
 const TARGET_APP_OPTIONS = [
   { value: "", labelKey: "reportDesigner.targetAppNone" },
   { value: "assets", labelKey: "reportDesigner.targetAppAssets" },
+  { value: "workOrders", labelKey: "reportDesigner.targetAppWorkOrders" },
 ] as const;
 
 const RECORD_ID_TOKEN = "{{recordId}}";
@@ -92,7 +100,7 @@ function slugifyReportKey(value: string): string {
     .slice(0, 100);
 }
 
-type ReportElementKind = "text" | "qr" | "barcode";
+type ReportElementKind = "text" | "qr" | "barcode" | "hline" | "vline";
 
 type ReportElement = {
   id: string;
@@ -107,12 +115,13 @@ type ReportElement = {
   bold: boolean;
   italic: boolean;
   underline: boolean;
+  color: string;
   kind: ReportElementKind;
   sourceField: string;
   dateFormat: string;
 };
 
-type BandConfig = { height: number };
+type BandConfig = { height: number; backgroundColor: string };
 
 type ReportLayout = {
   header: BandConfig & { firstPageOnly: boolean };
@@ -155,11 +164,27 @@ type BandMeta = {
 const a4Size = { width: 595, height: 842 };
 const BAND_GUTTER_WIDTH = 148;
 const MIN_BAND_HEIGHT = 16;
-const MAX_BAND_HEIGHT = 400;
+const MAX_BAND_HEIGHT = 720;
+const DEFAULT_TEXT_COLOR = "#111827";
+const DEFAULT_BAND_BACKGROUND_COLOR = "#ffffff";
 const FIELD_DND_MIME = "application/x-report-field";
 const POOL_DND_MIME = "application/x-report-pool-item";
 const GRID_SIZES = [5, 10, 20] as const;
 type GridSize = (typeof GRID_SIZES)[number];
+
+function normalizeTextColor(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_TEXT_COLOR;
+  const trimmed = raw.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : DEFAULT_TEXT_COLOR;
+}
+
+/** Empty string = transparent (no fill). Valid #rrggbb otherwise. */
+function normalizeBandBackgroundColor(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : "";
+}
 
 const BAND_META: BandMeta[] = [
   {
@@ -466,13 +491,14 @@ function createDefaultLayout(): ReportLayout {
     kind: "text" as const,
     sourceField: "",
     dateFormat: "",
+    color: DEFAULT_TEXT_COLOR,
   };
   return {
-    header: { height: 72, firstPageOnly: false },
-    groupHeader: { height: 28 },
-    detail: { height: 32 },
-    groupFooter: { height: 24 },
-    footer: { height: 28 },
+    header: { height: 72, firstPageOnly: false, backgroundColor: "" },
+    groupHeader: { height: 28, backgroundColor: "" },
+    detail: { height: 32, backgroundColor: "" },
+    groupFooter: { height: 24, backgroundColor: "" },
+    footer: { height: 28, backgroundColor: "" },
     grouping: { enabled: false, field: "", sort: "asc", granularity: "day", dateFormat: "YYYY-MM-DD" },
     filters: [],
     elements: [
@@ -482,7 +508,7 @@ function createDefaultLayout(): ReportLayout {
         text: "Report",
         x: 40,
         y: 22,
-        width: 500,
+        width: 600,
         fontSize: 18,
         align: "left",
         bold: true,
@@ -550,6 +576,41 @@ function createDefaultLayout(): ReportLayout {
   };
 }
 
+function isLineKind(kind: ReportElementKind): kind is "hline" | "vline" {
+  return kind === "hline" || kind === "vline";
+}
+
+function defaultTextForKind(kind: ReportElementKind): string {
+  if (kind === "qr") return "QR";
+  if (kind === "barcode") return "Barcode";
+  if (kind === "hline" || kind === "vline") return "";
+  return "Text";
+}
+
+function defaultWidthForKind(kind: ReportElementKind): number {
+  if (kind === "qr") return 72;
+  if (kind === "barcode") return 160;
+  if (kind === "hline") return 200;
+  if (kind === "vline") return 1;
+  return 200;
+}
+
+function defaultHeightForKind(kind: ReportElementKind): number {
+  if (kind === "qr") return 72;
+  if (kind === "barcode") return 40;
+  if (kind === "hline") return 1;
+  if (kind === "vline") return 80;
+  return 16;
+}
+
+function minWidthForKind(kind: ReportElementKind): number {
+  return kind === "vline" ? 1 : 20;
+}
+
+function maxWidthForKind(kind: ReportElementKind): number {
+  return kind === "vline" ? 8 : 560;
+}
+
 function createElement(
   section: ReportSection,
   patch: Partial<ReportElement> = {},
@@ -558,16 +619,17 @@ function createElement(
   return {
     id: crypto.randomUUID(),
     section,
-    text: patch.text ?? (kind === "qr" ? "QR" : kind === "barcode" ? "Barcode" : "Text"),
+    text: patch.text ?? defaultTextForKind(kind),
     x: patch.x ?? 40,
     y: patch.y ?? 6,
-    width: patch.width ?? (kind === "qr" ? 72 : kind === "barcode" ? 160 : 200),
-    height: patch.height ?? (kind === "qr" ? 72 : kind === "barcode" ? 40 : 16),
+    width: patch.width ?? defaultWidthForKind(kind),
+    height: patch.height ?? defaultHeightForKind(kind),
     fontSize: patch.fontSize ?? 12,
     align: patch.align ?? "left",
     bold: patch.bold ?? false,
     italic: patch.italic ?? false,
     underline: patch.underline ?? false,
+    color: normalizeTextColor(patch.color ?? DEFAULT_TEXT_COLOR),
     kind,
     sourceField: patch.sourceField ?? "",
     dateFormat: patch.dateFormat ?? "",
@@ -608,7 +670,9 @@ type PoolDragItem =
   | { type: "token"; token: string }
   | { type: "text" }
   | { type: "qr" }
-  | { type: "barcode" };
+  | { type: "barcode" }
+  | { type: "hline" }
+  | { type: "vline" };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -627,6 +691,47 @@ function bandHeightOf(layout: ReportLayout, section: ReportSection): number {
     case "footer":
       return layout.footer.height;
   }
+}
+
+function bandBackgroundOf(layout: ReportLayout, section: ReportSection): string {
+  switch (section) {
+    case "header":
+      return normalizeBandBackgroundColor(layout.header.backgroundColor);
+    case "groupHeader":
+      return normalizeBandBackgroundColor(layout.groupHeader.backgroundColor);
+    case "detail":
+      return normalizeBandBackgroundColor(layout.detail.backgroundColor);
+    case "groupFooter":
+      return normalizeBandBackgroundColor(layout.groupFooter.backgroundColor);
+    case "footer":
+      return normalizeBandBackgroundColor(layout.footer.backgroundColor);
+  }
+}
+
+function withNormalizedBandColors(layout: ReportLayout): ReportLayout {
+  return {
+    ...layout,
+    header: {
+      ...layout.header,
+      backgroundColor: normalizeBandBackgroundColor(layout.header.backgroundColor),
+    },
+    groupHeader: {
+      ...layout.groupHeader,
+      backgroundColor: normalizeBandBackgroundColor(layout.groupHeader.backgroundColor),
+    },
+    detail: {
+      ...layout.detail,
+      backgroundColor: normalizeBandBackgroundColor(layout.detail.backgroundColor),
+    },
+    groupFooter: {
+      ...layout.groupFooter,
+      backgroundColor: normalizeBandBackgroundColor(layout.groupFooter.backgroundColor),
+    },
+    footer: {
+      ...layout.footer,
+      backgroundColor: normalizeBandBackgroundColor(layout.footer.backgroundColor),
+    },
+  };
 }
 
 function defaultTextForSection(section: ReportSection): string {
@@ -649,6 +754,7 @@ export function ReportDesignerPage() {
   const toastRef = useRef<Toast>(null);
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const { user } = useAuth();
+  const { dark } = useThemeSwitcher();
 
   const [step, setStep] = useState<Step>(1);
   const [query, setQuery] = useState(
@@ -677,6 +783,8 @@ export function ReportDesignerPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [poolTab, setPoolTab] = useState<"tools" | "fields">("tools");
+  const [querySourceTab, setQuerySourceTab] = useState<"sql" | "designer">("sql");
+  const [queryDesignerOpen, setQueryDesignerOpen] = useState(false);
 
   const selectedElement = useMemo(
     () => layout.elements.find((element) => element.id === selectedElementId) ?? null,
@@ -685,6 +793,14 @@ export function ReportDesignerPage() {
   const selectedIsText = !selectedElement || selectedElement.kind === "text";
   const selectedIsCode =
     selectedElement?.kind === "qr" || selectedElement?.kind === "barcode";
+  const selectedIsLine = selectedElement ? isLineKind(selectedElement.kind) : false;
+  const selectedSupportsColor = Boolean(selectedElement);
+  const selectedSupportsAlign = Boolean(
+    selectedElement &&
+      (selectedElement.kind === "text" ||
+        selectedElement.kind === "barcode" ||
+        selectedElement.kind === "qr"),
+  );
 
   const visibleBands = useMemo(() => {
     return BAND_META.filter((band) => {
@@ -782,10 +898,25 @@ export function ReportDesignerPage() {
         const bandHeight = bandHeightOf(current, next.section);
         if (patch.x != null) next.x = snapValue(next.x, gridSize, snapToGrid);
         if (patch.y != null) next.y = snapValue(next.y, gridSize, snapToGrid);
-        if (patch.width != null) next.width = snapValue(next.width, gridSize, snapToGrid);
+        if (patch.width != null) {
+          const snapWidth = next.kind !== "vline" && snapToGrid;
+          next.width = snapValue(next.width, gridSize, snapWidth);
+        }
+        if (patch.color != null) {
+          next.color = normalizeTextColor(patch.color);
+        }
+        if (patch.height != null) {
+          if (next.kind === "hline") {
+            next.height = clamp(Math.round(next.height), 1, 8);
+          } else if (next.kind === "vline") {
+            next.height = clamp(Math.round(next.height), 8, 200);
+          } else if (next.kind === "qr" || next.kind === "barcode") {
+            next.height = clamp(Math.round(next.height), 16, 200);
+          }
+        }
         next.x = clamp(next.x, 0, a4Size.width - 20);
         next.y = clamp(next.y, 0, Math.max(bandHeight - 8, 0));
-        next.width = clamp(next.width, 20, 560);
+        next.width = clamp(next.width, minWidthForKind(next.kind), maxWidthForKind(next.kind));
         next.fontSize = clamp(next.fontSize, FONT_SIZE_MIN, FONT_SIZE_MAX);
         return next;
       }),
@@ -918,7 +1049,7 @@ export function ReportDesignerPage() {
     setReportTitle(item.name);
     setTargetAppKey(item.targetAppKey || "");
     setQuery(item.sql);
-    setLayout(item.layout);
+    setLayout(withNormalizedBandColors(item.layout));
     setPreview(null);
     setSelectedElementId(null);
     setStep(1);
@@ -1184,10 +1315,10 @@ export function ReportDesignerPage() {
     setLayout((current) => {
       const next = { ...current };
       if (section === "header") next.header = { ...current.header, height: nextHeight };
-      else if (section === "groupHeader") next.groupHeader = { height: nextHeight };
-      else if (section === "detail") next.detail = { height: nextHeight };
-      else if (section === "groupFooter") next.groupFooter = { height: nextHeight };
-      else next.footer = { height: nextHeight };
+      else if (section === "groupHeader") next.groupHeader = { ...current.groupHeader, height: nextHeight };
+      else if (section === "detail") next.detail = { ...current.detail, height: nextHeight };
+      else if (section === "groupFooter") next.groupFooter = { ...current.groupFooter, height: nextHeight };
+      else next.footer = { ...current.footer, height: nextHeight };
 
       next.elements = current.elements.map((element) =>
         element.section === section
@@ -1195,6 +1326,25 @@ export function ReportDesignerPage() {
           : element,
       );
       return next;
+    });
+  };
+
+  const setBandBackgroundColor = (section: ReportSection, backgroundColor: string) => {
+    const nextColor = normalizeBandBackgroundColor(backgroundColor);
+    setLayout((current) => {
+      if (section === "header") {
+        return { ...current, header: { ...current.header, backgroundColor: nextColor } };
+      }
+      if (section === "groupHeader") {
+        return { ...current, groupHeader: { ...current.groupHeader, backgroundColor: nextColor } };
+      }
+      if (section === "detail") {
+        return { ...current, detail: { ...current.detail, backgroundColor: nextColor } };
+      }
+      if (section === "groupFooter") {
+        return { ...current, groupFooter: { ...current.groupFooter, backgroundColor: nextColor } };
+      }
+      return { ...current, footer: { ...current.footer, backgroundColor: nextColor } };
     });
   };
 
@@ -1206,6 +1356,36 @@ export function ReportDesignerPage() {
 
     const onMove = (moveEvent: MouseEvent) => {
       setBandHeight(section, origin + (moveEvent.clientY - startY));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const startElementWidthResize = (element: ReportElement, event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedElementId(element.id);
+    setSelectedSection(element.section);
+    const startX = event.clientX;
+    const originWidth = element.width;
+    const minW = minWidthForKind(element.kind);
+    const maxW = Math.min(maxWidthForKind(element.kind), a4Size.width - element.x - 8);
+    const snapWidth = element.kind !== "vline" && snapToGrid;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const nextWidth = snapValue(originWidth + (moveEvent.clientX - startX), gridSize, snapWidth);
+      setLayout((current) => ({
+        ...current,
+        elements: current.elements.map((entry) =>
+          entry.id === element.id
+            ? { ...entry, width: clamp(nextWidth, minW, maxW) }
+            : entry,
+        ),
+      }));
     };
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
@@ -1272,6 +1452,10 @@ export function ReportDesignerPage() {
       event.dataTransfer.setData("text/plain", "QR");
     } else if (item.type === "barcode") {
       event.dataTransfer.setData("text/plain", "Barcode");
+    } else if (item.type === "hline") {
+      event.dataTransfer.setData("text/plain", "HLine");
+    } else if (item.type === "vline") {
+      event.dataTransfer.setData("text/plain", "VLine");
     } else {
       event.dataTransfer.setData("text/plain", "Text");
     }
@@ -1322,6 +1506,20 @@ export function ReportDesignerPage() {
           text = "Barcode";
           width = 160;
           height = 40;
+          bold = false;
+          fontSize = 10;
+        } else if (item.type === "hline") {
+          kind = "hline";
+          text = "";
+          width = 200;
+          height = 1;
+          bold = false;
+          fontSize = 10;
+        } else if (item.type === "vline") {
+          kind = "vline";
+          text = "";
+          width = 1;
+          height = 80;
           bold = false;
           fontSize = 10;
         } else {
@@ -1388,6 +1586,8 @@ export function ReportDesignerPage() {
       value={resolveCodeValue(element, row)}
       width={element.width}
       height={element.height}
+      color={normalizeTextColor(element.color)}
+      align={element.align}
       emptyLabel={
         element.sourceField.trim()
           ? element.sourceField
@@ -1399,45 +1599,75 @@ export function ReportDesignerPage() {
     />
   );
 
+  const renderLineElement = (element: ReportElement) => (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: normalizeTextColor(element.color),
+        pointerEvents: "none",
+      }}
+    />
+  );
+
+  const renderElementContent = (
+    element: ReportElement,
+    row: Record<string, unknown> | null,
+    extras: Record<string, string>,
+  ) => {
+    if (isLineKind(element.kind)) return renderLineElement(element);
+    if (element.kind === "qr" || element.kind === "barcode") return renderCodeElement(element, row);
+    return row ? applyTemplate(element.text, row, extras, element.dateFormat) : element.text;
+  };
+
   const renderElementButton = (
     element: ReportElement,
     row: Record<string, unknown> | null,
     extras: Record<string, string>,
-  ) => (
-    <button
-      key={element.id}
-      type="button"
-      style={{
-        position: "absolute",
-        left: `${element.x}px`,
-        top: `${element.y}px`,
-        width: `${element.width}px`,
-        height: element.kind === "text" ? undefined : `${element.height}px`,
-        textAlign: element.align,
-        fontSize: `${element.fontSize}px`,
-        fontWeight: element.bold ? 700 : 400,
-        fontStyle: element.italic ? "italic" : "normal",
-        textDecoration: element.underline ? "underline" : "none",
-        border: element.id === selectedElementId ? "1px dashed #f97316" : "1px dashed transparent",
-        color: "#111827",
-        background: "transparent",
-        padding: element.kind === "text" ? "2px" : "0",
-        cursor: "move",
-      }}
-      onClick={(event) => {
-        event.stopPropagation();
-        setSelectedElementId(element.id);
-        setSelectedSection(element.section);
-      }}
-      {...draggableHandlers(element)}
-    >
-      {element.kind === "qr" || element.kind === "barcode"
-        ? renderCodeElement(element, row)
-        : row
-          ? applyTemplate(element.text, row, extras, element.dateFormat)
-          : element.text}
-    </button>
-  );
+  ) => {
+    const selected = element.id === selectedElementId;
+    return (
+      <button
+        key={element.id}
+        type="button"
+        style={{
+          position: "absolute",
+          left: `${element.x}px`,
+          top: `${element.y}px`,
+          width: `${element.width}px`,
+          height: element.kind === "text" ? undefined : `${element.height}px`,
+          textAlign: element.align,
+          fontSize: `${element.fontSize}px`,
+          fontWeight: element.bold ? 700 : 400,
+          fontStyle: element.italic ? "italic" : "normal",
+          textDecoration: element.underline ? "underline" : "none",
+          outline: selected ? "1px solid #f97316" : "1px dashed #f97316",
+          outlineOffset: 0,
+          border: "none",
+          color: normalizeTextColor(element.color),
+          background: "transparent",
+          padding: element.kind === "text" ? "2px" : "0",
+          cursor: "move",
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          setSelectedElementId(element.id);
+          setSelectedSection(element.section);
+        }}
+        {...draggableHandlers(element)}
+      >
+        {renderElementContent(element, row, extras)}
+        {selected ? (
+          <span
+            role="presentation"
+            className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-orange-500/40 hover:bg-orange-500/70"
+            onMouseDown={(event) => startElementWidthResize(element, event)}
+          />
+        ) : null}
+      </button>
+    );
+  };
 
   const elementsFor = (section: ReportSection) =>
     layout.elements.filter((element) => element.section === section);
@@ -1521,17 +1751,13 @@ export function ReportDesignerPage() {
         fontWeight: element.bold ? 700 : 400,
         fontStyle: element.italic ? "italic" : "normal",
         textDecoration: element.underline ? "underline" : "none",
-        color: "#111827",
+        color: normalizeTextColor(element.color),
         padding: element.kind === "text" ? "2px" : "0",
         overflow: "hidden",
         whiteSpace: element.kind === "text" ? "nowrap" : "normal",
       }}
     >
-      {element.kind === "qr" || element.kind === "barcode"
-        ? renderCodeElement(element, row)
-        : row
-          ? applyTemplate(element.text, row, extras, element.dateFormat)
-          : element.text}
+      {renderElementContent(element, row, extras)}
     </div>
   );
 
@@ -1555,7 +1781,11 @@ export function ReportDesignerPage() {
         <div
           key={keyId}
           className="absolute inset-x-0 overflow-hidden"
-          style={{ top: `${y}px`, height: `${height}px` }}
+          style={{
+            top: `${y}px`,
+            height: `${height}px`,
+            backgroundColor: bandBackgroundOf(layout, section) || undefined,
+          }}
         >
           {elementsFor(section).map((element) =>
             renderPreviewElement(element, row, extras, `${keyId}-${element.id}`),
@@ -1630,7 +1860,11 @@ export function ReportDesignerPage() {
         <div
           key="pv-footer"
           className="absolute inset-x-0 overflow-hidden"
-          style={{ top: `${footerTop}px`, height: `${layout.footer.height}px` }}
+          style={{
+            top: `${footerTop}px`,
+            height: `${layout.footer.height}px`,
+            backgroundColor: bandBackgroundOf(layout, "footer") || undefined,
+          }}
         >
           {elementsFor("footer").map((element) =>
             renderPreviewElement(element, rows[0] ?? null, baseExtras(totalCount, ""), `pv-footer-${element.id}`),
@@ -1771,17 +2005,74 @@ export function ReportDesignerPage() {
         </div>
       </AppDialog>
 
+      <QueryDesignerModal
+        visible={queryDesignerOpen}
+        onHide={() => {
+          setQueryDesignerOpen(false);
+          setQuerySourceTab("sql");
+        }}
+        onApply={(sqlText) => {
+          setQuery(sqlText);
+          setQueryDesignerOpen(false);
+          setQuerySourceTab("sql");
+        }}
+      />
+
       {step === 1 ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(360px,460px)_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
           <div className="flex flex-col gap-3 rounded-sm bg-surface-container-low p-4">
-            <label className="text-sm font-semibold">{t("reportDesigner.queryLabel")}</label>
-            <InputTextarea
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              rows={10}
-              autoResize
-              className="font-mono text-xs"
-            />
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                className={`h-8 rounded-sm px-3 text-xs font-semibold transition-colors ${
+                  querySourceTab === "sql"
+                    ? "bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
+                    : "text-on-surface-variant hover:bg-surface"
+                }`}
+                onClick={() => {
+                  setQuerySourceTab("sql");
+                  setQueryDesignerOpen(false);
+                }}
+              >
+                {t("reportDesigner.queryTabSql")}
+              </button>
+              <button
+                type="button"
+                className={`h-8 rounded-sm px-3 text-xs font-semibold transition-colors ${
+                  querySourceTab === "designer"
+                    ? "bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
+                    : "text-on-surface-variant hover:bg-surface"
+                }`}
+                onClick={() => {
+                  setQuerySourceTab("designer");
+                  setQueryDesignerOpen(true);
+                }}
+              >
+                {t("reportDesigner.queryTabDesigner")}
+              </button>
+            </div>
+            <div>
+              <label className="text-sm font-semibold">{t("reportDesigner.queryLabel")}</label>
+              <span className="ml-2 text-[10px] text-on-surface-variant">
+                {t("reportDesigner.queryLabelHint")}
+              </span>
+            </div>
+            <div className="overflow-hidden rounded-sm border border-outline-variant">
+              <CodeMirror
+                value={query}
+                height="260px"
+                minHeight="260px"
+                theme={dark ? "dark" : "light"}
+                extensions={[sql()]}
+                onChange={(value) => setQuery(value)}
+                basicSetup={{
+                  lineNumbers: true,
+                  foldGutter: true,
+                  highlightActiveLine: true,
+                }}
+                className="text-xs"
+              />
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1912,7 +2203,7 @@ export function ReportDesignerPage() {
                 </div>
               </div>
 
-              <div className={`${ribbonGroup} w-[11rem] max-w-[11rem]`}>
+              <div className={`${ribbonGroup} w-[22rem] max-w-[22rem]`}>
                 <div className={ribbonLabel}>{t("reportDesigner.ribbonText")}</div>
                 <InputText
                   value={selectedElement?.kind === "text" ? (selectedElement.text ?? "") : ""}
@@ -1923,7 +2214,7 @@ export function ReportDesignerPage() {
                 />
               </div>
 
-              <div className={ribbonGroup}>
+              <div className={`${ribbonGroup} pr-4`}>
                 <div className={ribbonLabel}>{t("reportDesigner.ribbonFont")}</div>
                 <div className={ribbonTools}>
                   <button
@@ -1971,16 +2262,37 @@ export function ReportDesignerPage() {
                       </option>
                     ))}
                   </select>
+                  <span
+                    className={`relative inline-flex h-9 w-[4.75rem] shrink-0 overflow-hidden rounded-sm border border-outline-variant ${
+                      !selectedSupportsColor ? "opacity-45" : ""
+                    }`}
+                    title={t("reportDesigner.textColor")}
+                  >
+                    <input
+                      type="color"
+                      className="absolute inset-0 h-full w-full cursor-pointer border-0 bg-transparent p-0 disabled:cursor-not-allowed"
+                      value={
+                        selectedElement
+                          ? normalizeTextColor(selectedElement.color)
+                          : DEFAULT_TEXT_COLOR
+                      }
+                      disabled={!selectedSupportsColor}
+                      aria-label={t("reportDesigner.textColor")}
+                      onChange={(e) =>
+                        updateSelectedElement({ color: normalizeTextColor(e.target.value) })
+                      }
+                    />
+                  </span>
                 </div>
               </div>
 
-              <div className={ribbonGroup}>
+              <div className={`${ribbonGroup} pl-4`}>
                 <div className={ribbonLabel}>{t("reportDesigner.ribbonAlign")}</div>
                 <div className={ribbonTools}>
                   <button
                     type="button"
                     title={t("reportDesigner.left")}
-                    disabled={!selectedElement || !selectedIsText}
+                    disabled={!selectedSupportsAlign}
                     className={`${toolbarBtn} ${selectedElement?.align === "left" ? toolbarBtnActive : ""}`}
                     onClick={() => updateSelectedElement({ align: "left" })}
                   >
@@ -1989,7 +2301,7 @@ export function ReportDesignerPage() {
                   <button
                     type="button"
                     title={t("reportDesigner.center")}
-                    disabled={!selectedElement || !selectedIsText}
+                    disabled={!selectedSupportsAlign}
                     className={`${toolbarBtn} ${selectedElement?.align === "center" ? toolbarBtnActive : ""}`}
                     onClick={() => updateSelectedElement({ align: "center" })}
                   >
@@ -1998,7 +2310,7 @@ export function ReportDesignerPage() {
                   <button
                     type="button"
                     title={t("reportDesigner.right")}
-                    disabled={!selectedElement || !selectedIsText}
+                    disabled={!selectedSupportsAlign}
                     className={`${toolbarBtn} ${selectedElement?.align === "right" ? toolbarBtnActive : ""}`}
                     onClick={() => updateSelectedElement({ align: "right" })}
                   >
@@ -2240,12 +2552,18 @@ export function ReportDesignerPage() {
                         className={fieldSelect}
                         value={selectedElement?.width ?? ""}
                         disabled={!selectedElement}
+                        min={selectedElement ? minWidthForKind(selectedElement.kind) : 20}
+                        max={selectedElement ? maxWidthForKind(selectedElement.kind) : 560}
                         onChange={(e) =>
-                          updateSelectedElement({ width: Number(e.target.value) || 100 })
+                          updateSelectedElement({
+                            width:
+                              Number(e.target.value) ||
+                              (selectedElement ? minWidthForKind(selectedElement.kind) : 20),
+                          })
                         }
                       />
                     </div>
-                    {selectedIsCode ? (
+                    {selectedIsCode || selectedIsLine ? (
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
                         <label className={fieldLabel}>{t("reportDesigner.elementHeight")}</label>
                         <input
@@ -2253,13 +2571,20 @@ export function ReportDesignerPage() {
                           className={fieldSelect}
                           value={selectedElement?.height ?? ""}
                           disabled={!selectedElement}
-                          min={16}
-                          max={200}
-                          onChange={(e) =>
-                            updateSelectedElement({
-                              height: Math.max(16, Math.min(200, Number(e.target.value) || 16)),
-                            })
-                          }
+                          min={selectedElement?.kind === "hline" ? 1 : selectedIsLine ? 8 : 16}
+                          max={selectedElement?.kind === "hline" ? 8 : 200}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value) || 1;
+                            if (selectedElement?.kind === "hline") {
+                              updateSelectedElement({ height: Math.max(1, Math.min(8, raw)) });
+                            } else if (selectedElement?.kind === "vline") {
+                              updateSelectedElement({ height: Math.max(8, Math.min(200, raw)) });
+                            } else {
+                              updateSelectedElement({
+                                height: Math.max(16, Math.min(200, raw || 16)),
+                              });
+                            }
+                          }}
                         />
                       </div>
                     ) : null}
@@ -2332,12 +2657,76 @@ export function ReportDesignerPage() {
                     <span>{t("reportDesigner.firstPageOnly")}</span>
                   </label>
                 ) : null}
+                <div className="mt-2 flex flex-col gap-1">
+                  <label className={fieldLabel}>{t("reportDesigner.bandBackgroundColor")}</label>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="relative inline-flex h-9 w-[4.75rem] shrink-0 overflow-hidden rounded-sm border border-outline-variant"
+                      title={t("reportDesigner.bandBackgroundColor")}
+                    >
+                      <input
+                        type="color"
+                        className="absolute inset-0 h-full w-full cursor-pointer border-0 bg-transparent p-0"
+                        value={
+                          bandBackgroundOf(layout, selectedSection) ||
+                          DEFAULT_BAND_BACKGROUND_COLOR
+                        }
+                        aria-label={t("reportDesigner.bandBackgroundColor")}
+                        onChange={(e) =>
+                          setBandBackgroundColor(
+                            selectedSection,
+                            normalizeBandBackgroundColor(e.target.value),
+                          )
+                        }
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      className="h-9 shrink-0 rounded-sm border border-outline-variant px-2 text-xs text-on-surface-variant hover:bg-surface disabled:opacity-45"
+                      disabled={!bandBackgroundOf(layout, selectedSection)}
+                      onClick={() => setBandBackgroundColor(selectedSection, "")}
+                      title={t("reportDesigner.bandBackgroundClear")}
+                    >
+                      {t("reportDesigner.bandBackgroundClear")}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className={`${panelBand} min-h-0 border-t-0`}>
-              <div className="border-b border-outline-variant px-3 py-2 text-sm font-semibold">
-                {t("reportDesigner.canvasPreview")}
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-outline-variant px-3 py-2">
+                <span className="text-sm font-semibold">{t("reportDesigner.canvasPreview")}</span>
+                {query.includes(RECORD_ID_TOKEN) ? (
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="canvasPreviewRecordId"
+                      className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant"
+                    >
+                      {t("reportDesigner.previewRecordIdShort")}
+                    </label>
+                    <InputText
+                      id="canvasPreviewRecordId"
+                      value={previewRecordId}
+                      onChange={(e) => setPreviewRecordId(e.target.value.trim())}
+                      className="!h-8 w-56 font-mono text-xs"
+                      placeholder="uuid"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && previewRecordId.trim()) void runPreview();
+                      }}
+                    />
+                    <Button
+                      icon={<RefreshCw size={16} strokeWidth={2.25} />}
+                      rounded={false}
+                      title={t("reportDesigner.generatePreview")}
+                      aria-label={t("reportDesigner.generatePreview")}
+                      className="!h-8 !w-8 !min-w-0 shrink-0 !p-0"
+                      onClick={() => void runPreview()}
+                      loading={queryLoading}
+                      disabled={!previewRecordId.trim()}
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="min-h-0 flex-1 overflow-auto bg-[color-mix(in_srgb,var(--color-surface-container-high)_55%,transparent)] p-4">
                 <div className="flex items-start justify-center gap-8">
@@ -2386,6 +2775,13 @@ export function ReportDesignerPage() {
                               maxHeight: `${Math.max(height - 4, 14)}px`,
                             }}
                           >
+                            {selectedSection === section ? (
+                              <ChevronRight
+                                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-on-surface"
+                                strokeWidth={2.5}
+                                aria-hidden
+                              />
+                            ) : null}
                             <div
                               className={`${meta.labelTint} pointer-events-none rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap`}
                             >
@@ -2432,14 +2828,25 @@ export function ReportDesignerPage() {
                         if (!options?.pinBottom) {
                           offset += height;
                         }
+                        const bandBg = bandBackgroundOf(layout, section);
                         pushGutterLabel(section, top, height, options?.labelExtra);
                         nodes.push(
                           <div
                             key={`${section}-${top}`}
                             className={`absolute inset-x-0 border-b border-dashed border-black/10 ${
-                              dropTarget === section ? meta.dropTint : meta.tint
-                            } ${selectedSection === section ? meta.tintStrong : ""}`}
-                            style={{ top: `${top}px`, height: `${height}px` }}
+                              bandBg
+                                ? selectedSection === section
+                                  ? "ring-1 ring-inset ring-primary/50"
+                                  : ""
+                                : `${dropTarget === section ? meta.dropTint : meta.tint} ${
+                                    selectedSection === section ? meta.tintStrong : ""
+                                  }`
+                            }`}
+                            style={{
+                              top: `${top}px`,
+                              height: `${height}px`,
+                              backgroundColor: bandBg || undefined,
+                            }}
                             onDragOver={(event) => onBandDragOver(section, event)}
                             onDragLeave={() => onBandDragLeave(section)}
                             onDrop={(event) => onBandDrop(section, event)}
@@ -2639,6 +3046,24 @@ export function ReportDesignerPage() {
                   >
                     <ScanBarcode className="h-4 w-4 shrink-0" strokeWidth={2.25} />
                     <span>{t("reportDesigner.poolBarcode")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => onPoolItemDragStart({ type: "hline" }, event)}
+                    className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left text-sm text-on-surface active:cursor-grabbing"
+                  >
+                    <Minus className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                    <span>{t("reportDesigner.poolHLine")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => onPoolItemDragStart({ type: "vline" }, event)}
+                    className="flex cursor-grab items-center gap-2 rounded-sm border-2 border-outline-variant bg-surface px-2 py-2 text-left text-sm text-on-surface active:cursor-grabbing"
+                  >
+                    <SeparatorVertical className="h-4 w-4 shrink-0" strokeWidth={2.25} />
+                    <span>{t("reportDesigner.poolVLine")}</span>
                   </button>
                   <button
                     type="button"

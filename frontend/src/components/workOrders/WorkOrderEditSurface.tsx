@@ -11,6 +11,7 @@ import { TabPanel, TabView } from "primereact/tabview";
 
 import { DocumentMimeIcon } from "../documents/DocumentMimeIcon";
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
+import { ReportCodePreview } from "../ReportCodePreview";
 import { AssetSelItem } from "../selItem/AssetSelItem";
 import { WorkOrderFeedbackTabContent } from "./WorkOrderFeedbackTabContent";
 import { WorkOrderFeedbackTransactionsSection } from "./WorkOrderFeedbackTransactionsSection";
@@ -37,6 +38,7 @@ import {
 import { isImageDocument } from "../../lib/isImageDocument";
 import { orderDialogTabs } from "../../lib/workOrderDialog";
 import type { WorkOrderType } from "../../lib/workOrderForm";
+import { workOrderQrValue } from "../../lib/workOrderQr";
 import { formatOriginalWoOrderNumber } from "../../lib/workOrderTypes";
 import { workOrderStatusAllowsFeedbackTab } from "../../lib/workOrderStatus";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
@@ -232,6 +234,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     editingMeta?.status === "ended" || editingMeta?.status === "done" || editingMeta?.status === "cancelled";
   const inspectionPointsTabEnabled = Boolean(editingId && form.inspectionRoundId);
   const { showPreview, clearPreview, previewPortal } = useDocumentImageHoverPreview();
+  const orderQrValue = workOrderQrValue(editingMeta?.orderNumber ?? form.orderNumber);
 
   return (
     <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
@@ -258,7 +261,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
         }}
       >
         <TabPanel header={<AppTabHeader label={t("workOrders.tabGeneral")} />}>
-          <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6" style={{ margin: 0, display: "grid" }}>
+          <div className="grid grid-cols-1 gap-4 pt-1 md:grid-cols-6 md:grid-rows-[auto_auto]" style={{ margin: 0, display: "grid" }}>
             <div className="space-y-2 md:col-span-2">
               <label htmlFor="order-number" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
                 {t("workOrders.orderNumber")}
@@ -283,6 +286,48 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               />
             </div>
 
+            <div className="space-y-2 md:col-span-2 md:row-span-2">
+              <span className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                {t("workOrders.qrCode")}
+              </span>
+              <div
+                className="flex min-h-[7.25rem] h-full flex-col items-center justify-center gap-1.5 rounded border border-outline-variant/40 bg-surface-container-lowest p-2"
+                title={orderQrValue || undefined}
+                aria-label={
+                  orderQrValue
+                    ? t("workOrders.qrCodeValue", { value: orderQrValue })
+                    : t("workOrders.qrCodePending")
+                }
+              >
+                <div className="h-24 w-24">
+                  <ReportCodePreview
+                    kind="qr"
+                    value={orderQrValue}
+                    width={96}
+                    height={96}
+                    align="center"
+                    emptyLabel={t("workOrders.qrCodePending")}
+                    kindLabel={t("workOrders.qrCode")}
+                  />
+                </div>
+                <span className="max-w-full truncate font-mono text-xs text-on-surface-variant">
+                  {orderQrValue || t("workOrders.qrCodePending")}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label htmlFor="order-original-wo" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
+                {t("workOrders.originalWo")}
+              </label>
+              <InputText
+                id="order-original-wo"
+                value={formatOriginalWoOrderNumber(form.copySourceOrderNumber)}
+                disabled
+                className="w-full"
+              />
+            </div>
+
             <div className="space-y-2 md:col-span-2">
               <label htmlFor="order-type" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
                 {t("workOrders.orderType")}
@@ -297,18 +342,6 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                 onChange={(e) => setForm((cur) => ({ ...cur, orderType: e.value as WorkOrderType }))}
                 className="w-full app-inline-icon-dropdown"
                 appendTo={overlayAppendTo}
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="order-original-wo" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-                {t("workOrders.originalWo")}
-              </label>
-              <InputText
-                id="order-original-wo"
-                value={formatOriginalWoOrderNumber(form.copySourceOrderNumber)}
-                disabled
-                className="w-full"
               />
             </div>
 

@@ -7,21 +7,32 @@ type ReportCodePreviewProps = {
   value: string;
   width: number;
   height: number;
+  color?: string;
+  align?: "left" | "center" | "right";
   emptyLabel: string;
   kindLabel: string;
 };
+
+function normalizeHexColor(raw: string | undefined, fallback = "#111827"): string {
+  if (!raw) return fallback;
+  const trimmed = raw.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : fallback;
+}
 
 export function ReportCodePreview({
   kind,
   value,
   width,
   height,
+  color,
+  align = "left",
   emptyLabel,
   kindLabel,
 }: ReportCodePreviewProps) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const trimmed = value.trim();
+  const ink = normalizeHexColor(color);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +47,10 @@ export function ReportCodePreview({
             width: Math.max(Math.round(width), 32),
             margin: 1,
             errorCorrectionLevel: "M",
+            color: {
+              dark: ink,
+              light: "#00000000",
+            },
           });
           if (!cancelled) setSrc(url);
           return;
@@ -48,6 +63,7 @@ export function ReportCodePreview({
           scale: 2,
           height: Math.max(8, Math.round(height / 3)),
           includetext: false,
+          barcolor: ink.slice(1),
         });
         if (!cancelled) setSrc(canvas.toDataURL("image/png"));
       } catch {
@@ -58,7 +74,7 @@ export function ReportCodePreview({
     return () => {
       cancelled = true;
     };
-  }, [kind, trimmed, width, height]);
+  }, [kind, trimmed, width, height, ink]);
 
   if (!trimmed || failed || !src) {
     return (
@@ -74,13 +90,16 @@ export function ReportCodePreview({
     );
   }
 
+  const objectPosition =
+    align === "right" ? "right center" : align === "center" ? "center center" : "left center";
+
   return (
     <img
       src={src}
       alt={kindLabel}
       draggable={false}
       className="h-full w-full object-contain"
-      style={{ imageRendering: "pixelated" }}
+      style={{ imageRendering: "pixelated", objectPosition }}
     />
   );
 }

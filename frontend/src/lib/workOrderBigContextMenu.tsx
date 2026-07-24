@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Bell, BellOff, CheckCircle, CircleX, Copy, Pencil, Plus, Send, Star, Trash2, UserPlus } from "lucide-react";
+import { Bell, BellOff, CheckCircle, CircleX, Copy, Pencil, Plus, Printer, Send, Star, Trash2, UserPlus } from "lucide-react";
 
 import type { BigMenuItem, BigMenuSection } from "../components/contextMenu/bigMenuTypes";
 import {
@@ -27,6 +27,7 @@ export type WorkOrderBigMenuHandlers = {
   onCreateFeedback: (row: WorkOrder) => void;
   onCloseOrder: (row: WorkOrder) => void;
   onCancelOrder: (row: WorkOrder) => void;
+  onPrint?: (row: WorkOrder) => void;
   /** When set, subscribe/unsubscribe is enabled (Monitoring). */
   subscription?: {
     isSubscribed: (workOrderId: string) => boolean;
@@ -145,6 +146,15 @@ export function buildWorkOrderBigMenuModel(
         disabled: !hasRow,
         onSelect: () => {
           if (row) handlers.onEdit(row);
+        },
+      },
+      {
+        id: "print",
+        label: t("workOrders.print"),
+        icon: <Printer className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+        disabled: !hasRow || !handlers.onPrint,
+        onSelect: () => {
+          if (row && handlers.onPrint) handlers.onPrint(row);
         },
       },
       {

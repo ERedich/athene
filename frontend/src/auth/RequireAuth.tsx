@@ -194,7 +194,7 @@ export function RequireAuth() {
             <NotificationToastBridge />
             <MaintenancePlanDialogProvider>
               <OnboardingProvider shellReady={shellReady}>
-                <div className={`min-h-screen w-full ${shellEnterClass}`}>
+                <div className={`h-screen max-h-screen w-full overflow-hidden ${shellEnterClass}`}>
                   <Outlet />
                 </div>
               </OnboardingProvider>

@@ -34,6 +34,7 @@ import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
+import { useWorkOrderReportPrint } from "../lib/useWorkOrderReportPrint";
 import { buildWorkOrderBigMenuModel } from "../lib/workOrderBigContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
@@ -95,6 +96,7 @@ export function WorkOrdersPage() {
   const { appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
+  const { openPrintDialog, PrintDialogEl } = useWorkOrderReportPrint(toastRef);
   const overview = useWorkOrderOverviewPanel();
   const woDialog = useWorkOrderDialog();
   const refData = useWorkOrderSearchReferenceData();
@@ -920,6 +922,9 @@ export function WorkOrdersPage() {
         onCreateFeedback: (row) => openFeedbackTab(row, "create"),
         onCloseOrder: confirmCloseWorkOrder,
         onCancelOrder: confirmCancelWorkOrder,
+        onPrint: (row) => {
+          void openPrintDialog(row);
+        },
       }),
     [
       athene,
@@ -932,6 +937,7 @@ export function WorkOrdersPage() {
       openFeedbackTab,
       openFollowUpOrder,
       openPlanningTab,
+      openPrintDialog,
       selectedOrder,
       startOrder,
       t,
@@ -997,6 +1003,7 @@ export function WorkOrdersPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
+      {PrintDialogEl}
       <WorkOrderSearchPanel
         visible={searchPanelVisible}
         onHide={() => setSearchPanelVisible(false)}
