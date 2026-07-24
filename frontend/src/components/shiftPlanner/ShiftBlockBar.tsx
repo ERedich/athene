@@ -134,18 +134,14 @@ export function ShiftBlockBar({
     setIsDropDenied(false);
     if (!onAssignEmployee && !onRequestRollout) return;
 
-    if (!assignmentAllowed) {
-      const employeeId = readShiftEmployeeDragData(e.dataTransfer, draggingEmployeeId) ?? "";
-      if (layoutMode === "timeline" && onRequestRollout && employeeId) {
-        onRequestRollout(block, employeeId, e);
-      } else if (employeeId) {
-        onAssignEmployee?.(block, employeeId);
-      }
-      return;
-    }
-
     const employeeId = readShiftEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
+
+    // Past dates: still notify via parent handlers (they toast + no-op); do not open rollout.
+    if (!assignmentAllowed) {
+      onAssignEmployee?.(block, employeeId);
+      return;
+    }
 
     if (layoutMode === "timeline" && onRequestRollout) {
       onRequestRollout(block, employeeId, e);

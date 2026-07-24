@@ -155,6 +155,7 @@ export function LayoutEditorPage() {
   }, [loadData]);
 
   const openEdit = useCallback((row: AppLayout) => {
+    setSelected(row);
     setEditing(row);
     setDraft(null);
     setMode("edit");
@@ -177,18 +178,15 @@ export function LayoutEditorPage() {
     [siteFieldLocked, t, user.workingSiteId],
   );
 
-  const canMutate = useCallback(
-    (row: AppLayout | null) => {
-      if (!row) return false;
-      if (row.isSystem && !canEditSystem) return false;
-      return true;
-    },
-    [canEditSystem],
-  );
+  /** System layouts are protected from delete (even for admin); copy instead. */
+  const canDelete = useCallback((row: AppLayout | null) => {
+    if (!row) return false;
+    return !row.isSystem;
+  }, []);
 
   const remove = useCallback(
     (row: AppLayout) => {
-      if (!canMutate(row)) {
+      if (!canDelete(row)) {
         toastRef.current?.show({
           severity: "warn",
           summary: t("layoutEditor.systemReadOnly"),
@@ -203,6 +201,7 @@ export function LayoutEditorPage() {
         acceptLabel: t("layoutEditor.delete"),
         rejectLabel: t("layoutEditor.cancel"),
         acceptClassName: "p-button-danger",
+        appendTo: overlayAppendTo,
         accept: () => {
           void (async () => {
             try {
@@ -225,7 +224,7 @@ export function LayoutEditorPage() {
         },
       });
     },
-    [canMutate, loadData, t],
+    [canDelete, loadData, t],
   );
 
   const save = async (payload: AppLayoutWritePayload) => {
@@ -233,7 +232,7 @@ export function LayoutEditorPage() {
     setSaving(true);
     try {
       const updated = await updateAppLayout(editing.id, payload);
-      setEditing(updated);
+      setSelected(updated);
       setMode("list");
       setEditing(null);
       setDraft(null);
@@ -278,6 +277,7 @@ export function LayoutEditorPage() {
         contextMenu: draft.contextMenu,
         tabs: draft.tabs ?? defaultTabsPayload(),
       });
+      setSelected(updated);
       setEditing(updated);
       setDraft({
         key: updated.key,
@@ -505,7 +505,7 @@ export function LayoutEditorPage() {
             <button
               type="button"
               className={deleteActionNavItem}
-              disabled={!selected || !canMutate(selected)}
+              disabled={!selected || !canDelete(selected)}
               onClick={() => {
                 if (selected) remove(selected);
               }}
@@ -530,8 +530,8 @@ export function LayoutEditorPage() {
     }
     return () => setHeaderActions(null);
   }, [
+    canDelete,
     canEditSystem,
-    canMutate,
     closeEditor,
     draft,
     editing,
@@ -577,8 +577,8 @@ export function LayoutEditorPage() {
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      <Toast ref={toastRef} position="top-right" />
-      <ConfirmDialog />
+      <Toast ref={toastRef} position="top-right" appendTo={overlayAppendTo} />
+      <ConfirmDialog appendTo={overlayAppendTo} />
 
       {mode === "table" && draft ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3">

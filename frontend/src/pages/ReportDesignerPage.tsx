@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { ArrowRight, Download, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext } from "react-router-dom";
@@ -61,7 +68,7 @@ function applyTemplate(template: string, row: Record<string, unknown>): string {
 function createDefaultElement(): TextElement {
   return {
     id: crypto.randomUUID(),
-    text: "Titel: {{name}}",
+    text: "{{key}} — {{name}}",
     x: 50,
     y: 60,
     width: 500,
@@ -78,7 +85,8 @@ export function ReportDesignerPage() {
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
 
   const [step, setStep] = useState<Step>(1);
-  const [query, setQuery] = useState('SELECT "key", "name" FROM "asset" ORDER BY "name" ASC');
+  // Default to site master data — assets are often empty on fresh installs.
+  const [query, setQuery] = useState('SELECT "key", "name" FROM "site" ORDER BY "key" ASC');
   const [queryLimit, setQueryLimit] = useState(50);
   const [queryLoading, setQueryLoading] = useState(false);
   const [reportTitle, setReportTitle] = useState("report-designer");
@@ -99,7 +107,7 @@ export function ReportDesignerPage() {
     return () => setHeaderRowCount(null);
   }, [setHeaderRowCount]);
 
-  const runPreview = async () => {
+  const runPreview = useCallback(async () => {
     setQueryLoading(true);
     try {
       const res = await apiFetch("/api/report-designer/query-preview", {
@@ -111,9 +119,7 @@ export function ReportDesignerPage() {
       const data = (await res.json()) as QueryPreviewResponse;
       setPreview(data);
       setSelectedRowIndex(0);
-      if (!selectedElementId && elements[0]) {
-        setSelectedElementId(elements[0].id);
-      }
+      setSelectedElementId((current) => current ?? elements[0]?.id ?? null);
       if (data.rows.length > 0) {
         setStep(2);
       }
@@ -126,7 +132,7 @@ export function ReportDesignerPage() {
     } finally {
       setQueryLoading(false);
     }
-  };
+  }, [elements, query, queryLimit, t]);
 
   const updateSelectedElement = (patch: Partial<TextElement>) => {
     if (!selectedElementId) return;
@@ -150,7 +156,7 @@ export function ReportDesignerPage() {
     });
   };
 
-  const downloadPdf = async () => {
+  const downloadPdf = useCallback(async () => {
     if (!preview || preview.rows.length === 0) {
       toastRef.current?.show({
         severity: "warn",
@@ -194,7 +200,7 @@ export function ReportDesignerPage() {
     } finally {
       setPdfLoading(false);
     }
-  };
+  }, [elements, preview, reportTitle, t]);
 
   useEffect(() => {
     setHeaderActions(
