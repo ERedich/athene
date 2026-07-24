@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { pool } from "./db.js";
+import { isDatabaseUnavailableError } from "./dbErrors.js";
 
 const router = Router();
 
@@ -41,6 +42,10 @@ router.get("/login-kpis", async (_req: Request, res: Response) => {
     };
     res.json(payload);
   } catch (err) {
+    if (isDatabaseUnavailableError(err)) {
+      res.json({ openActive: 0, completedLast24h: 0 } satisfies LoginKpisResponse);
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }

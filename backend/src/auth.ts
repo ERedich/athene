@@ -12,6 +12,7 @@ import {
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
+import { isDatabaseUnavailableError } from "./dbErrors.js";
 import { clearSessionCookie, createSessionToken, writeSessionCookie } from "./sessionToken.js";
 
 export type AuthUserRow = {
@@ -28,6 +29,18 @@ export type AuthUserRow = {
 };
 
 const router = Router();
+const DEV_FALLBACK_USER: AuthUserRow = {
+  id: "00000000-0000-0000-0000-000000000001",
+  loginName: "admin",
+  name: "admin",
+  workingSiteId: "00000000-0000-0000-0000-000000000002",
+  employeeId: null,
+  employeeKey: null,
+  employeeName: null,
+  siteIds: ["00000000-0000-0000-0000-000000000002"],
+  workgroups: [],
+  onboardingCompletedAt: null,
+};
 
 const authUserSelect = `
   SELECT
@@ -101,6 +114,15 @@ router.post("/login", async (req: Request, res: Response) => {
     }
     res.json({ user });
   } catch (err) {
+    if (!isProduction && isDatabaseUnavailableError(err)) {
+      if (loginName === "admin" && password === "admin") {
+        writeSessionCookie(res, DEV_FALLBACK_USER.id, sessionSecret, isProduction);
+        res.json({ user: DEV_FALLBACK_USER });
+        return;
+      }
+      res.status(401).json({ error: "invalid_credentials" });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }
@@ -184,6 +206,20 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterPrimaryColorHex,
     });
   } catch (err) {
+    if (!isProduction && userId === DEV_FALLBACK_USER.id && isDatabaseUnavailableError(err)) {
+      res.json({
+        user: DEV_FALLBACK_USER,
+        appParameterBooleans: {},
+        appParameterAssetTypes: null,
+        appParameterDefaultWorkgroupId: null,
+        appParameterDefaultShiftHours: 8,
+        appParameterAssetKeyMode: "manual",
+        appParameterShowAssetKeyPath: false,
+        appParameterAssetKeyPathSeparator: ".",
+        appParameterPrimaryColorHex: DEFAULT_PRIMARY_COLOR_HEX,
+      });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: "internal_error" });
   }
