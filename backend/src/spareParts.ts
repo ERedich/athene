@@ -18,6 +18,7 @@ import {
   notifySparePartStockBelowReorder,
   snapshotSparePartStockScopes,
 } from "./sparePartStockNotify.js";
+import { computeMovingAverage } from "./stockMovingAverage.js";
 import {
   quantityForPolicyScope,
   resolveEffectiveStockPolicy,

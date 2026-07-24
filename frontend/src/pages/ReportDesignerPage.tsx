@@ -394,7 +394,22 @@ export function ReportDesignerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sql: query, limit: queryLimit }),
       });
-      if (!res.ok) throw new Error("query");
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const errBody = (await res.json()) as { error?: string };
+          if (errBody.error === "invalid_query") detail = t("reportDesigner.queryInvalid");
+          else if (errBody.error === "query_failed") detail = t("reportDesigner.queryFailed");
+        } catch {
+          /* ignore */
+        }
+        if (!detail && (res.status === 401 || res.status === 403)) {
+          detail = t("reportDesigner.queryAuthError");
+        } else if (!detail && res.status === 404) {
+          detail = t("reportDesigner.queryUnavailable");
+        }
+        throw new Error(detail || "query");
+      }
       const data = (await res.json()) as QueryPreviewResponse;
       setPreview(data);
       if (!selectedElementId && layout.elements[0]) {
@@ -409,10 +424,11 @@ export function ReportDesignerPage() {
       if (data.rows.length > 0) {
         setStep(2);
       }
-    } catch {
+    } catch (err) {
+      const detail = err instanceof Error && err.message && err.message !== "query" ? err.message : "";
       toastRef.current?.show({
         severity: "error",
-        summary: t("reportDesigner.queryError"),
+        summary: detail || t("reportDesigner.queryError"),
         life: 5000,
       });
     } finally {
