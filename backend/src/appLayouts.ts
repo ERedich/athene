@@ -552,11 +552,9 @@ router.delete("/:id", async (req: Request, res: Response) => {
       if (!existing.rows[0]) {
         throw new Error("not_found");
       }
+      // System layouts are never deletable — copy them instead (standard layout protection).
       if (existing.rows[0].isSystem) {
-        const admin = await isAdminUser(client, userId);
-        if (!admin) {
-          throw new Error("system_layout_forbidden");
-        }
+        throw new Error("system_layout_forbidden");
       }
       await client.query(`DELETE FROM "appLayout" WHERE "id" = $1::uuid`, [id]);
     });

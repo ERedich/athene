@@ -135,6 +135,8 @@ export function ShiftsPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  /** Prime overlays append to body; Escape would otherwise close the whole dialog. */
+  const [formOverlayOpen, setFormOverlayOpen] = useState(false);
 
   const siteDropdownOptions = useMemo<SiteDropdownOption[]>(
     () => sites.map((site) => ({ label: `${site.key} - ${site.name}`, value: site.id })),
@@ -669,10 +671,14 @@ export function ShiftsPage() {
         visible={dialogVisible}
         style={{ width: "min(32rem, 95vw)" }}
         contentClassName="app-atyp-dialog"
-        onHide={() => setDialogVisible(false)}
+        onHide={() => {
+          setFormOverlayOpen(false);
+          setDialogVisible(false);
+        }}
         footer={dialogFooter}
         modal
-        dismissableMask
+        dismissableMask={!formOverlayOpen}
+        closeOnEscape={!formOverlayOpen}
         draggable={false}
         resizable={false}
       >
@@ -726,7 +732,9 @@ export function ShiftsPage() {
             <InputText
               id="shift-shortCode"
               value={form.shortCode}
-              onChange={(e) => setForm((f) => ({ ...f, shortCode: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, shortCode: e.target.value.slice(0, 5) }))
+              }
               className="w-full"
               maxLength={5}
               autoComplete="off"
@@ -768,6 +776,8 @@ export function ShiftsPage() {
                   const next = e.value instanceof Date ? e.value : null;
                   setForm((f) => ({ ...f, startTime: dateToTimeString(next) }));
                 }}
+                onShow={() => setFormOverlayOpen(true)}
+                onHide={() => setFormOverlayOpen(false)}
                 timeOnly
                 hourFormat="24"
                 className="w-full"
@@ -791,6 +801,8 @@ export function ShiftsPage() {
                   const next = e.value instanceof Date ? e.value : null;
                   setForm((f) => ({ ...f, endTime: dateToTimeString(next) }));
                 }}
+                onShow={() => setFormOverlayOpen(true)}
+                onHide={() => setFormOverlayOpen(false)}
                 timeOnly
                 hourFormat="24"
                 className="w-full"
@@ -840,6 +852,8 @@ export function ShiftsPage() {
                   ),
                 }))
               }
+              onShow={() => setFormOverlayOpen(true)}
+              onHide={() => setFormOverlayOpen(false)}
               placeholder={t("shifts.weekdaysPlaceholder")}
               className="w-full"
               display="comma"
@@ -861,6 +875,8 @@ export function ShiftsPage() {
               value={form.siteId}
               options={siteDropdownOptions}
               onChange={(e) => setForm((f) => ({ ...f, siteId: String(e.value ?? "") }))}
+              onShow={() => setFormOverlayOpen(true)}
+              onHide={() => setFormOverlayOpen(false)}
               placeholder={t("shifts.sitePlaceholder")}
               className="w-full app-inline-icon-dropdown"
               itemTemplate={renderSiteDropdownOption}
