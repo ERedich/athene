@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from "express";
 import type { Pool } from "pg";
 
 import { pool } from "./db.js";
+import { isDatabaseUnavailableError } from "./dbErrors.js";
+import { isProduction } from "./authSessionConfig.js";
 import { siteAccessSql } from "./siteAccess.js";
 
 const router = Router();
@@ -519,6 +521,10 @@ router.get("/", async (req: Request, res: Response) => {
     const rows = await listPresetsForUser(userId);
     res.json(rows);
   } catch (err) {
+    if (!isProduction && isDatabaseUnavailableError(err)) {
+      res.json([]);
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -549,6 +555,10 @@ router.get("/defaults", async (req: Request, res: Response) => {
     }
     res.json({ workOrdersPresetId, monitoringPresetId, mobilePresetId });
   } catch (err) {
+    if (!isProduction && isDatabaseUnavailableError(err)) {
+      res.json({ workOrdersPresetId: null, monitoringPresetId: null, mobilePresetId: null });
+      return;
+    }
     sendPgError(res, err);
   }
 });

@@ -304,20 +304,20 @@ router.get("/", async (req: Request, res: Response) => {
     params.push(to);
   }
 
-  const extra = await buildTransactionListExtraFilters(q, userId, pool, i);
-  if (!extra.ok) {
-    res.status(extra.status).json({ error: extra.error });
-    return;
-  }
-  for (const c of extra.conditions) {
-    conditions.push(c);
-  }
-  params.push(...extra.params);
-  i += extra.params.length;
-
-  const filterSql = conditions.length ? ` AND ${conditions.join(" AND ")}` : "";
-
   try {
+    const extra = await buildTransactionListExtraFilters(q, userId, pool, i);
+    if (!extra.ok) {
+      res.status(extra.status).json({ error: extra.error });
+      return;
+    }
+    for (const c of extra.conditions) {
+      conditions.push(c);
+    }
+    params.push(...extra.params);
+    i += extra.params.length;
+
+    const filterSql = conditions.length ? ` AND ${conditions.join(" AND ")}` : "";
+
     const countSql = `
       SELECT count(*)::bigint AS c
       FROM "transaction" t

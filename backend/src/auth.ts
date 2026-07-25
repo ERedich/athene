@@ -29,18 +29,50 @@ export type AuthUserRow = {
 };
 
 const router = Router();
-const DEV_FALLBACK_USER: AuthUserRow = {
-  id: "00000000-0000-0000-0000-000000000001",
-  loginName: "admin",
-  name: "admin",
-  workingSiteId: "00000000-0000-0000-0000-000000000002",
-  employeeId: null,
-  employeeKey: null,
-  employeeName: null,
-  siteIds: ["00000000-0000-0000-0000-000000000002"],
-  workgroups: [],
-  onboardingCompletedAt: null,
-};
+const DEV_FALLBACK_USERS: Array<{ password: string; user: AuthUserRow }> = [
+  {
+    password: "admin",
+    user: {
+      id: "00000000-0000-0000-0000-000000000001",
+      loginName: "admin",
+      name: "admin",
+      workingSiteId: "00000000-0000-0000-0000-000000000002",
+      employeeId: null,
+      employeeKey: null,
+      employeeName: null,
+      siteIds: ["00000000-0000-0000-0000-000000000002"],
+      workgroups: [],
+      onboardingCompletedAt: null,
+    },
+  },
+  {
+    password: "eredich",
+    user: {
+      id: "00000000-0000-0000-0000-000000000003",
+      loginName: "eredich",
+      name: "eredich",
+      workingSiteId: "00000000-0000-0000-0000-000000000002",
+      employeeId: null,
+      employeeKey: null,
+      employeeName: null,
+      siteIds: ["00000000-0000-0000-0000-000000000002"],
+      workgroups: [],
+      onboardingCompletedAt: null,
+    },
+  },
+];
+
+function getDevFallbackUser(loginName: string, password: string): AuthUserRow | null {
+  const matched = DEV_FALLBACK_USERS.find(
+    (entry) => entry.user.loginName === loginName && entry.password === password,
+  );
+  return matched?.user ?? null;
+}
+
+function getDevFallbackUserById(userId: string): AuthUserRow | null {
+  const matched = DEV_FALLBACK_USERS.find((entry) => entry.user.id === userId);
+  return matched?.user ?? null;
+}
 
 const authUserSelect = `
   SELECT
@@ -115,9 +147,10 @@ router.post("/login", async (req: Request, res: Response) => {
     res.json({ user });
   } catch (err) {
     if (!isProduction && isDatabaseUnavailableError(err)) {
-      if (loginName === "admin" && password === "admin") {
-        writeSessionCookie(res, DEV_FALLBACK_USER.id, sessionSecret, isProduction);
-        res.json({ user: DEV_FALLBACK_USER });
+      const fallbackUser = getDevFallbackUser(loginName, password);
+      if (fallbackUser) {
+        writeSessionCookie(res, fallbackUser.id, sessionSecret, isProduction);
+        res.json({ user: fallbackUser });
         return;
       }
       res.status(401).json({ error: "invalid_credentials" });
@@ -206,9 +239,10 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterPrimaryColorHex,
     });
   } catch (err) {
-    if (!isProduction && userId === DEV_FALLBACK_USER.id && isDatabaseUnavailableError(err)) {
+    const fallbackUser = !isProduction ? getDevFallbackUserById(userId) : null;
+    if (fallbackUser && isDatabaseUnavailableError(err)) {
       res.json({
-        user: DEV_FALLBACK_USER,
+        user: fallbackUser,
         appParameterBooleans: {},
         appParameterAssetTypes: null,
         appParameterDefaultWorkgroupId: null,

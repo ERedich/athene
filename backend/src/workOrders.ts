@@ -13,7 +13,9 @@ import {
 import { getAllowSiteChange, getWorkingSiteId } from "./appParameters.js";
 import { assertClassificationForSiteAndScope } from "./classificationAssert.js";
 import { withAuditContext, type AuditSessionMeta } from "./auditContext.js";
+import { isProduction } from "./authSessionConfig.js";
 import { pool } from "./db.js";
+import { isDatabaseUnavailableError } from "./dbErrors.js";
 import {
   assertAssetAndCostCenterContext,
   assertResponsibleEmployeesContext,
@@ -748,6 +750,10 @@ router.get("/", async (req: Request, res: Response) => {
     );
     res.json(rows);
   } catch (err) {
+    if (!isProduction && isDatabaseUnavailableError(err)) {
+      res.json([]);
+      return;
+    }
     sendPgError(res, err);
   }
 });
