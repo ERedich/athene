@@ -195,16 +195,25 @@ export function useAssetDocumentsQuery(assetId: string | null | undefined, enabl
   });
 }
 
+function parseWorkOrderListPayload(data: unknown): WorkOrderRow[] {
+  if (Array.isArray(data)) return data as WorkOrderRow[];
+  if (data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows)) {
+    return (data as { rows: WorkOrderRow[] }).rows;
+  }
+  return [];
+}
+
 export function useWorkOrdersByAssetQuery(assetId: string | null | undefined, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.workOrdersByAsset(assetId ?? ""),
     enabled: Boolean(assetId) && enabled,
     queryFn: async (): Promise<WorkOrderRow[]> => {
       if (!assetId) return [];
-      const r = await apiFetch(`/api/work-orders?assetId=${encodeURIComponent(assetId)}`);
+      const r = await apiFetch(
+        `/api/work-orders?assetId=${encodeURIComponent(assetId)}&limit=2000&offset=0`,
+      );
       if (!r.ok) throw new Error("work_orders_by_asset");
-      const data = (await r.json()) as unknown;
-      return Array.isArray(data) ? (data as WorkOrderRow[]) : [];
+      return parseWorkOrderListPayload(await r.json());
     },
   });
 }
@@ -213,9 +222,9 @@ export function useWorkOrdersQuery(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...queryKeys.workOrders, "all"],
     queryFn: async (): Promise<WorkOrderRow[]> => {
-      const r = await apiFetch("/api/work-orders");
+      const r = await apiFetch("/api/work-orders?limit=2000&offset=0");
       if (!r.ok) throw new Error("workOrders");
-      return r.json() as Promise<WorkOrderRow[]>;
+      return parseWorkOrderListPayload(await r.json());
     },
     enabled: options?.enabled ?? true,
     refetchInterval: 20_000,
@@ -251,10 +260,12 @@ export function useWorkOrdersByPresetQuery(presetId: string | undefined, enabled
       const detail = await fetchWorkOrderSearchPresetDetail(presetId);
       const adv = { ...emptyWorkOrderAdvancedSearch(), ...detail.payload.advanced };
       const qs = buildWorkOrderListQueryString(detail.payload.quickSearch ?? "", adv);
-      const path = qs ? `/api/work-orders?${qs}` : "/api/work-orders";
-      const r = await apiFetch(path);
+      const params = new URLSearchParams(qs);
+      params.set("limit", "2000");
+      params.set("offset", "0");
+      const r = await apiFetch(`/api/work-orders?${params.toString()}`);
       if (!r.ok) throw new Error("workOrders");
-      return r.json() as Promise<WorkOrderRow[]>;
+      return parseWorkOrderListPayload(await r.json());
     },
     refetchInterval: 20_000,
     refetchIntervalInBackground: true,

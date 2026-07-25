@@ -100,11 +100,20 @@ export async function fetchCalendarWorkOrders(
   rangeEnd: Date,
 ): Promise<CalendarWorkOrder[]> {
   const qs = buildWorkOrderOverlapQuery(rangeStart, rangeEnd);
-  const res = await apiFetch(`/api/work-orders?${qs}`);
+  const params = new URLSearchParams(qs);
+  // Calendar needs the full overlap window; request the soft-limit max.
+  params.set("limit", "2000");
+  params.set("offset", "0");
+  const res = await apiFetch(`/api/work-orders?${params.toString()}`);
   if (!res.ok) {
     throw new Error(`work_orders_fetch_failed_${res.status}`);
   }
-  return (await res.json()) as CalendarWorkOrder[];
+  const data = (await res.json()) as unknown;
+  if (Array.isArray(data)) return data as CalendarWorkOrder[];
+  if (data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows)) {
+    return (data as { rows: CalendarWorkOrder[] }).rows;
+  }
+  return [];
 }
 
 export function workOrderToCalendarEvent(wo: CalendarWorkOrder): CalendarEvent {

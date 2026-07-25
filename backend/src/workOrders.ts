@@ -466,26 +466,58 @@ function emitTransactionCreatedAudit(params: {
   });
 }
 
-const responsibleEmployeeColumnsSql = (workOrderIdRef: string) => `
-  (
-    SELECT COALESCE(array_agg(wor."employeeId"::text ORDER BY e."key"), ARRAY[]::text[])
+/** One scan for ids/keys/names instead of three correlated subqueries. */
+const responsibleEmployeeLateralJoinSql = `
+  LEFT JOIN LATERAL (
+    SELECT
+      COALESCE(array_agg(wor."employeeId"::text ORDER BY e."key"), ARRAY[]::text[]) AS "responsibleEmployeeIds",
+      NULLIF(COALESCE(string_agg(e."key", ', ' ORDER BY e."key"), ''), '') AS "responsibleEmployeeKey",
+      NULLIF(COALESCE(string_agg(e."name", ', ' ORDER BY e."key"), ''), '') AS "responsibleEmployeeName"
     FROM "workOrderResponsibleEmployee" wor
     JOIN "employee" e ON e."id" = wor."employeeId"
-    WHERE wor."workOrderId" = ${workOrderIdRef}
-  ) AS "responsibleEmployeeIds",
-  (
-    SELECT NULLIF(COALESCE(string_agg(e."key", ', ' ORDER BY e."key"), ''), '')
-    FROM "workOrderResponsibleEmployee" wor
-    JOIN "employee" e ON e."id" = wor."employeeId"
-    WHERE wor."workOrderId" = ${workOrderIdRef}
-  ) AS "responsibleEmployeeKey",
-  (
-    SELECT NULLIF(COALESCE(string_agg(e."name", ', ' ORDER BY e."key"), ''), '')
-    FROM "workOrderResponsibleEmployee" wor
-    JOIN "employee" e ON e."id" = wor."employeeId"
-    WHERE wor."workOrderId" = ${workOrderIdRef}
-  ) AS "responsibleEmployeeName"`;
+    WHERE wor."workOrderId" = w."id"
+  ) responsible_employees ON TRUE
+`;
 
+const responsibleEmployeeSelectSql = `
+  COALESCE(responsible_employees."responsibleEmployeeIds", ARRAY[]::text[]) AS "responsibleEmployeeIds",
+  responsible_employees."responsibleEmployeeKey",
+  responsible_employees."responsibleEmployeeName"`;
+
+const workOrderListCountJoinsSql = `
+  ${workOrderDocumentCountSubquery}
+  ${workOrderAssetDocumentCountSubquery}
+  LEFT JOIN (
+    SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
+    FROM "workOrderEmployeeAssignment"
+    GROUP BY "workOrderId"
+  ) assign_counts ON assign_counts."workOrderId" = w."id"
+  LEFT JOIN (
+    SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
+    FROM "transaction"
+    GROUP BY "workOrderId"
+  ) tx_counts ON tx_counts."workOrderId" = w."id"
+  LEFT JOIN (
+    SELECT
+      "workOrderId",
+      COUNT(*)::int AS "inspectionPointCount",
+      COUNT(*) FILTER (WHERE "checked")::int AS "checkedInspectionPointCount"
+    FROM "workOrderInspectionPoint"
+    GROUP BY "workOrderId"
+  ) ip_counts ON ip_counts."workOrderId" = w."id"
+`;
+
+const currentSegmentStartedAtSql = `
+    (
+      SELECT h."occurredAt"
+      FROM "workOrderStatusHistory" h
+      WHERE h."workOrderId" = w."id"
+        AND h."status" IN ('started', 'continued')
+      ORDER BY h."occurredAt" DESC
+      LIMIT 1
+    ) AS "currentSegmentStartedAt"`;
+
+/** Full row for detail / mutations / realtime. */
 const selectWorkOrdersSql = `
   SELECT
     w."id",
@@ -511,19 +543,12 @@ const selectWorkOrdersSql = `
     w."plannedDurationMinutes",
     w."orderType",
     w."status",
-    ${responsibleEmployeeColumnsSql('w."id"')},
+    ${responsibleEmployeeSelectSql},
     w."doneBy",
     dbe."key" AS "doneByEmployeeKey",
     dbe."name" AS "doneByEmployeeName",
     w."pauseRemark",
-    (
-      SELECT h."occurredAt"
-      FROM "workOrderStatusHistory" h
-      WHERE h."workOrderId" = w."id"
-        AND h."status" IN ('started', 'continued')
-      ORDER BY h."occurredAt" DESC
-      LIMIT 1
-    ) AS "currentSegmentStartedAt",
+    ${currentSegmentStartedAtSql},
     w."workgroupId",
     wg."key" AS "workgroupKey",
     wg."name" AS "workgroupName",
@@ -570,27 +595,93 @@ const selectWorkOrdersSql = `
   LEFT JOIN "inspectionRound" ir ON ir."id" = w."inspectionRoundId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
-  ${workOrderDocumentCountSubquery}
-  ${workOrderAssetDocumentCountSubquery}
-  LEFT JOIN (
-    SELECT "workOrderId", COUNT(*)::int AS "assignedEmployeeCount"
-    FROM "workOrderEmployeeAssignment"
-    GROUP BY "workOrderId"
-  ) assign_counts ON assign_counts."workOrderId" = w."id"
-  LEFT JOIN (
-    SELECT "workOrderId", COUNT(*)::int AS "transactionCount"
-    FROM "transaction"
-    GROUP BY "workOrderId"
-  ) tx_counts ON tx_counts."workOrderId" = w."id"
-  LEFT JOIN (
-    SELECT
-      "workOrderId",
-      COUNT(*)::int AS "inspectionPointCount",
-      COUNT(*) FILTER (WHERE "checked")::int AS "checkedInspectionPointCount"
-    FROM "workOrderInspectionPoint"
-    GROUP BY "workOrderId"
-  ) ip_counts ON ip_counts."workOrderId" = w."id"
+  ${responsibleEmployeeLateralJoinSql}
+  ${workOrderListCountJoinsSql}
 `;
+
+/**
+ * Slim list projection for GET /api/work-orders.
+ * Keeps table/overview/edit-hydrate essentials; drops unused joins/payload fields.
+ */
+const selectWorkOrdersListSql = `
+  SELECT
+    w."id",
+    w."orderNumber",
+    w."name",
+    w."description",
+    w."siteId",
+    s."key" AS "siteKey",
+    s."name" AS "siteName",
+    s."colorHex" AS "siteColorHex",
+    w."assetId",
+    a."key" AS "assetKey",
+    a."name" AS "assetName",
+    w."costCenterId",
+    c."key" AS "costCenterKey",
+    c."name" AS "costCenterName",
+    w."classificationId",
+    cl."key" AS "classificationKey",
+    cl."name" AS "classificationName",
+    w."plannedStart",
+    w."plannedEnd",
+    w."plannedDurationMinutes",
+    w."orderType",
+    w."status",
+    ${responsibleEmployeeSelectSql},
+    ${currentSegmentStartedAtSql},
+    w."workgroupId",
+    wg."key" AS "workgroupKey",
+    wg."name" AS "workgroupName",
+    w."problemId"::text AS "problemId",
+    w."causeId"::text AS "causeId",
+    w."remedyId"::text AS "remedyId",
+    w."originalWo",
+    orig."orderNumber" AS "originalWoOrderNumber",
+    w."maintenancePlanId",
+    mp."key" AS "maintenancePlanKey",
+    mp."name" AS "maintenancePlanName",
+    w."inspectionRoundId",
+    w."createdAt",
+    w."updatedAt",
+    COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
+    COALESCE(updated_by."loginName", w."updatedBy"::text) AS "updatedBy",
+    COALESCE(doc_counts."documentCount", 0)::int AS "documentCount",
+    COALESCE(asset_doc_counts."assetDocumentCount", 0)::int AS "assetDocumentCount",
+    COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
+    COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount",
+    COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
+    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount"
+  FROM "workOrder" w
+  JOIN "site" s ON s."id" = w."siteId"
+  JOIN "asset" a ON a."id" = w."assetId"
+  JOIN "costCenter" c ON c."id" = w."costCenterId"
+  LEFT JOIN "classification" cl ON cl."id" = w."classificationId"
+  LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
+  LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
+  LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
+  LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
+  LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
+  ${responsibleEmployeeLateralJoinSql}
+  ${workOrderListCountJoinsSql}
+`;
+
+/** Soft page size for Monitoring / WorkOrders lists (clients may raise up to max). */
+const WORK_ORDER_LIST_DEFAULT_LIMIT = 250;
+const WORK_ORDER_LIST_MAX_LIMIT = 2000;
+
+function parseWorkOrderListLimit(raw: unknown): number {
+  if (typeof raw !== "string" || !raw.trim()) return WORK_ORDER_LIST_DEFAULT_LIMIT;
+  const n = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n) || n < 1) return WORK_ORDER_LIST_DEFAULT_LIMIT;
+  return Math.min(n, WORK_ORDER_LIST_MAX_LIMIT);
+}
+
+function parseWorkOrderListOffset(raw: unknown): number {
+  if (typeof raw !== "string" || !raw.trim()) return 0;
+  const n = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
 
 async function fetchWorkOrderRow(
   client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
@@ -736,17 +827,29 @@ router.get("/", async (req: Request, res: Response) => {
       res.status(built.status).json({ error: built.error });
       return;
     }
+    const limit = parseWorkOrderListLimit(req.query.limit);
+    const offset = parseWorkOrderListOffset(req.query.offset);
     const extraWhere = built.conditions.length ? ` AND ${built.conditions.join(" AND ")}` : "";
+    const limitParam = built.params.length + 2;
+    const offsetParam = limitParam + 1;
+    // Fetch one extra row to detect hasMore without a separate COUNT(*).
     const { rows } = await pool.query<WorkOrderRow>(
       `
-      ${selectWorkOrdersSql}
+      ${selectWorkOrdersListSql}
       WHERE ${siteAccessSql('w."siteId"', "$1")}
       ${extraWhere}
       ORDER BY w."orderNumber" DESC
+      LIMIT $${limitParam} OFFSET $${offsetParam}
       `,
-      [userId, ...built.params],
+      [userId, ...built.params, limit + 1, offset],
     );
-    res.json(rows);
+    const hasMore = rows.length > limit;
+    res.json({
+      rows: hasMore ? rows.slice(0, limit) : rows,
+      hasMore,
+      limit,
+      offset,
+    });
   } catch (err) {
     sendPgError(res, err);
   }
