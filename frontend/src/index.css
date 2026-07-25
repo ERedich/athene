@@ -823,6 +823,15 @@ html.theme-crossfade-fallback #root {
 [class*="app-ref-button--"].p-button {
   min-width: 50px !important;
   max-width: 60px !important;
+  position: relative;
+}
+
+/* Native light ref buttons (Monitoring/WorkOrders) still use .p-button class for chrome. */
+button.p-button[class*="app-ref-button--"] .p-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(40%, -40%);
 }
 
 .app-ref-button--documents.p-button:not(:disabled),

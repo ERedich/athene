@@ -495,6 +495,119 @@ router.get("/by-key", async (req: Request, res: Response) => {
   }
 });
 
+/** Thin typeahead for search panels — must stay before `/:id` routes. */
+router.get("/suggest", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (q.length < 1) {
+    res.json([]);
+    return;
+  }
+
+  const siteIdRaw = typeof req.query.siteId === "string" ? req.query.siteId.trim() : "";
+  if (siteIdRaw && !isUuid(siteIdRaw)) {
+    res.status(400).json({ error: "invalid_site_id" });
+    return;
+  }
+
+  const limitRaw =
+    typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : Number.NaN;
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 25;
+
+  try {
+    const params: unknown[] = [userId];
+    let i = 2;
+    let siteFilter = "";
+    if (siteIdRaw) {
+      siteFilter = `AND a."siteId" = $${i++}::uuid`;
+      params.push(siteIdRaw);
+    }
+    const keyPrefixParam = i++;
+    const nameContainsParam = i++;
+    const limitParam = i;
+    params.push(`${q}%`, `%${q}%`, limit);
+
+    const { rows } = await pool.query<{
+      id: string;
+      key: string;
+      name: string;
+      siteId: string;
+    }>(
+      `
+      SELECT
+        a."id",
+        a."key",
+        a."name",
+        a."siteId"
+      FROM "asset" a
+      WHERE ${siteAccessSql('a."siteId"', "$1")}
+        ${siteFilter}
+        AND (
+          a."key" ILIKE $${keyPrefixParam}
+          OR a."name" ILIKE $${nameContainsParam}
+        )
+      ORDER BY
+        CASE WHEN a."key" ILIKE $${keyPrefixParam} THEN 0 ELSE 1 END,
+        a."key" ASC
+      LIMIT $${limitParam}::int
+      `,
+      params,
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+/** Hydrate MultiSelect chips for selected asset UUIDs without a full asset dump. */
+router.get("/by-ids", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const raw = req.query.ids;
+  const idList = (Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [])
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => isUuid(v));
+  const uniqueIds = [...new Set(idList)].slice(0, 100);
+  if (uniqueIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  try {
+    const { rows } = await pool.query<{
+      id: string;
+      key: string;
+      name: string;
+      siteId: string;
+    }>(
+      `
+      SELECT
+        a."id",
+        a."key",
+        a."name",
+        a."siteId"
+      FROM "asset" a
+      WHERE ${siteAccessSql('a."siteId"', "$1")}
+        AND a."id" = ANY($2::uuid[])
+      ORDER BY a."key" ASC
+      `,
+      [userId, uniqueIds],
+    );
+    res.json(rows);
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.get("/:id/documents", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {

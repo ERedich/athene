@@ -20,6 +20,7 @@ import {
   type WorkOrderPlanningDateMode,
   emptyWorkOrderAdvancedSearch,
 } from "../../lib/workOrderApiFilters";
+import { AssetSuggestMultiSelect } from "./AssetSuggestMultiSelect";
 
 /** Named tab indexes for Relativ / Absolut planning mode (Guidelines: Tab Handling). */
 const planningDateModeTabs = {
@@ -62,6 +63,11 @@ type WorkOrderSearchPanelProps = {
   onReset: () => void;
   siteOptions: SelectOption[];
   assetOptions: SelectOption[];
+  /**
+   * When true, asset MultiSelect uses `/api/assets/suggest` instead of the full
+   * `assetOptions` dump (Monitoring / Work Orders / Search Presets).
+   */
+  assetSuggestMode?: boolean;
   costCenterOptions: SelectOption[];
   classificationOptions: SelectOption[];
   workgroupOptions: SelectOption[];
@@ -300,6 +306,7 @@ export function WorkOrderSearchPanel({
   onReset,
   siteOptions,
   assetOptions,
+  assetSuggestMode = false,
   costCenterOptions,
   classificationOptions,
   workgroupOptions,
@@ -509,18 +516,28 @@ export function WorkOrderSearchPanel({
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-xs font-medium text-on-surface-variant">{t("workOrders.asset")}</span>
-                  <MultiSelect
-                    value={value.assetId}
-                    options={assetOptions}
-                    onChange={(e) => patch({ assetId: (e.value as string[]) ?? [] })}
-                    optionLabel="label"
-                    optionValue="value"
-                    display="chip"
-                    className={multiClass}
-                    filter
-                    appendTo={overlayAppendTo}
-                    placeholder={t("workOrders.searchPanel.selectPlaceholder")}
-                  />
+                  {assetSuggestMode ? (
+                    <AssetSuggestMultiSelect
+                      value={value.assetId}
+                      onChange={(ids) => patch({ assetId: ids })}
+                      className={multiClass}
+                      placeholder={t("workOrders.searchPanel.selectPlaceholder")}
+                      seedOptions={assetOptions}
+                    />
+                  ) : (
+                    <MultiSelect
+                      value={value.assetId}
+                      options={assetOptions}
+                      onChange={(e) => patch({ assetId: (e.value as string[]) ?? [] })}
+                      optionLabel="label"
+                      optionValue="value"
+                      display="chip"
+                      className={multiClass}
+                      filter
+                      appendTo={overlayAppendTo}
+                      placeholder={t("workOrders.searchPanel.selectPlaceholder")}
+                    />
+                  )}
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-xs font-medium text-on-surface-variant">{t("workOrders.costCenter")}</span>

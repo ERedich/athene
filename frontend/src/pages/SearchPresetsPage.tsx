@@ -41,7 +41,7 @@ export function SearchPresetsPage() {
   const { t } = useTranslation();
   const { setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
-  const refData = useWorkOrderSearchReferenceData();
+  const refData = useWorkOrderSearchReferenceData({ includeAssets: false });
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<WorkOrderSearchPresetListItem[]>([]);
@@ -443,6 +443,7 @@ export function SearchPresetsPage() {
         onReset={() => setEditAdvanced(emptyWorkOrderAdvancedSearch())}
         siteOptions={refData.searchSiteOptions}
         assetOptions={refData.searchAssetOptions}
+        assetSuggestMode
         costCenterOptions={refData.searchCostCenterOptions}
         classificationOptions={refData.searchClassificationOptions}
         workgroupOptions={refData.searchWorkgroupOptions}

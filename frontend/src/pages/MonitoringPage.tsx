@@ -7,16 +7,13 @@ import {
   type PointerEvent,
 } from "react";
 import {
-  CheckSquare,
   CircleHelp,
-  File,
   Pencil,
   Plus,
   Search,
   Timer,
   Trash2,
   TriangleAlert,
-  UserPlus,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useOutletContext, useSearchParams } from "react-router-dom";
@@ -40,6 +37,7 @@ import { useWorkOrderReportPrint } from "../lib/useWorkOrderReportPrint";
 import { buildWorkOrderBigMenuModel } from "../lib/workOrderBigContextMenu";
 import { WorkOrderOverviewOverlay } from "../components/workOrders/WorkOrderOverviewOverlay";
 import { WorkOrderEditPageView } from "../components/workOrders/WorkOrderEditPageView";
+import { WorkOrderReferencesCell } from "../components/workOrders/WorkOrderReferencesCell";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
 import { useWorkOrderOverviewPanel } from "../hooks/useWorkOrderOverviewPanel";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
@@ -56,6 +54,7 @@ import {
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
 import { fetchWorkOrderList } from "../lib/workOrderListApi";
+import { ordersTableVirtualScrollerOptions } from "../lib/ordersTableVirtualScroller";
 import {
   createWorkOrderSearchPreset,
   fetchWorkOrderSearchPresetDefaults,
@@ -79,7 +78,6 @@ import {
   lucidePrimeBtnIcon,
 } from "../icons/lucide";
 
-const ORDERS_TABLE_VIRTUAL_ROW_PX = 38;
 const MONITOR_HIGHLIGHT_MS = 10_000;
 const MONITOR_HIGHLIGHT_FADE_MS = 1_000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -109,14 +107,6 @@ const createActionIcon = "text-green-500/70";
 const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 const deleteActionIcon = "text-red-500";
 
-function supportsOrdersVirtualScroller(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  const firefox = /firefox\//i.test(ua) || /fxios/i.test(ua);
-  const chromium = /chrome\//i.test(ua) || /crios/i.test(ua) || /edg\//i.test(ua) || /opr\//i.test(ua);
-  return !firefox && !chromium;
-}
-
 export function MonitoringPage() {
   const { t, i18n } = useTranslation();
   const athene = useAtheneAssistant();
@@ -128,7 +118,7 @@ export function MonitoringPage() {
   const woDialog = useWorkOrderDialog();
   const subscriptions = useWorkOrderSubscriptions();
   /** Reference data only needed for the search panel — defer so the table shell can open immediately. */
-  const refData = useWorkOrderSearchReferenceData({ autoLoad: false });
+  const refData = useWorkOrderSearchReferenceData({ autoLoad: false, includeAssets: false });
   const [searchParams, setSearchParams] = useSearchParams();
   const helpTour = useAtheneTour({
     steps: MONITORING_HELP_STEPS,
@@ -171,11 +161,7 @@ export function MonitoringPage() {
   const [searchBootstrapDone, setSearchBootstrapDone] = useState(() => Boolean(initialDeeplink));
 
   const cleverSearchEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_ENABLE_CLEVER_SEARCH]);
-  const canUseVirtual = useMemo(() => supportsOrdersVirtualScroller(), []);
-  const virtualScrollerOptions = useMemo(
-    () => (canUseVirtual ? { itemSize: ORDERS_TABLE_VIRTUAL_ROW_PX, showLoader: true } : undefined),
-    [canUseVirtual],
-  );
+  const virtualScrollerOptions = useMemo(() => ordersTableVirtualScrollerOptions(), []);
   const selectedOrderRef = useRef<WorkOrder | null>(null);
   selectedOrderRef.current = selectedOrder;
   const searchBootstrapDoneRef = useRef(false);
@@ -790,95 +776,18 @@ export function MonitoringPage() {
       })} h`
     );
 
-  const referencesBody = (row: WorkOrder) => {
-    const ownDocuments = row.documentCount;
-    const assetDocuments = row.assetDocumentCount;
-    const totalDocuments = ownDocuments + assetDocuments;
-    const hasDocuments = totalDocuments > 0;
-    const isAssetOnly = ownDocuments === 0 && assetDocuments > 0;
-    const badgeValue = hasDocuments ? String(totalDocuments) : " ";
-    const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
-      hasDocuments ? "" : " app-ref-badge--placeholder"
-    }`;
-    const assignedCount = row.assignedEmployeeCount ?? 0;
-    const hasAssignments = assignedCount > 0;
-    const assignmentsBadge = hasAssignments ? String(assignedCount) : " ";
-    const assignmentsBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
-      hasAssignments ? "" : " app-ref-badge--placeholder"
-    }`;
-    const assignmentsTitle = hasAssignments
-      ? t("workOrders.assignmentsReferenceTitle", { count: assignedCount })
-      : t("workOrders.assignmentsReference");
-    const documentsTitle = hasDocuments
-      ? t("workOrders.references")
-      : t("workOrders.referencesOpenDocumentsTab");
-    const inspectionPointCount = row.inspectionPointCount ?? 0;
-    const checkedInspectionPointCount = row.checkedInspectionPointCount ?? 0;
-    const hasInspectionRound = Boolean(row.inspectionRoundId);
-    const hasInspectionPoints = inspectionPointCount > 0;
-    const inspectionActive = hasInspectionRound || hasInspectionPoints;
-    const inspectionBadge = hasInspectionPoints
-      ? `${checkedInspectionPointCount}/${inspectionPointCount}`
-      : hasInspectionRound
-        ? "0"
-        : " ";
-    const inspectionBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
-      inspectionActive ? "" : " app-ref-badge--placeholder"
-    }`;
-    const inspectionTitle = hasInspectionPoints
-      ? t("workOrders.inspectionPointsReferenceTitle", {
-          checked: checkedInspectionPointCount,
-          total: inspectionPointCount,
-        })
-      : t("workOrders.inspectionPointsReference");
-    return (
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          icon={<File className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-          badge={badgeValue}
-          badgeClassName={badgeClassName}
-          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-            hasDocuments
-              ? isAssetOnly
-                ? "app-ref-button--documents-asset"
-                : "app-ref-button--documents"
-              : "app-ref-button--documents-inactive"
-          }`}
-          onClick={() => openDocumentsTab(row)}
-          aria-label={documentsTitle}
-          title={documentsTitle}
-        />
-        <Button
-          type="button"
-          icon={<UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-          badge={assignmentsBadge}
-          badgeClassName={assignmentsBadgeClassName}
-          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-            hasAssignments ? "app-ref-button--employees" : "app-ref-button--employees-empty"
-          }`}
-          onClick={() => openPlanningTab(row)}
-          aria-label={assignmentsTitle}
-          title={assignmentsTitle}
-        />
-        <Button
-          type="button"
-          icon={<CheckSquare className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-          badge={inspectionBadge}
-          badgeClassName={inspectionBadgeClassName}
-          className={`h-7 w-7 !rounded-[0.5rem] !p-0 ${
-            inspectionActive
-              ? "app-ref-button--inspection-points"
-              : "app-ref-button--inspection-points-empty"
-          }`}
-          disabled={!inspectionActive}
-          onClick={() => openInspectionPointsTab(row)}
-          aria-label={inspectionTitle}
-          title={inspectionTitle}
-        />
-      </div>
-    );
-  };
+  const referencesBody = useCallback(
+    (row: WorkOrder) => (
+      <WorkOrderReferencesCell
+        row={row}
+        onOpenDocuments={openDocumentsTab}
+        onOpenPlanning={openPlanningTab}
+        onOpenInspectionPoints={openInspectionPointsTab}
+        emptyBadgePlaceholder
+      />
+    ),
+    [openDocumentsTab, openInspectionPointsTab, openPlanningTab],
+  );
 
   const statusLabel = useCallback((status: WorkOrderStatus) => t(`workOrders.statusValues.${status}`), [t]);
 
@@ -1179,6 +1088,7 @@ export function MonitoringPage() {
         }}
         siteOptions={refData.searchSiteOptions}
         assetOptions={refData.searchAssetOptions}
+        assetSuggestMode
         costCenterOptions={refData.searchCostCenterOptions}
         classificationOptions={refData.searchClassificationOptions}
         workgroupOptions={refData.searchWorkgroupOptions}
