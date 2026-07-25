@@ -666,7 +666,7 @@ const selectWorkOrdersListSql = `
 `;
 
 /** Soft page size for Monitoring / WorkOrders lists (clients may raise up to max). */
-const WORK_ORDER_LIST_DEFAULT_LIMIT = 250;
+const WORK_ORDER_LIST_DEFAULT_LIMIT = 50;
 const WORK_ORDER_LIST_MAX_LIMIT = 2000;
 
 function parseWorkOrderListLimit(raw: unknown): number {

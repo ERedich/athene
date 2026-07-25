@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 /** Mirror of parse helpers in workOrders.ts (kept local to avoid exporting router internals). */
-const WORK_ORDER_LIST_DEFAULT_LIMIT = 250;
+const WORK_ORDER_LIST_DEFAULT_LIMIT = 50;
 const WORK_ORDER_LIST_MAX_LIMIT = 2000;
 
 function parseWorkOrderListLimit(raw: unknown): number {
@@ -19,10 +19,10 @@ function parseWorkOrderListOffset(raw: unknown): number {
 }
 
 describe("work order list soft-limit parsing", () => {
-  it("defaults limit to 250", () => {
-    expect(parseWorkOrderListLimit(undefined)).toBe(250);
-    expect(parseWorkOrderListLimit("")).toBe(250);
-    expect(parseWorkOrderListLimit("abc")).toBe(250);
+  it("defaults limit to 50", () => {
+    expect(parseWorkOrderListLimit(undefined)).toBe(50);
+    expect(parseWorkOrderListLimit("")).toBe(50);
+    expect(parseWorkOrderListLimit("abc")).toBe(50);
   });
 
   it("clamps limit to max 2000", () => {

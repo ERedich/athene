@@ -1,7 +1,8 @@
 /** PrimeReact DataTable stateStorage key for Monitoring (personal browser state). */
-export const MONITORING_TABLE_STATE_STORAGE_KEY = "athene-monitoring-table-v4";
+export const MONITORING_TABLE_STATE_STORAGE_KEY = "athene-monitoring-table-v5";
 
 const LEGACY_MONITORING_TABLE_STATE_KEYS = [
+  "athene-monitoring-table-v4",
   "athene-monitoring-table-v3",
   "athene-monitoring-table-v2",
   "athene-monitoring-table",

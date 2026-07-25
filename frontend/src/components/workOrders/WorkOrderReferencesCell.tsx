@@ -60,7 +60,7 @@ function WorkOrderReferencesCellInner({
   const hasDocuments = totalDocuments > 0;
   const isAssetOnly = ownDocuments === 0 && assetDocuments > 0;
   const badgeValue = hasDocuments ? String(totalDocuments) : emptyBadgePlaceholder ? " " : undefined;
-  const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+  const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !px-1 !py-0${
     hasDocuments ? "" : " app-ref-badge--placeholder"
   }`;
 
@@ -71,7 +71,7 @@ function WorkOrderReferencesCellInner({
     : emptyBadgePlaceholder
       ? " "
       : undefined;
-  const assignmentsBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+  const assignmentsBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !px-1 !py-0${
     hasAssignments ? "" : " app-ref-badge--placeholder"
   }`;
   const assignmentsTitle = hasAssignments
@@ -93,7 +93,7 @@ function WorkOrderReferencesCellInner({
       : emptyBadgePlaceholder
         ? " "
         : undefined;
-  const inspectionBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !p-0${
+  const inspectionBadgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !px-1 !py-0${
     inspectionActive ? "" : " app-ref-badge--placeholder"
   }`;
   const inspectionTitle = hasInspectionPoints
@@ -108,7 +108,7 @@ function WorkOrderReferencesCellInner({
   const openInspection = useCallback(() => onOpenInspectionPoints(row), [onOpenInspectionPoints, row]);
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 overflow-visible py-0.5 pr-1">
       <RefIconButton
         className={
           hasDocuments

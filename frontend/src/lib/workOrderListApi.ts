@@ -2,7 +2,7 @@ import { apiFetch } from "./api";
 import type { WorkOrder } from "./workOrderTypes";
 
 /** Must stay in sync with backend WORK_ORDER_LIST_DEFAULT_LIMIT / MAX. */
-export const WORK_ORDER_LIST_DEFAULT_LIMIT = 250;
+export const WORK_ORDER_LIST_DEFAULT_LIMIT = 50;
 export const WORK_ORDER_LIST_MAX_LIMIT = 2000;
 
 export type WorkOrderListResponse = {

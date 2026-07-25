@@ -2,7 +2,7 @@
 export const ORDERS_TABLE_VIRTUAL_ROW_PX = 38;
 
 /**
- * Always enable VirtualScroller. Soft-limited lists stay within a few hundred rows;
+ * Always enable VirtualScroller. Soft-limited lists stay within ~50 rows per page;
  * TranslationsPage already uses the same PrimeReact pattern with scrollHeight="flex".
  * Historical Chromium/Firefox gate was a zero-height workaround — keep itemSize exact.
  */

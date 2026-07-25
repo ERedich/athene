@@ -69,12 +69,12 @@ describe("parseWorkOrderListResponse", () => {
     const parsed = parseWorkOrderListResponse({
       rows: [row],
       hasMore: true,
-      limit: 250,
+      limit: 50,
       offset: 0,
     });
     expect(parsed.rows).toHaveLength(1);
     expect(parsed.hasMore).toBe(true);
-    expect(parsed.limit).toBe(250);
+    expect(parsed.limit).toBe(50);
     expect(parsed.offset).toBe(0);
   });
 
@@ -134,7 +134,7 @@ describe("parseWorkOrderListResponse", () => {
       inspectionPointCount: 0,
       checkedInspectionPointCount: 0,
     };
-    const parsed = parseWorkOrderListResponse({ rows: [slim], hasMore: false, limit: 250, offset: 0 });
+    const parsed = parseWorkOrderListResponse({ rows: [slim], hasMore: false, limit: 50, offset: 0 });
     expect(parsed.rows[0]?.doneBy).toBeNull();
     expect(parsed.rows[0]?.pauseRemark).toBeNull();
     expect(parsed.rows[0]?.originalWoName).toBeNull();

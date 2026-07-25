@@ -824,14 +824,24 @@ html.theme-crossfade-fallback #root {
   min-width: 50px !important;
   max-width: 60px !important;
   position: relative;
+  /* Badges hang slightly off the corner; must not clip (esp. "0/7"). */
+  overflow: visible !important;
 }
 
-/* Native light ref buttons (Monitoring/WorkOrders) still use .p-button class for chrome. */
+/* Native light ref buttons (Monitoring/WorkOrders) still use .p-button class for chrome.
+   Fixed px offset (not % translate) so single- and multi-digit badges share the same corner. */
 button.p-button[class*="app-ref-button--"] .p-badge {
   position: absolute;
-  top: 0;
-  right: 0;
-  transform: translate(40%, -40%);
+  top: -0.25rem;
+  right: -0.25rem;
+  transform: none;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 .app-ref-button--documents.p-button:not(:disabled),
@@ -2733,6 +2743,11 @@ button.p-button[class*="app-ref-button--"] .p-badge {
 .app-work-orders-data-grid.app-data-table .p-datatable-thead > tr > th,
 .app-work-orders-data-grid.app-data-table .p-datatable-tbody > tr > td {
   border-color: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
+}
+
+/* Let reference count badges hang slightly off icon buttons without clipping. */
+.app-work-orders-data-grid.app-data-table .p-datatable-tbody > tr > td {
+  overflow: visible;
 }
 
 .app-work-orders-data-grid.p-datatable .p-datatable-thead > tr > th {

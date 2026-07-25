@@ -1066,7 +1066,7 @@ export function WorkOrdersPage() {
           scrollHeight="flex"
           tableStyle={{ minWidth: "94rem" }}
           stateStorage="local"
-          stateKey="athene-work-orders-table"
+          stateKey="athene-work-orders-table-v2"
           virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={t("workOrders.empty")}
         >
@@ -1137,7 +1137,7 @@ export function WorkOrdersPage() {
             header={t("workOrders.references")}
             body={referencesBody}
             sortable={!isPreloadMode}
-            style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
+            style={{ width: "10rem", minWidth: "10rem", maxWidth: "10rem" }}
           />
           <Column
             field="orderType"

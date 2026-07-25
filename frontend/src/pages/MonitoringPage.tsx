@@ -1237,7 +1237,7 @@ export function MonitoringPage() {
             header={<span data-onboarding="mon-references">{t("workOrders.references")}</span>}
             body={referencesBody}
             sortable={!isPreloadMode}
-            style={{ width: "7rem", minWidth: "7rem", maxWidth: "7rem" }}
+            style={{ width: "10rem", minWidth: "10rem", maxWidth: "10rem" }}
           />
           <Column
             field="orderType"
