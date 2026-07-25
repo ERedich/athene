@@ -61,12 +61,17 @@ export function WorkOrderSelectionBrowser({
       setLoading(true);
       setLoadError(false);
       try {
-        const res = await apiFetch("/api/work-orders");
+        const res = await apiFetch("/api/work-orders?limit=2000&offset=0");
         if (!res.ok) throw new Error("load");
         const data = (await res.json()) as unknown;
         if (cancelled) return;
-        const mapped = Array.isArray(data)
+        const list = Array.isArray(data)
           ? data
+          : data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows)
+            ? (data as { rows: unknown[] }).rows
+            : [];
+        const mapped = Array.isArray(list)
+          ? list
               .map((raw): WorkOrderSelectionRow | null => {
                 if (!raw || typeof raw !== "object") return null;
                 const o = raw as Record<string, unknown>;

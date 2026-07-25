@@ -385,10 +385,16 @@ export function BaumstrukturPage() {
     async (asset: AssetTreeAsset) => {
       setWoLoading(true);
       try {
-        const res = await apiFetch(`/api/work-orders?assetId=${encodeURIComponent(asset.id)}`);
+        const res = await apiFetch(
+          `/api/work-orders?assetId=${encodeURIComponent(asset.id)}&limit=2000&offset=0`,
+        );
         if (!res.ok) throw new Error("wos");
         const data = (await res.json()) as unknown;
-        const rows = Array.isArray(data) ? (data as WorkOrder[]) : [];
+        const rows = Array.isArray(data)
+          ? (data as WorkOrder[])
+          : data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows)
+            ? ((data as { rows: WorkOrder[] }).rows)
+            : [];
         setWoRows(rows);
         setWoLoadedAssetId(asset.id);
       } catch {

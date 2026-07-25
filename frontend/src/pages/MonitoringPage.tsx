@@ -55,6 +55,7 @@ import {
   parseWorkOrderDeeplinkParams,
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
+import { fetchWorkOrderList } from "../lib/workOrderListApi";
 import {
   createWorkOrderSearchPreset,
   fetchWorkOrderSearchPresetDefaults,
@@ -148,6 +149,8 @@ export function MonitoringPage() {
   const initialDeeplink = initialDeeplinkRef.current;
 
   const [orders, setOrders] = useState<WorkOrder[]>([]);
+  const [hasMoreOrders, setHasMoreOrders] = useState(false);
+  const [loadingMoreOrders, setLoadingMoreOrders] = useState(false);
   const [newlyCreatedOrderIds, setNewlyCreatedOrderIds] = useState<Record<string, number>>({});
   const [updatedOrderIds, setUpdatedOrderIds] = useState<Record<string, number>>({});
   const [deletedOrderIds, setDeletedOrderIds] = useState<Record<string, number>>({});
@@ -310,13 +313,19 @@ export function MonitoringPage() {
   const bootstrapSearchPresets = useCallback(async () => {
     const deeplink = initialDeeplinkRef.current;
     try {
-      const [rows, defaults] = await Promise.all([fetchWorkOrderSearchPresets(), fetchWorkOrderSearchPresetDefaults()]);
+      // Overlap defaults → detail with presets list to save one Neon RTT when a default exists.
+      const defaultsPromise = fetchWorkOrderSearchPresetDefaults();
+      const presetsPromise = fetchWorkOrderSearchPresets();
+      const defaults = await defaultsPromise;
+      const defaultId = defaults.monitoringPresetId;
+      const detailPromise =
+        !deeplink && defaultId ? fetchWorkOrderSearchPresetDetail(defaultId) : null;
+      const rows = await presetsPromise;
       setSearchPresets(rows);
       if (deeplink) return;
-      const defaultId = defaults.monitoringPresetId;
       const match = defaultId ? rows.find((p) => isSamePresetId(p.id, defaultId)) : undefined;
-      if (match) {
-        const d = await fetchWorkOrderSearchPresetDetail(match.id);
+      if (match && detailPromise) {
+        const d = await detailPromise;
         const q = d.payload.quickSearch ?? "";
         setSearchTerm(q);
         setDebouncedSearch(q.trim());
@@ -396,12 +405,10 @@ export function MonitoringPage() {
     setLoading(true);
     try {
       const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
-      const ordersPath = qs ? `/api/work-orders?${qs}` : "/api/work-orders";
-      const ordersRes = await apiFetch(ordersPath);
-      if (!ordersRes.ok) throw new Error("load");
-      const ordersData = (await ordersRes.json()) as WorkOrder[];
+      const page = await fetchWorkOrderList({ queryString: qs, offset: 0 });
       if (gen !== loadDataGenRef.current) return;
-      setOrders(ordersData);
+      setOrders(page.rows);
+      setHasMoreOrders(page.hasMore);
     } catch {
       if (gen !== loadDataGenRef.current) return;
       toastRef.current?.show({ severity: "error", summary: t("workOrders.loadError"), life: 6000 });
@@ -409,6 +416,28 @@ export function MonitoringPage() {
       if (gen === loadDataGenRef.current) setLoading(false);
     }
   }, [appliedAdvanced, debouncedSearch, t]);
+
+  const loadMoreOrders = useCallback(async () => {
+    if (loadingMoreOrders || !hasMoreOrders || loading) return;
+    setLoadingMoreOrders(true);
+    try {
+      const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
+      const page = await fetchWorkOrderList({ queryString: qs, offset: orders.length });
+      setOrders((current) => {
+        const seen = new Set(current.map((row) => row.id));
+        const merged = [...current];
+        for (const row of page.rows) {
+          if (!seen.has(row.id)) merged.push(row);
+        }
+        return merged;
+      });
+      setHasMoreOrders(page.hasMore);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("workOrders.loadMoreError"), life: 6000 });
+    } finally {
+      setLoadingMoreOrders(false);
+    }
+  }, [appliedAdvanced, debouncedSearch, hasMoreOrders, loading, loadingMoreOrders, orders.length, t]);
 
   const loadDataRef = useRef(loadData);
   loadDataRef.current = loadData;
@@ -1332,6 +1361,21 @@ export function MonitoringPage() {
             style={{ width: "7.5rem", minWidth: "7.5rem" }}
           />
         </DataTable>
+        {hasMoreOrders && !isPreloadMode ? (
+          <div className="flex shrink-0 items-center justify-center gap-3 border-t border-[var(--color-outline-variant)]/40 px-3 py-2">
+            <span className="text-sm text-on-surface-variant">
+              {t("workOrders.listTruncated", { count: orders.length })}
+            </span>
+            <Button
+              type="button"
+              label={t("workOrders.loadMore")}
+              loading={loadingMoreOrders}
+              disabled={loadingMoreOrders}
+              onClick={() => void loadMoreOrders()}
+              className="p-button-outlined p-button-sm"
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

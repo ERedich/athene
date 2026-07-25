@@ -34,7 +34,7 @@ export const GETTING_STARTED_COUNT_ENDPOINTS: Record<
   problems: "/api/problems",
   causes: "/api/causes",
   remedies: "/api/remedies",
-  workOrders: "/api/work-orders",
+  workOrders: "/api/work-orders?limit=1&offset=0",
   warehouses: "/api/warehouses",
   storageLocations: "/api/storage-locations",
   spareParts: "/api/spare-parts",
@@ -74,6 +74,18 @@ function countFromPayload(key: GettingStartedCountKey, data: unknown): number | 
       typeof (data as { total: unknown }).total === "number"
     ) {
       return (data as { total: number }).total;
+    }
+    return null;
+  }
+
+  if (key === "workOrders") {
+    // Soft-limited list: presence check — any row or hasMore means work orders exist.
+    if (Array.isArray(data)) return data.length;
+    if (data && typeof data === "object") {
+      const obj = data as { rows?: unknown; hasMore?: unknown };
+      const rowCount = Array.isArray(obj.rows) ? obj.rows.length : 0;
+      if (rowCount > 0 || obj.hasMore) return Math.max(rowCount, obj.hasMore ? 1 : 0);
+      return 0;
     }
     return null;
   }

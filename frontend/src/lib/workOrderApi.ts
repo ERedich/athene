@@ -99,9 +99,16 @@ export async function fetchWorkOrderByOrderNumber(orderNumber: number): Promise<
   const params = new URLSearchParams();
   params.set("orderNumberFrom", String(orderNumber));
   params.set("orderNumberTo", String(orderNumber));
+  params.set("limit", "5");
+  params.set("offset", "0");
   const res = await apiFetch(`/api/work-orders?${params.toString()}`);
   if (!res.ok) throw new Error(`work_order_fetch_failed_${res.status}`);
-  const rows = (await res.json()) as WorkOrder[];
+  const data = (await res.json()) as unknown;
+  const rows = Array.isArray(data)
+    ? (data as WorkOrder[])
+    : data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows)
+      ? ((data as { rows: WorkOrder[] }).rows)
+      : [];
   return rows.find((row) => row.orderNumber === orderNumber) ?? rows[0] ?? null;
 }
 
