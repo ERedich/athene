@@ -189,11 +189,11 @@ export function AppShellLayout() {
 
   return (
     <div
-      className="text-on-surface flex h-screen min-h-0 overflow-hidden bg-surface"
+      className="text-on-surface flex h-full min-h-0 overflow-hidden bg-surface"
       style={{ fontFamily: "var(--font-family)" }}
     >
       <aside
-        className={`app-chrome-bg flex h-screen min-h-0 shrink-0 flex-col overflow-hidden border-r border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-low transition-[width] duration-200 ease-out ${
+        className={`app-chrome-bg flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)] bg-surface-container-low transition-[width] duration-200 ease-out ${
           collapsed ? "w-[68px]" : "w-[260px]"
         }`}
         aria-label={t("dashboard.navAria")}
@@ -331,7 +331,7 @@ export function AppShellLayout() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header
           className="app-chrome-bg h-14 shrink-0 flex items-center justify-between gap-4 pl-[15px] pr-4 border-b border-white/5 bg-surface-container-low"
           style={chromeBackground}

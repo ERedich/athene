@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { apiFetch } from "../lib/api";
+import { APP_PARAM_KEY_INTRO } from "../lib/appParameterKeys";
 import { AtheneCoachmark } from "./AtheneCoachmark";
 import {
   requestEnsureSidebarExpanded,
@@ -36,19 +37,42 @@ type Props = {
 };
 
 export function OnboardingProvider({ children, shellReady }: Props) {
-  const { user, refresh } = useAuth();
+  const { user, refresh, appParameterBooleans } = useAuth();
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [active, setActive] = useState(false);
   const [completing, setCompleting] = useState(false);
 
-  const needsTour = user.onboardingCompletedAt == null;
+  const introEnabled = Boolean(appParameterBooleans[APP_PARAM_KEY_INTRO]);
+  const onboardingPending = user.onboardingCompletedAt == null;
+  const needsTour = introEnabled && onboardingPending;
+
+  const complete = useCallback(async (opts?: { silent?: boolean }) => {
+    if (completing) return;
+    setCompleting(true);
+    setActive(false);
+    try {
+      await apiFetch("/api/auth/onboarding/complete", { method: "POST" });
+      await refresh();
+    } catch {
+      setCompleting(false);
+      if (!opts?.silent) {
+        setActive(true);
+      }
+    }
+  }, [completing, refresh]);
 
   useEffect(() => {
-    if (!shellReady || !needsTour || completing) return;
-    setActive(true);
-    setStepIndex(0);
-  }, [shellReady, needsTour, completing]);
+    if (!shellReady || completing || !onboardingPending) return;
+    if (!introEnabled) {
+      void complete({ silent: true });
+      return;
+    }
+    if (needsTour) {
+      setActive(true);
+      setStepIndex(0);
+    }
+  }, [shellReady, needsTour, completing, introEnabled, onboardingPending, complete]);
 
   const step = ONBOARDING_STEPS[stepIndex] ?? ONBOARDING_STEPS[0];
 
@@ -68,19 +92,6 @@ export function OnboardingProvider({ children, shellReady }: Props) {
       window.clearTimeout(t2);
     };
   }, [active, step, navigate]);
-
-  const complete = useCallback(async () => {
-    if (completing) return;
-    setCompleting(true);
-    setActive(false);
-    try {
-      await apiFetch("/api/auth/onboarding/complete", { method: "POST" });
-      await refresh();
-    } catch {
-      setCompleting(false);
-      setActive(true);
-    }
-  }, [completing, refresh]);
 
   const onNext = useCallback(() => {
     if (stepIndex >= ONBOARDING_STEPS.length - 1) {

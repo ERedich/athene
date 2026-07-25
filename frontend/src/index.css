@@ -119,14 +119,22 @@
 
 html {
   font-size: 15px;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   background-color: var(--color-background);
   color: var(--color-on-surface);
   font-family: Manrope, system-ui, sans-serif;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Native ViewTransition crossfade (Chromium) — default (e.g. theme). */
@@ -1838,57 +1846,61 @@ html.theme-crossfade-fallback #root {
 
 .app-wo-edit-page-view {
   min-height: 0;
-  /* Flex-fill only — avoid height:100% which can overflow main (p-px) and
-     create a document scrollbar alongside the tab-panel scrollbar. */
+  /* Flex-fill only — avoid height:100% which can overflow main (p-px). */
   overflow: hidden;
 }
 
+/*
+ * Fullscreen edit: ONE vertical scroller on __body (like modal dialog content).
+ * Nested overflow on .p-tabview-panel caused a second scrollbar beside the page.
+ * Sticky tab nav then sticks within this single scroller.
+ */
 .app-wo-edit-page-view__body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs,
 .app-wo-edit-page-view__body .app-wo-edit-tab-host {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+  flex: 1 0 auto;
+  min-height: min-content;
+  overflow: visible;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs .p-tabview,
 .app-wo-edit-page-view__body .app-wo-edit-tab-host .p-tabview {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+  flex: 1 0 auto;
+  min-height: min-content;
+  overflow: visible;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panels,
 .app-wo-edit-page-view__body .app-wo-edit-tab-host .p-tabview-panels {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  overscroll-behavior: contain;
-  /* Prime default panels padding sits beside the panel scrollbar and reads as a
-     second vertical scrollbar track in fullscreen edit. Panel has its own padding. */
+  flex: 1 0 auto;
+  min-height: min-content;
+  overflow: visible;
+  display: block;
+  /* Prime default panels padding sits beside a nested panel scrollbar and
+     reads as a second vertical track — keep padding on the panel only. */
   padding: 0 !important;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panel,
 .app-wo-edit-page-view__body .app-wo-edit-tab-host .p-tabview-panel {
-  flex: 1 1 auto;
+  flex: none;
   min-height: 0;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  height: auto;
+  overflow: visible;
 }
 
 .app-wo-edit-page-view__body .app-standard-tabs .app-wo-messages-tab,
@@ -1899,7 +1911,7 @@ html.theme-crossfade-fallback #root {
   flex-direction: column;
 }
 
-/* Spare-part fullscreen edit: same layout rules as work-order page view */
+/* Spare-part fullscreen edit: same single-scroller approach as work-order page view */
 .app-sp-edit-page-view,
 .app-sp-edit-page-view .app-wo-edit-page-view__body,
 .app-sp-edit-page-view .app-wo-edit-page-view__body .app-standard-tabs,
@@ -1912,44 +1924,39 @@ html.theme-crossfade-fallback #root {
 .app-wo-edit-page-view__body .app-sp-edit-tab-host {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
+  flex: 1 0 auto;
+  min-height: min-content;
+  overflow: visible;
 }
 
 .app-sp-edit-page-view .app-wo-edit-page-view__body .app-standard-tabs .p-tabview,
 .app-wo-edit-page-view__body .app-sp-edit-tab-host .p-tabview {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: min-content;
   min-width: 0;
   max-width: 100%;
-  flex: 1 1 auto;
+  overflow: visible;
 }
 
 .app-sp-edit-page-view .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panels,
 .app-wo-edit-page-view__body .app-sp-edit-tab-host .p-tabview-panels {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: min-content;
   min-width: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  overscroll-behavior: contain;
+  overflow: visible;
+  display: block;
   padding: 0 !important;
 }
 
 .app-sp-edit-page-view .app-wo-edit-page-view__body .app-standard-tabs .p-tabview-panel,
 .app-wo-edit-page-view__body .app-sp-edit-tab-host .p-tabview-panel {
-  flex: 1 1 auto;
+  flex: none;
   min-height: 0;
   min-width: 0;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Keep vertical scrollbar from eating into field width (clipped right edges). */
-  scrollbar-gutter: stable;
+  height: auto;
+  overflow: visible;
   box-sizing: border-box;
   padding: 0.75rem 1rem 1rem;
 }

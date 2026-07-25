@@ -25,6 +25,9 @@ export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR" as const;
 /** Must match backend `APP_PARAM_KEY_PRIMARY_COLOR` (GN-PRIM). */
 export const APP_PARAM_KEY_PRIMARY_COLOR = "GN-PRIM" as const;
 
+/** Must match backend `APP_PARAM_KEY_INTRO` (GN-INTRO). */
+export const APP_PARAM_KEY_INTRO = "GN-INTRO" as const;
+
 /** Default when GN-PRIM is missing; must match backend `DEFAULT_PRIMARY_COLOR_HEX`. */
 export const DEFAULT_PRIMARY_COLOR_HEX = "#f97316" as const;
 

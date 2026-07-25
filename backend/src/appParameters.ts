@@ -30,6 +30,9 @@ export const APP_PARAM_KEY_COLORED_ASSET_TREE = "GN-CATR";
 /** Allgemein: Primärfarbe der UI (JSON colorHex → CSS --color-primary). */
 export const APP_PARAM_KEY_PRIMARY_COLOR = "GN-PRIM";
 
+/** Allgemein: Introduction/Onboarding beim ersten Login. */
+export const APP_PARAM_KEY_INTRO = "GN-INTRO";
+
 /** Default when GN-PRIM is missing or invalid. */
 export const DEFAULT_PRIMARY_COLOR_HEX = "#f97316";
 
