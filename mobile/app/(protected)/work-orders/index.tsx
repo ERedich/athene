@@ -1,4 +1,5 @@
 import {
+  CheckSquare,
   ChevronRight,
   FileText,
   MoreVertical,
@@ -375,6 +376,7 @@ export default function WorkOrdersListScreen() {
         },
         docChipBlue: { backgroundColor: "rgb(103,232,249)" },
         docChipGreen: { backgroundColor: "rgb(134,239,172)" },
+        inspectionChip: { backgroundColor: "rgb(252,211,77)" },
         docChipText: { color: "rgb(15,23,42)", fontWeight: "700", fontSize: 11 },
       }),
     [
@@ -544,11 +546,34 @@ export default function WorkOrdersListScreen() {
                   </View>
                 );
               })()}
+              {(() => {
+                const inspectionPointCount = item.inspectionPointCount ?? 0;
+                const checkedInspectionPointCount = item.checkedInspectionPointCount ?? 0;
+                const hasInspectionRound = Boolean(item.inspectionRoundId);
+                if (!hasInspectionRound && inspectionPointCount === 0) return null;
+                const badge =
+                  inspectionPointCount > 0
+                    ? `${checkedInspectionPointCount}/${inspectionPointCount}`
+                    : "0";
+                return (
+                  <View style={[styles.docChip, styles.inspectionChip]}>
+                    <CheckSquare size={13} color="rgb(15,23,42)" />
+                    <Text style={styles.docChipText}>{badge}</Text>
+                  </View>
+                );
+              })()}
             </View>
             <Text style={styles.name}>{item.name}</Text>
             <Text style={styles.type}>
               {item.assetKey} — {item.assetName}
             </Text>
+            {item.inspectionRoundName || item.inspectionRoundKey ? (
+              <Text style={styles.type}>
+                {t("workOrders.inspectionRoundSubtitle", {
+                  name: item.inspectionRoundName || item.inspectionRoundKey,
+                })}
+              </Text>
+            ) : null}
             <Text style={styles.type}>
               {t(`workOrders.typeValues.${item.orderType}`)} ·{" "}
               {new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(
@@ -700,8 +725,18 @@ export default function WorkOrdersListScreen() {
       <WorkOrderActionsSheet
         visible={actionsOpen}
         status={selectedOrder?.status ?? null}
+        showInspectionPoints={
+          Boolean(selectedOrder?.inspectionRoundId) || (selectedOrder?.inspectionPointCount ?? 0) > 0
+        }
         onClose={() => setActionsOpen(false)}
         atheneBusy={athene.busy}
+        onOpenInspectionPoints={() => {
+          if (!selectedOrder) return;
+          router.push({
+            pathname: "/work-orders/inspection-points/[id]",
+            params: { id: selectedOrder.id },
+          });
+        }}
         onAskAthene={() => {
           if (!selectedOrder) return;
           athene.openWithContext({

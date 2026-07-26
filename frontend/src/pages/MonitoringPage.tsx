@@ -53,7 +53,7 @@ import {
   parseWorkOrderDeeplinkParams,
   type WorkOrderAdvancedSearchState,
 } from "../lib/workOrderApiFilters";
-import { fetchWorkOrderList } from "../lib/workOrderListApi";
+import { appendWorkOrderPage, fetchRemainingWorkOrderPages, fetchWorkOrderList } from "../lib/workOrderListApi";
 import { ordersTableVirtualScrollerOptions } from "../lib/ordersTableVirtualScroller";
 import {
   createWorkOrderSearchPreset,
@@ -302,22 +302,24 @@ export function MonitoringPage() {
       // Overlap defaults → detail with presets list to save one Neon RTT when a default exists.
       const defaultsPromise = fetchWorkOrderSearchPresetDefaults();
       const presetsPromise = fetchWorkOrderSearchPresets();
-      const defaults = await defaultsPromise;
-      const defaultId = defaults.monitoringPresetId;
-      const detailPromise =
-        !deeplink && defaultId ? fetchWorkOrderSearchPresetDetail(defaultId) : null;
-      const rows = await presetsPromise;
+      const [defaultsResult, presetsResult] = await Promise.allSettled([defaultsPromise, presetsPromise]);
+      const rows = presetsResult.status === "fulfilled" ? presetsResult.value : [];
       setSearchPresets(rows);
       if (deeplink) return;
+      const defaults = defaultsResult.status === "fulfilled" ? defaultsResult.value : null;
+      const defaultId = defaults?.monitoringPresetId ?? null;
       const match = defaultId ? rows.find((p) => isSamePresetId(p.id, defaultId)) : undefined;
-      if (match && detailPromise) {
-        const d = await detailPromise;
+      if (!match || !defaultId) return;
+      try {
+        const d = await fetchWorkOrderSearchPresetDetail(defaultId);
         const q = d.payload.quickSearch ?? "";
         setSearchTerm(q);
         setDebouncedSearch(q.trim());
         setAppliedAdvanced(coerceWorkOrderAdvancedSearch(d.payload.advanced));
         setPanelDraft(coerceWorkOrderAdvancedSearch(d.payload.advanced));
         setHeaderPresetSelectionId(match.id);
+      } catch {
+        // Keep the preset list even if the default detail fails to load.
       }
     } catch {
       setSearchPresets([]);
@@ -409,17 +411,31 @@ export function MonitoringPage() {
     try {
       const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
       const page = await fetchWorkOrderList({ queryString: qs, offset: orders.length });
-      setOrders((current) => {
-        const seen = new Set(current.map((row) => row.id));
-        const merged = [...current];
-        for (const row of page.rows) {
-          if (!seen.has(row.id)) merged.push(row);
-        }
-        return merged;
-      });
+      setOrders((current) => appendWorkOrderPage(current, page.rows));
       setHasMoreOrders(page.hasMore);
     } catch {
       toastRef.current?.show({ severity: "error", summary: t("workOrders.loadMoreError"), life: 6000 });
+    } finally {
+      setLoadingMoreOrders(false);
+    }
+  }, [appliedAdvanced, debouncedSearch, hasMoreOrders, loading, loadingMoreOrders, orders.length, t]);
+
+  const loadAllOrders = useCallback(async () => {
+    if (loadingMoreOrders || !hasMoreOrders || loading) return;
+    setLoadingMoreOrders(true);
+    try {
+      const qs = buildWorkOrderListQueryString(debouncedSearch, appliedAdvanced);
+      await fetchRemainingWorkOrderPages({
+        queryString: qs,
+        offset: orders.length,
+        onPage: (page) => {
+          setOrders((current) => appendWorkOrderPage(current, page.rows));
+          setHasMoreOrders(page.hasMore);
+        },
+      });
+      setHasMoreOrders(false);
+    } catch {
+      toastRef.current?.show({ severity: "error", summary: t("workOrders.loadAllError"), life: 6000 });
     } finally {
       setLoadingMoreOrders(false);
     }
@@ -1282,6 +1298,14 @@ export function MonitoringPage() {
               loading={loadingMoreOrders}
               disabled={loadingMoreOrders}
               onClick={() => void loadMoreOrders()}
+              className="p-button-outlined p-button-sm"
+            />
+            <Button
+              type="button"
+              label={t("workOrders.loadAll")}
+              loading={loadingMoreOrders}
+              disabled={loadingMoreOrders}
+              onClick={() => void loadAllOrders()}
               className="p-button-outlined p-button-sm"
             />
           </div>

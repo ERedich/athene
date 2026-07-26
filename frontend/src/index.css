@@ -821,8 +821,10 @@ html.theme-crossfade-fallback #root {
 
 /* Reference column icon buttons — Guidelines “Referenzen” (Tailwind 300 palette) */
 [class*="app-ref-button--"].p-button {
-  min-width: 50px !important;
-  max-width: 60px !important;
+  /* Icon-only table buttons: stay on the h-7/w-7 footprint so three fit in ~10rem. */
+  min-width: 1.75rem !important;
+  width: 1.75rem !important;
+  max-width: 1.75rem !important;
   position: relative;
   /* Badges hang slightly off the corner; must not clip (esp. "0/7"). */
   overflow: visible !important;
@@ -1878,8 +1880,9 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* Must win over any utility overflow on the same node (Tailwind overflow-hidden). */
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
@@ -2745,9 +2748,20 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   border-color: color-mix(in srgb, var(--color-on-surface) 6%, transparent);
 }
 
-/* Let reference count badges hang slightly off icon buttons without clipping. */
+/* Keep text inside columns — overflow:visible on every td made long values paint over neighbours. */
 .app-work-orders-data-grid.app-data-table .p-datatable-tbody > tr > td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* References column only: allow count badges to hang slightly off icon buttons. */
+.app-work-orders-data-grid.app-data-table
+  .p-datatable-tbody
+  > tr
+  > td:has([class*="app-ref-button--"]) {
   overflow: visible;
+  text-overflow: clip;
 }
 
 .app-work-orders-data-grid.p-datatable .p-datatable-thead > tr > th {

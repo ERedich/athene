@@ -86,3 +86,46 @@ export async function fetchWorkOrderList(
   if (!res.ok) throw new Error(`work_orders_list_failed_${res.status}`);
   return parseWorkOrderListResponse(await res.json());
 }
+
+/** Deduping append used by load-more / load-all. */
+export function appendWorkOrderPage(current: WorkOrder[], pageRows: WorkOrder[]): WorkOrder[] {
+  if (pageRows.length === 0) return current;
+  const seen = new Set(current.map((row) => row.id));
+  const merged = [...current];
+  for (const row of pageRows) {
+    if (!seen.has(row.id)) {
+      seen.add(row.id);
+      merged.push(row);
+    }
+  }
+  return merged;
+}
+
+/**
+ * Fetches remaining soft-limit pages until exhausted (chunks of MAX_LIMIT).
+ * `onPage` is called after each chunk so the UI can grow progressively.
+ */
+export async function fetchRemainingWorkOrderPages(options: {
+  queryString: string;
+  offset: number;
+  onPage?: (page: { rows: WorkOrder[]; hasMore: boolean; offset: number }) => void;
+}): Promise<{ rows: WorkOrder[]; hasMore: boolean }> {
+  let offset = Math.max(0, options.offset);
+  let hasMore = true;
+  const collected: WorkOrder[] = [];
+
+  while (hasMore) {
+    const page = await fetchWorkOrderList({
+      queryString: options.queryString,
+      offset,
+      limit: WORK_ORDER_LIST_MAX_LIMIT,
+    });
+    collected.push(...page.rows);
+    offset += page.rows.length;
+    hasMore = page.hasMore;
+    options.onPage?.({ rows: page.rows, hasMore, offset });
+    if (page.rows.length === 0) break;
+  }
+
+  return { rows: collected, hasMore: false };
+}

@@ -171,6 +171,28 @@ export type WorkOrderRow = {
   updatedBy: string;
   documentCount: number;
   assetDocumentCount: number;
+  inspectionRoundId: string | null;
+  inspectionRoundKey: string | null;
+  inspectionRoundName: string | null;
+  inspectionPointCount: number;
+  checkedInspectionPointCount: number;
+};
+
+export type WorkOrderInspectionPointRow = {
+  id: string;
+  workOrderId: string;
+  pos: number;
+  name: string;
+  assetId: string | null;
+  assetKey: string | null;
+  assetName: string | null;
+  inspectionPointId: string | null;
+  inspectionPointKey: string | null;
+  inspectionPointName: string | null;
+  checked: boolean;
+  checkedAt: string | null;
+  checkedBy: string | null;
+  checkedByLoginName: string | null;
 };
 
 export type WorkgroupRow = {

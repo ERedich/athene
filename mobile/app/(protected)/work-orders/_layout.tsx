@@ -60,6 +60,14 @@ export default function WorkOrdersStackLayout() {
           headerRight: undefined,
         }}
       />
+      <Stack.Screen
+        name="inspection-points/[id]"
+        options={{
+          title: t("workOrders.tabInspectionPoints"),
+          headerLeft: ({ tintColor }) => workOrderBackHeaderLeft(tintColor ?? colors.onSurface),
+          headerRight: undefined,
+        }}
+      />
     </Stack>
   );
 }

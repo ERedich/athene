@@ -62,7 +62,7 @@ export function SparePartEditPageView({
           </div>
         </header>
 
-        <div className="app-wo-edit-page-view__body min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+        <div className="app-wo-edit-page-view__body min-h-0 min-w-0 flex-1">{children}</div>
 
         <footer className="app-wo-edit-page-view__footer shrink-0 border-t border-solid app-wo-detail-outline-border px-4 py-3">
           <SparePartEditFooter

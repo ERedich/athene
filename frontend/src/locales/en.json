@@ -832,6 +832,8 @@
     "loadError": "Could not load orders.",
     "loadMore": "Load more",
     "loadMoreError": "Could not load more orders.",
+    "loadAll": "Load all",
+    "loadAllError": "Could not load all orders.",
     "listTruncated": "{{count}} orders loaded — more available",
     "saveError": "Could not save order.",
     "assetConflictConfirmTitle": "Planning conflict",

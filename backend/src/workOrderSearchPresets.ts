@@ -97,6 +97,22 @@ function parseBoolean(raw: unknown): boolean | null {
   return raw;
 }
 
+function parsePlanningMode(raw: unknown): "absolute" | "relative" | null {
+  if (raw === undefined || raw === null) return "relative";
+  if (raw === "absolute" || raw === "relative") return raw;
+  return null;
+}
+
+function parseNonNegDayField(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return "";
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!t) return "";
+  if (t.length > 40) return null;
+  if (!/^\d+$/.test(t)) return null;
+  return t;
+}
+
 /** Same visibility as GET /api/users for the given actor. */
 async function countUsersVisibleToActor(
   client: Pick<Pool, "query">,
@@ -143,10 +159,16 @@ export type WorkOrderSearchPresetAdvancedV1 = {
   description: string;
   createdBy: string[];
   updatedBy: string[];
+  plannedStartMode: "absolute" | "relative";
   plannedStartFrom: string;
   plannedStartTo: string;
+  plannedStartPastDays: string;
+  plannedStartFutureDays: string;
+  plannedEndMode: "absolute" | "relative";
   plannedEndFrom: string;
   plannedEndTo: string;
+  plannedEndPastDays: string;
+  plannedEndFutureDays: string;
   createdAtFrom: string;
   createdAtTo: string;
   updatedAtFrom: string;
@@ -158,9 +180,11 @@ export type WorkOrderSearchPresetAdvancedV1 = {
   costCenterId: string[];
   classificationId: string[];
   classificationUnassigned: boolean;
+  overdue: boolean;
   workgroupId: string[];
   responsibleEmployeeId: string[];
   employeeId: string[];
+  maintenancePlanId: string[];
 };
 
 export type WorkOrderSearchPresetPayloadV1 = {
@@ -188,10 +212,16 @@ export function emptyWorkOrderSearchPresetPayload(): WorkOrderSearchPresetPayloa
       description: "",
       createdBy: [],
       updatedBy: [],
+      plannedStartMode: "relative",
       plannedStartFrom: "",
       plannedStartTo: "",
+      plannedStartPastDays: "",
+      plannedStartFutureDays: "",
+      plannedEndMode: "relative",
       plannedEndFrom: "",
       plannedEndTo: "",
+      plannedEndPastDays: "",
+      plannedEndFutureDays: "",
       createdAtFrom: "",
       createdAtTo: "",
       updatedAtFrom: "",
@@ -203,9 +233,11 @@ export function emptyWorkOrderSearchPresetPayload(): WorkOrderSearchPresetPayloa
       costCenterId: [],
       classificationId: [],
       classificationUnassigned: false,
+      overdue: false,
       workgroupId: [],
       responsibleEmployeeId: [],
       employeeId: [],
+      maintenancePlanId: [],
     },
   };
 }
@@ -356,10 +388,16 @@ const ADVANCED_KEYS = new Set([
   "description",
   "createdBy",
   "updatedBy",
+  "plannedStartMode",
   "plannedStartFrom",
   "plannedStartTo",
+  "plannedStartPastDays",
+  "plannedStartFutureDays",
+  "plannedEndMode",
   "plannedEndFrom",
   "plannedEndTo",
+  "plannedEndPastDays",
+  "plannedEndFutureDays",
   "createdAtFrom",
   "createdAtTo",
   "updatedAtFrom",
@@ -371,9 +409,11 @@ const ADVANCED_KEYS = new Set([
   "costCenterId",
   "classificationId",
   "classificationUnassigned",
+  "overdue",
   "workgroupId",
   "responsibleEmployeeId",
   "employeeId",
+  "maintenancePlanId",
 ]);
 
 export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV1 | null {
@@ -407,10 +447,16 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
   const description = str("description", 2000) ?? "";
   const createdBy = uuidArr("createdBy");
   const updatedBy = uuidArr("updatedBy");
+  const plannedStartMode = parsePlanningMode(adv.plannedStartMode);
   const plannedStartFrom = str("plannedStartFrom", 80) ?? "";
   const plannedStartTo = str("plannedStartTo", 80) ?? "";
+  const plannedStartPastDays = parseNonNegDayField(adv.plannedStartPastDays);
+  const plannedStartFutureDays = parseNonNegDayField(adv.plannedStartFutureDays);
+  const plannedEndMode = parsePlanningMode(adv.plannedEndMode);
   const plannedEndFrom = str("plannedEndFrom", 80) ?? "";
   const plannedEndTo = str("plannedEndTo", 80) ?? "";
+  const plannedEndPastDays = parseNonNegDayField(adv.plannedEndPastDays);
+  const plannedEndFutureDays = parseNonNegDayField(adv.plannedEndFutureDays);
   const createdAtFrom = str("createdAtFrom", 80) ?? "";
   const createdAtTo = str("createdAtTo", 80) ?? "";
   const updatedAtFrom = str("updatedAtFrom", 80) ?? "";
@@ -425,11 +471,25 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
   if (siteId === null || assetId === null || costCenterId === null || classificationId === null) return null;
   const classificationUnassigned = parseBoolean(adv.classificationUnassigned);
   if (classificationUnassigned === null) return null;
+  const overdue = parseBoolean(adv.overdue);
+  if (overdue === null) return null;
   const workgroupId = wgArr();
   const responsibleEmployeeId = uuidArr("responsibleEmployeeId");
   const employeeId = empArr();
+  const maintenancePlanId = uuidArr("maintenancePlanId");
   if (createdBy === null || updatedBy === null) return null;
   if (workgroupId === null || responsibleEmployeeId === null || employeeId === null) return null;
+  if (maintenancePlanId === null) return null;
+  if (
+    plannedStartMode === null ||
+    plannedEndMode === null ||
+    plannedStartPastDays === null ||
+    plannedStartFutureDays === null ||
+    plannedEndPastDays === null ||
+    plannedEndFutureDays === null
+  ) {
+    return null;
+  }
 
   return {
     version: 1,
@@ -449,10 +509,16 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
       description,
       createdBy,
       updatedBy,
+      plannedStartMode,
       plannedStartFrom,
       plannedStartTo,
+      plannedStartPastDays,
+      plannedStartFutureDays,
+      plannedEndMode,
       plannedEndFrom,
       plannedEndTo,
+      plannedEndPastDays,
+      plannedEndFutureDays,
       createdAtFrom,
       createdAtTo,
       updatedAtFrom,
@@ -464,9 +530,11 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
       costCenterId,
       classificationId,
       classificationUnassigned,
+      overdue,
       workgroupId,
       responsibleEmployeeId,
       employeeId,
+      maintenancePlanId,
     },
   };
 }

@@ -23,6 +23,7 @@ import type {
   WorkOrderDocumentCategory,
   WorkOrderDocumentRow,
   WorkOrderAssignmentRow,
+  WorkOrderInspectionPointRow,
   WorkOrderMessage,
   TransactionRow,
   WorkOrderRow,
@@ -44,6 +45,7 @@ export const queryKeys = {
   workOrderDocuments: (orderId: string) => ["workOrders", orderId, "documents"] as const,
   workOrderAssignments: (orderId: string) => ["workOrders", orderId, "assignments"] as const,
   workOrderFeedback: (orderId: string) => ["workOrders", orderId, "feedback"] as const,
+  workOrderInspectionPoints: (orderId: string) => ["workOrders", orderId, "inspectionPoints"] as const,
   workOrderMessages: (orderId: string) => ["workOrders", orderId, "messages"] as const,
   workgroups: ["workgroups"] as const,
   employees: ["employees"] as const,
@@ -349,6 +351,52 @@ export function useWorkOrderFeedbackQuery(orderId: string | null | undefined) {
       if (!r.ok) throw new Error("workOrderFeedback");
       const data = (await r.json()) as { rows?: TransactionRow[] };
       return Array.isArray(data.rows) ? data.rows : [];
+    },
+  });
+}
+
+export function useWorkOrderInspectionPointsQuery(orderId: string | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.workOrderInspectionPoints(orderId ?? ""),
+    enabled: Boolean(orderId),
+    queryFn: async (): Promise<WorkOrderInspectionPointRow[]> => {
+      if (!orderId) return [];
+      const r = await apiFetch(`/api/work-orders/${orderId}/inspection-points`);
+      if (!r.ok) throw new Error("workOrderInspectionPoints");
+      const data = (await r.json()) as WorkOrderInspectionPointRow[];
+      return Array.isArray(data) ? data : [];
+    },
+  });
+}
+
+export async function patchWorkOrderInspectionPoint(
+  orderId: string,
+  pointId: string,
+  checked: boolean,
+): Promise<WorkOrderInspectionPointRow> {
+  const r = await apiFetch(`/api/work-orders/${orderId}/inspection-points/${pointId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ checked }),
+  });
+  if (!r.ok) throw new Error("workOrderInspectionPointPatch");
+  return r.json() as Promise<WorkOrderInspectionPointRow>;
+}
+
+export function usePatchWorkOrderInspectionPointMutation(orderId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ pointId, checked }: { pointId: string; checked: boolean }) => {
+      if (!orderId) throw new Error("order_id_required");
+      return patchWorkOrderInspectionPoint(orderId, pointId, checked);
+    },
+    onSuccess: async (updated) => {
+      if (!orderId) return;
+      qc.setQueryData<WorkOrderInspectionPointRow[]>(
+        queryKeys.workOrderInspectionPoints(orderId),
+        (prev) => (prev ? prev.map((row) => (row.id === updated.id ? updated : row)) : [updated]),
+      );
+      await qc.invalidateQueries({ queryKey: queryKeys.workOrders });
     },
   });
 }

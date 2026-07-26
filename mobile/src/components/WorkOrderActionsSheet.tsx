@@ -1,5 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Sparkles } from "lucide-react-native";
+import { CheckSquare, Sparkles } from "lucide-react-native";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
@@ -18,10 +18,12 @@ const PLAYBACK_ICON_SIZE = 28;
 type Props = {
   visible: boolean;
   status: WorkOrderStatus | null;
+  showInspectionPoints?: boolean;
   onStart: () => void;
   onPause: () => void;
   onStop: () => void;
   onFeedback: () => void;
+  onOpenInspectionPoints?: () => void;
   onAskAthene: () => void;
   onClose: () => void;
   atheneBusy?: boolean;
@@ -30,10 +32,12 @@ type Props = {
 export function WorkOrderActionsSheet({
   visible,
   status,
+  showInspectionPoints = false,
   onStart,
   onPause,
   onStop,
   onFeedback,
+  onOpenInspectionPoints,
   onAskAthene,
   onClose,
   atheneBusy = false,
@@ -146,6 +150,16 @@ export function WorkOrderActionsSheet({
             </HapticPressable>
           ) : null}
         </View>
+      ) : null}
+      {showInspectionPoints && onOpenInspectionPoints ? (
+        <HapticPressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => run(onOpenInspectionPoints)}
+        >
+          <CheckSquare size={20} color={colors.primary} />
+          <Text style={styles.rowText}>{t("workOrders.contextMenuInspectionPoints")}</Text>
+        </HapticPressable>
       ) : null}
       <HapticPressable
         disabled={atheneBusy}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   WORK_ORDER_LIST_DEFAULT_LIMIT,
+  appendWorkOrderPage,
   buildWorkOrderListPath,
   parseWorkOrderListResponse,
 } from "./workOrderListApi";
@@ -159,5 +160,14 @@ describe("buildWorkOrderListPath", () => {
     expect(path).toContain("status=assigned");
     expect(path).toContain("limit=2000");
     expect(path).toContain("offset=250");
+  });
+});
+
+describe("appendWorkOrderPage", () => {
+  it("appends only unseen ids", () => {
+    const a = sampleRow({ id: "1", orderNumber: 1 });
+    const b = sampleRow({ id: "2", orderNumber: 2 });
+    const merged = appendWorkOrderPage([a], [a, b]);
+    expect(merged.map((r: WorkOrder) => r.id)).toEqual(["1", "2"]);
   });
 });

@@ -77,7 +77,7 @@ export function WorkOrderEditPageView(props: WorkOrderEditDialogProps) {
           </div>
         </header>
 
-        <div className="app-wo-edit-page-view__body min-h-0 flex-1 overflow-hidden">
+        <div className="app-wo-edit-page-view__body min-h-0 flex-1">
           <WorkOrderEditTabContent {...props} />
         </div>
 
