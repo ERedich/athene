@@ -124,7 +124,10 @@ export type WorkOrderDocumentCategory =
   | "drawings"
   | "instructions"
   | "nameplates"
-  | "certificates";
+  | "certificates"
+  | "customerSignoff";
+
+export type SlaState = "ok" | "warn" | "overdue";
 
 export type WorkOrderRow = {
   id: string;
@@ -176,6 +179,14 @@ export type WorkOrderRow = {
   inspectionRoundName: string | null;
   inspectionPointCount: number;
   checkedInspectionPointCount: number;
+  customerId?: string | null;
+  customerName?: string | null;
+  serviceContractId?: string | null;
+  slaReactionDueAt?: string | null;
+  slaResolutionDueAt?: string | null;
+  slaReactionState?: SlaState | null;
+  slaResolutionState?: SlaState | null;
+  signedOffAt?: string | null;
 };
 
 export type WorkOrderInspectionPointRow = {

@@ -43,6 +43,7 @@ import {
 } from "../../../src/hooks/queries";
 import { isSamePresetId } from "../../../src/lib/workOrderSearchPresetsApi";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../../../src/lib/workOrderLifecycle";
+import { workOrderSlaBackground, workOrderSlaForeground, worstSlaState } from "../../../src/lib/workOrderSlaColors";
 import { workOrderStatusBackground, workOrderStatusForeground } from "../../../src/lib/workOrderStatusColors";
 import {
   androidRippleProps,
@@ -65,6 +66,7 @@ function filterWorkOrders(rows: WorkOrderRow[], q: string, t: ReturnType<typeof 
       row.description ?? "",
       row.assetKey,
       row.assetName,
+      row.customerName ?? "",
       row.costCenterKey,
       row.costCenterName,
       row.siteKey,
@@ -378,6 +380,8 @@ export default function WorkOrdersListScreen() {
         docChipGreen: { backgroundColor: "rgb(134,239,172)" },
         inspectionChip: { backgroundColor: "rgb(252,211,77)" },
         docChipText: { color: "rgb(15,23,42)", fontWeight: "700", fontSize: 11 },
+        slaChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+        slaChipText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
       }),
     [
       colors.background,
@@ -562,8 +566,22 @@ export default function WorkOrdersListScreen() {
                   </View>
                 );
               })()}
+              {(() => {
+                const slaState = worstSlaState(item.slaReactionState, item.slaResolutionState);
+                if (!slaState) return null;
+                return (
+                  <View style={[styles.slaChip, { backgroundColor: workOrderSlaBackground(slaState) }]}>
+                    <Text style={[styles.slaChipText, { color: workOrderSlaForeground(slaState) }]}>
+                      {t(`workOrders.slaState.${slaState}`)}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
             <Text style={styles.name}>{item.name}</Text>
+            {item.customerName ? (
+              <Text style={styles.type}>{t("workOrders.customerLabel", { name: item.customerName })}</Text>
+            ) : null}
             <Text style={styles.type}>
               {item.assetKey} — {item.assetName}
             </Text>
@@ -728,8 +746,16 @@ export default function WorkOrdersListScreen() {
         showInspectionPoints={
           Boolean(selectedOrder?.inspectionRoundId) || (selectedOrder?.inspectionPointCount ?? 0) > 0
         }
+        showSignoff={Boolean(selectedOrder?.customerId) && !selectedOrder?.signedOffAt}
         onClose={() => setActionsOpen(false)}
         atheneBusy={athene.busy}
+        onOpenSignoff={() => {
+          if (!selectedOrder) return;
+          router.push({
+            pathname: "/work-orders/signoff/[id]",
+            params: { id: selectedOrder.id },
+          });
+        }}
         onOpenInspectionPoints={() => {
           if (!selectedOrder) return;
           router.push({

@@ -308,6 +308,20 @@ export async function buildWorkOrderListFilters(
   );
   if (mpErr) return { ok: false, status: 400, error: mpErr };
 
+  const customerErr = uuidIn(
+    collectQueryStrings(q, "customerId"),
+    `w."customerId"`,
+    "invalid_customer_id",
+  );
+  if (customerErr) return { ok: false, status: 400, error: customerErr };
+
+  const contractErr = uuidIn(
+    collectQueryStrings(q, "serviceContractId"),
+    `w."serviceContractId"`,
+    "invalid_service_contract_id",
+  );
+  if (contractErr) return { ok: false, status: 400, error: contractErr };
+
   const ccErr = uuidIn(collectQueryStrings(q, "costCenterId"), `w."costCenterId"`, "invalid_cost_center_id");
   if (ccErr) return { ok: false, status: 400, error: ccErr };
 

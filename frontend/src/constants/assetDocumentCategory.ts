@@ -10,6 +10,7 @@ export const ASSET_DOCUMENT_CATEGORY_ORDER = [
   "instructions",
   "nameplates",
   "certificates",
+  "customerSignoff",
 ] as const;
 
 export type AssetDocumentCategory = (typeof ASSET_DOCUMENT_CATEGORY_ORDER)[number];
@@ -26,6 +27,7 @@ export const DOCUMENT_CATEGORY_BADGE_CLASS: Record<AssetDocumentCategory, string
   instructions: "bg-emerald-500/15 text-emerald-900 dark:bg-emerald-400/20 dark:text-emerald-50",
   nameplates: "bg-amber-500/18 text-amber-950 dark:bg-amber-400/20 dark:text-amber-50",
   certificates: "bg-rose-500/15 text-rose-900 dark:bg-rose-400/18 dark:text-rose-50",
+  customerSignoff: "bg-teal-500/15 text-teal-900 dark:bg-teal-400/20 dark:text-teal-50",
 };
 
 export function documentCategoryBadgeClass(category: string): string {

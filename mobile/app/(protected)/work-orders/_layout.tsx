@@ -68,6 +68,14 @@ export default function WorkOrdersStackLayout() {
           headerRight: undefined,
         }}
       />
+      <Stack.Screen
+        name="signoff/[id]"
+        options={{
+          title: t("workOrders.signoffTitle"),
+          headerLeft: ({ tintColor }) => workOrderBackHeaderLeft(tintColor ?? colors.onSurface),
+          headerRight: undefined,
+        }}
+      />
     </Stack>
   );
 }

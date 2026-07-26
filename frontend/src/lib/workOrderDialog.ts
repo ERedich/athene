@@ -6,6 +6,7 @@ export const orderDialogTabs = {
   Feedback: 4,
   Transactions: 5,
   Messages: 6,
+  CustomerService: 7,
 } as const;
 
 export type OrderDialogTab = (typeof orderDialogTabs)[keyof typeof orderDialogTabs];

@@ -185,6 +185,8 @@ export type WorkOrderSearchPresetAdvancedV1 = {
   responsibleEmployeeId: string[];
   employeeId: string[];
   maintenancePlanId: string[];
+  customerId: string[];
+  serviceContractId: string[];
 };
 
 export type WorkOrderSearchPresetPayloadV1 = {
@@ -238,6 +240,8 @@ export function emptyWorkOrderSearchPresetPayload(): WorkOrderSearchPresetPayloa
       responsibleEmployeeId: [],
       employeeId: [],
       maintenancePlanId: [],
+      customerId: [],
+      serviceContractId: [],
     },
   };
 }
@@ -414,6 +418,8 @@ const ADVANCED_KEYS = new Set([
   "responsibleEmployeeId",
   "employeeId",
   "maintenancePlanId",
+  "customerId",
+  "serviceContractId",
 ]);
 
 export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV1 | null {
@@ -477,9 +483,11 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
   const responsibleEmployeeId = uuidArr("responsibleEmployeeId");
   const employeeId = empArr();
   const maintenancePlanId = uuidArr("maintenancePlanId");
+  const customerId = uuidArr("customerId");
+  const serviceContractId = uuidArr("serviceContractId");
   if (createdBy === null || updatedBy === null) return null;
   if (workgroupId === null || responsibleEmployeeId === null || employeeId === null) return null;
-  if (maintenancePlanId === null) return null;
+  if (maintenancePlanId === null || customerId === null || serviceContractId === null) return null;
   if (
     plannedStartMode === null ||
     plannedEndMode === null ||
@@ -535,6 +543,8 @@ export function parsePresetPayload(body: unknown): WorkOrderSearchPresetPayloadV
       responsibleEmployeeId,
       employeeId,
       maintenancePlanId,
+      customerId,
+      serviceContractId,
     },
   };
 }

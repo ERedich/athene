@@ -78,6 +78,9 @@ function headerTitleKey(pathname: string): string {
     translations: "translations.appName",
     abonnements: "abonnements.appName",
     mitteilungszentrale: "mitteilungszentrale.appName",
+    disposition: "disposition.appName",
+    customers: "customers.appName",
+    "service-contracts": "serviceContracts.appName",
   };
   if (!seg) return "dashboard.appName";
   return map[seg.toLowerCase()] ?? "dashboard.appName";

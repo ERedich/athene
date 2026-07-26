@@ -4,7 +4,8 @@ export type DocumentCategory =
   | "drawings"
   | "instructions"
   | "nameplates"
-  | "certificates";
+  | "certificates"
+  | "customerSignoff";
 
 export type ReferenceApp = "assets" | "workOrders" | "spareParts";
 
@@ -20,6 +21,7 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "instructions",
   "nameplates",
   "certificates",
+  "customerSignoff",
 ];
 
 export const REFERENCE_APPS: ReferenceApp[] = ["assets", "workOrders", "spareParts"];

@@ -619,6 +619,54 @@ export async function postWorkOrderFeedback(orderId: string, body: WorkOrderFeed
   return r.json() as Promise<WorkOrderRow>;
 }
 
+export async function postWorkOrderSignoff(
+  orderId: string,
+  input: {
+    file: { uri: string; name: string; type?: string | null };
+    remark?: string | null;
+    satisfaction?: string | null;
+    displayName?: string | null;
+  },
+): Promise<WorkOrderRow> {
+  const formData = new FormData();
+  if (input.remark?.trim()) formData.append("remark", input.remark.trim());
+  if (input.satisfaction?.trim()) formData.append("satisfaction", input.satisfaction.trim());
+  if (input.displayName?.trim()) formData.append("displayName", input.displayName.trim());
+  if (Platform.OS === "web") {
+    formData.append("file", {
+      uri: input.file.uri,
+      name: input.file.name,
+      type: input.file.type ?? "application/octet-stream",
+    } as unknown as Blob);
+  } else {
+    formData.append("file", new ExpoFile(input.file.uri));
+  }
+
+  const url = apiUrl(`/api/work-orders/${orderId}/signoff`);
+  const r =
+    Platform.OS === "web"
+      ? await apiFetch(`/api/work-orders/${orderId}/signoff`, {
+          method: "POST",
+          body: formData,
+        })
+      : await expoFetch(url, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          headers: (() => {
+            const headers = new Headers();
+            const token = getMobileBearerToken();
+            if (token) headers.set("Authorization", `Bearer ${token}`);
+            return headers;
+          })(),
+        });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(err || "signoff_failed");
+  }
+  return r.json() as Promise<WorkOrderRow>;
+}
+
 export async function uploadWorkOrderDocument(
   orderId: string,
   input: {

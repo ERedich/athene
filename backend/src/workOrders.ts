@@ -53,6 +53,8 @@ import {
 import type { DashboardAuditFeedItem } from "./dashboard.js";
 import { workOrderMessagesRouter } from "./workOrderMessages.js";
 import { buildWorkOrderListFilters } from "./workOrderListQuery.js";
+import { enrichWorkOrderSla } from "./workOrderSla.js";
+import { computeBillingSummary } from "./workOrderBilling.js";
 import {
   calendarDayKey,
   computePlannedDurationMinutes,
@@ -137,6 +139,24 @@ type WorkOrderRow = {
   inspectionRoundId: string | null;
   inspectionRoundKey: string | null;
   inspectionRoundName: string | null;
+  customerId: string | null;
+  customerKey: string | null;
+  customerName: string | null;
+  serviceContractId: string | null;
+  serviceContractKey: string | null;
+  serviceContractName: string | null;
+  /** Internal: used to derive SLA; stripped before JSON if needed via withSla. */
+  contractReactionMinutes?: number | null;
+  contractResolutionMinutes?: number | null;
+  slaReactionDueAt?: string | null;
+  slaResolutionDueAt?: string | null;
+  slaReactionState?: string | null;
+  slaResolutionState?: string | null;
+  signoffRemark: string | null;
+  signoffSatisfaction: string | null;
+  signedOffAt: string | null;
+  signedOffBy: string | null;
+  signedOffByLoginName: string | null;
 };
 
 type WorkOrderAssignmentRow = {
@@ -356,6 +376,12 @@ function parseBody(body: unknown): ParsedBody | null {
   const inspectionRoundIdRaw = readTrimmedOptionalString(o.inspectionRoundId);
   if (inspectionRoundIdRaw !== null && !isUuid(inspectionRoundIdRaw)) return null;
 
+  const customerIdRaw = readTrimmedOptionalString(o.customerId);
+  if (customerIdRaw !== null && !isUuid(customerIdRaw)) return null;
+
+  const serviceContractIdRaw = readTrimmedOptionalString(o.serviceContractId);
+  if (serviceContractIdRaw !== null && !isUuid(serviceContractIdRaw)) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -371,6 +397,8 @@ function parseBody(body: unknown): ParsedBody | null {
     originalWo: originalWoRaw,
     maintenancePlanId: maintenancePlanIdRaw,
     inspectionRoundId: inspectionRoundIdRaw,
+    customerId: customerIdRaw,
+    serviceContractId: serviceContractIdRaw,
   };
 }
 
@@ -570,6 +598,19 @@ const selectWorkOrdersSql = `
     w."inspectionRoundId",
     ir."key" AS "inspectionRoundKey",
     ir."name" AS "inspectionRoundName",
+    w."customerId"::text AS "customerId",
+    cust."key" AS "customerKey",
+    cust."name" AS "customerName",
+    w."serviceContractId"::text AS "serviceContractId",
+    sc."key" AS "serviceContractKey",
+    sc."name" AS "serviceContractName",
+    sc."reactionMinutes" AS "contractReactionMinutes",
+    sc."resolutionMinutes" AS "contractResolutionMinutes",
+    w."signoffRemark",
+    w."signoffSatisfaction",
+    w."signedOffAt",
+    w."signedOffBy"::text AS "signedOffBy",
+    signoff_user."loginName" AS "signedOffByLoginName",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -593,6 +634,9 @@ const selectWorkOrdersSql = `
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
   LEFT JOIN "inspectionRound" ir ON ir."id" = w."inspectionRoundId"
+  LEFT JOIN "customer" cust ON cust."id" = w."customerId"
+  LEFT JOIN "serviceContract" sc ON sc."id" = w."serviceContractId"
+  LEFT JOIN "users" signoff_user ON signoff_user."id" = w."signedOffBy"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${responsibleEmployeeLateralJoinSql}
@@ -641,6 +685,18 @@ const selectWorkOrdersListSql = `
     mp."key" AS "maintenancePlanKey",
     mp."name" AS "maintenancePlanName",
     w."inspectionRoundId",
+    w."customerId"::text AS "customerId",
+    cust."key" AS "customerKey",
+    cust."name" AS "customerName",
+    w."serviceContractId"::text AS "serviceContractId",
+    sc."key" AS "serviceContractKey",
+    sc."name" AS "serviceContractName",
+    sc."reactionMinutes" AS "contractReactionMinutes",
+    sc."resolutionMinutes" AS "contractResolutionMinutes",
+    w."signoffRemark",
+    w."signoffSatisfaction",
+    w."signedOffAt",
+    w."signedOffBy"::text AS "signedOffBy",
     w."createdAt",
     w."updatedAt",
     COALESCE(created_by."loginName", w."createdBy"::text) AS "createdBy",
@@ -659,6 +715,8 @@ const selectWorkOrdersListSql = `
   LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
   LEFT JOIN "workOrder" orig ON orig."id" = w."originalWo"
   LEFT JOIN "maintenancePlan" mp ON mp."id" = w."maintenancePlanId"
+  LEFT JOIN "customer" cust ON cust."id" = w."customerId"
+  LEFT JOIN "serviceContract" sc ON sc."id" = w."serviceContractId"
   LEFT JOIN "users" created_by ON created_by."id" = w."createdBy"
   LEFT JOIN "users" updated_by ON updated_by."id" = w."updatedBy"
   ${responsibleEmployeeLateralJoinSql}
@@ -695,7 +753,29 @@ async function fetchWorkOrderRow(
     `,
     [workOrderId],
   );
-  return rows[0] ?? null;
+  return withSlaFields(rows[0] ?? null);
+}
+
+function withSlaFields(row: WorkOrderRow | null): WorkOrderRow | null {
+  if (!row) return null;
+  const sla = enrichWorkOrderSla({
+    createdAt: row.createdAt,
+    reactionMinutes: row.contractReactionMinutes ?? null,
+    resolutionMinutes: row.contractResolutionMinutes ?? null,
+  });
+  const {
+    contractReactionMinutes: _r,
+    contractResolutionMinutes: _s,
+    ...rest
+  } = row;
+  return {
+    ...rest,
+    ...sla,
+  };
+}
+
+function withSlaFieldsMany(rows: WorkOrderRow[]): WorkOrderRow[] {
+  return rows.map((r) => withSlaFields(r)!);
 }
 
 async function assertResponsiblesCompatibleWithWorkgroup(
@@ -812,7 +892,7 @@ export async function getWorkOrderRowForRealtime(workOrderId: string): Promise<W
     `,
     [workOrderId],
   );
-  return rows[0] ?? null;
+  return withSlaFields(rows[0] ?? null);
 }
 
 router.get("/", async (req: Request, res: Response) => {
@@ -844,8 +924,9 @@ router.get("/", async (req: Request, res: Response) => {
       [userId, ...built.params, limit + 1, offset],
     );
     const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
     res.json({
-      rows: hasMore ? rows.slice(0, limit) : rows,
+      rows: withSlaFieldsMany(page),
       hasMore,
       limit,
       offset,
@@ -1800,6 +1881,173 @@ router.post("/:id/feedback", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/:id/billing-summary", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const wo = await pool.query<{
+      id: string;
+      billingModel: string | null;
+      hourlyRate: string | null;
+      travelRate: string | null;
+      materialMarkupPercent: string | null;
+      flatRate: string | null;
+      serviceContractId: string | null;
+    }>(
+      `
+      SELECT
+        w."id",
+        sc."billingModel",
+        sc."hourlyRate"::text AS "hourlyRate",
+        sc."travelRate"::text AS "travelRate",
+        sc."materialMarkupPercent"::text AS "materialMarkupPercent",
+        sc."flatRate"::text AS "flatRate",
+        w."serviceContractId"::text AS "serviceContractId"
+      FROM "workOrder" w
+      LEFT JOIN "serviceContract" sc ON sc."id" = w."serviceContractId"
+      WHERE w."id" = $1::uuid
+        AND ${siteAccessSql('w."siteId"', "$2")}
+      LIMIT 1
+      `,
+      [id, userId],
+    );
+    if (!wo.rows[0]) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const sums = await pool.query<{
+      laborHours: string;
+      travelQuantity: string;
+      materialBaseAmount: string;
+    }>(
+      `
+      SELECT
+        COALESCE(SUM(CASE WHEN t."type" = 'IN' THEN t."quantity" ELSE 0 END), 0)::text AS "laborHours",
+        COALESCE(SUM(CASE WHEN t."type" = 'TR' THEN t."quantity" ELSE 0 END), 0)::text AS "travelQuantity",
+        COALESCE(
+          SUM(
+            CASE
+              WHEN t."type" = 'RM' THEN t."quantity" * COALESCE(t."unitPrice", 0)
+              ELSE 0
+            END
+          ),
+          0
+        )::text AS "materialBaseAmount"
+      FROM "transaction" t
+      WHERE t."workOrderId" = $1::uuid
+      `,
+      [id],
+    );
+    const s = sums.rows[0]!;
+    const row = wo.rows[0];
+    const billingModel =
+      row.billingModel === "flat" || row.billingModel === "timeAndMaterial"
+        ? row.billingModel
+        : null;
+    const summary = computeBillingSummary({
+      billingModel,
+      hourlyRate: row.hourlyRate != null ? Number(row.hourlyRate) : null,
+      travelRate: row.travelRate != null ? Number(row.travelRate) : null,
+      materialMarkupPercent:
+        row.materialMarkupPercent != null ? Number(row.materialMarkupPercent) : null,
+      flatRate: row.flatRate != null ? Number(row.flatRate) : null,
+      laborHours: Number(s.laborHours),
+      travelQuantity: Number(s.travelQuantity),
+      materialBaseAmount: Number(s.materialBaseAmount),
+    });
+    res.json({
+      workOrderId: id,
+      serviceContractId: row.serviceContractId,
+      ...summary,
+    });
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.post("/:id/signoff", upload.single("file"), async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: "missing_file" });
+    return;
+  }
+  const remarkRaw = typeof req.body?.remark === "string" ? req.body.remark.trim() : "";
+  const satisfactionRaw =
+    typeof req.body?.satisfaction === "string" ? req.body.satisfaction.trim() : "";
+  if (remarkRaw.length > 2000 || satisfactionRaw.length > 200) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  const fileName = req.file.originalname?.trim() || "signoff.png";
+  const displayNameRaw = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+  const displayName = displayNameRaw || "Customer signoff";
+  const mimeType = req.file.mimetype?.trim() || "application/octet-stream";
+
+  try {
+    const meta = auditMeta(req);
+    const access = await getAccessibleWorkOrder(meta.userId, id);
+    if (!access) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    await createDocument(meta, {
+      fileName,
+      displayName,
+      category: "customerSignoff",
+      mimeType,
+      fileSize: req.file.size,
+      content: req.file.buffer,
+      referenceApp: "workOrders",
+      entityType: "workOrder",
+      entityId: id,
+    });
+    await withAuditContext(meta, async (client) => {
+      await client.query(
+        `
+        UPDATE "workOrder"
+        SET
+          "signoffRemark" = $1,
+          "signoffSatisfaction" = $2,
+          "signedOffAt" = now(),
+          "signedOffBy" = $3::uuid
+        WHERE "id" = $4::uuid
+        `,
+        [remarkRaw || null, satisfactionRaw || null, meta.userId, id],
+      );
+    });
+    const row = await getWorkOrderRowForRealtime(id);
+    if (row) {
+      void broadcastWorkOrderUpdated(row.siteId, row).catch((err) => {
+        console.error(err);
+      });
+    }
+    res.status(201).json(row);
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
 router.get("/:id/documents", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -2071,6 +2319,18 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "invalid_order_type" });
       return;
     }
+    if (message === "invalid_customer") {
+      res.status(400).json({ error: "invalid_customer" });
+      return;
+    }
+    if (message === "invalid_service_contract") {
+      res.status(400).json({ error: "invalid_service_contract" });
+      return;
+    }
+    if (message === "service_contract_customer_mismatch") {
+      res.status(400).json({ error: "service_contract_customer_mismatch" });
+      return;
+    }
     sendPgError(res, err);
   }
 });
@@ -2184,6 +2444,36 @@ router.put("/:id", async (req: Request, res: Response) => {
       );
       await assertWorkOrderTypeForSite(client, effectiveSiteId, parsed.orderType);
 
+      if (parsed.customerId) {
+        const cust = await client.query<{ id: string }>(
+          `
+          SELECT "id" FROM "customer"
+          WHERE "id" = $1::uuid AND "siteId" = $2::uuid
+            AND ${siteAccessSql('"siteId"', "$3")}
+          LIMIT 1
+          `,
+          [parsed.customerId, effectiveSiteId, meta.userId],
+        );
+        if (!cust.rows[0]) throw new Error("invalid_customer");
+      }
+      if (parsed.serviceContractId) {
+        const contract = await client.query<{ id: string; customerId: string }>(
+          `
+          SELECT "id", "customerId"::text AS "customerId"
+          FROM "serviceContract"
+          WHERE "id" = $1::uuid AND "siteId" = $2::uuid
+            AND ${siteAccessSql('"siteId"', "$3")}
+          LIMIT 1
+          `,
+          [parsed.serviceContractId, effectiveSiteId, meta.userId],
+        );
+        const c = contract.rows[0];
+        if (!c) throw new Error("invalid_service_contract");
+        if (parsed.customerId && c.customerId !== parsed.customerId) {
+          throw new Error("service_contract_customer_mismatch");
+        }
+      }
+
       await client.query(
         `
         UPDATE "workOrder"
@@ -2199,8 +2489,10 @@ router.put("/:id", async (req: Request, res: Response) => {
           "orderType" = $9,
           "workgroupId" = $10::uuid,
           "classificationId" = $11::uuid,
-          "inspectionRoundId" = $12::uuid
-        WHERE "id" = $13::uuid
+          "inspectionRoundId" = $12::uuid,
+          "customerId" = $13::uuid,
+          "serviceContractId" = $14::uuid
+        WHERE "id" = $15::uuid
         `,
         [
           parsed.name,
@@ -2215,6 +2507,8 @@ router.put("/:id", async (req: Request, res: Response) => {
           parsed.workgroupId,
           parsed.classificationId,
           parsed.inspectionRoundId,
+          parsed.customerId,
+          parsed.serviceContractId,
           id,
         ],
       );
@@ -2301,6 +2595,18 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
     if (message === "invalid_order_type") {
       res.status(400).json({ error: "invalid_order_type" });
+      return;
+    }
+    if (message === "invalid_customer") {
+      res.status(400).json({ error: "invalid_customer" });
+      return;
+    }
+    if (message === "invalid_service_contract") {
+      res.status(400).json({ error: "invalid_service_contract" });
+      return;
+    }
+    if (message === "service_contract_customer_mismatch") {
+      res.status(400).json({ error: "service_contract_customer_mismatch" });
       return;
     }
     sendPgError(res, err);

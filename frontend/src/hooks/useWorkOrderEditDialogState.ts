@@ -121,6 +121,8 @@ type WorkOrderSavePayload = {
   classificationId: string | null;
   inspectionRoundId: string | null;
   originalWo?: string | null;
+  customerId?: string | null;
+  serviceContractId?: string | null;
 };
 
 type WorkOrderAssetConflictPayload = {
@@ -188,6 +190,21 @@ function workOrderRowFromMeta(
     inspectionRoundId: form.inspectionRoundId || null,
     inspectionRoundKey: null,
     inspectionRoundName: null,
+    customerId: form.customerId.trim() || null,
+    customerKey: meta.customerKey ?? null,
+    customerName: meta.customerName ?? null,
+    serviceContractId: form.serviceContractId.trim() || null,
+    serviceContractKey: meta.serviceContractKey ?? null,
+    serviceContractName: meta.serviceContractName ?? null,
+    slaReactionDueAt: meta.slaReactionDueAt ?? null,
+    slaResolutionDueAt: meta.slaResolutionDueAt ?? null,
+    slaReactionState: meta.slaReactionState ?? null,
+    slaResolutionState: meta.slaResolutionState ?? null,
+    signoffRemark: meta.signoffRemark ?? null,
+    signoffSatisfaction: meta.signoffSatisfaction ?? null,
+    signedOffAt: meta.signedOffAt ?? null,
+    signedOffBy: meta.signedOffBy ?? null,
+    signedOffByLoginName: meta.signedOffByLoginName ?? null,
   };
 }
 
@@ -1544,6 +1561,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         workgroupId: form.workgroupId.trim(),
         classificationId: form.classificationId.trim() || null,
         inspectionRoundId: form.inspectionRoundId.trim() || null,
+        customerId: form.customerId.trim() || null,
+        serviceContractId: form.serviceContractId.trim() || null,
         ...(editingId ? {} : { originalWo: form.originalWoId.trim() || null }),
       };
 

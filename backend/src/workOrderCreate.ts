@@ -26,6 +26,9 @@ export type WorkOrderCreateInput = {
   originalWo: string | null;
   maintenancePlanId: string | null;
   inspectionRoundId: string | null;
+  /** Optional FSM links; omit or null for internal WOs. */
+  customerId?: string | null;
+  serviceContractId?: string | null;
 };
 
 export type DbClient = PoolClient;
@@ -231,15 +234,52 @@ export async function createWorkOrderRecord(
 
   await assertWorkOrderTypeForSite(client, effectiveSiteId, input.orderType);
 
+  if (input.customerId) {
+    const cust = await client.query<{ id: string }>(
+      `
+      SELECT "id"
+      FROM "customer"
+      WHERE "id" = $1::uuid
+        AND "siteId" = $2::uuid
+        AND ${siteAccessSql('"siteId"', "$3")}
+      LIMIT 1
+      `,
+      [input.customerId, effectiveSiteId, userId],
+    );
+    if (!cust.rows[0]) throw new Error("invalid_customer");
+  }
+
+  if (input.serviceContractId) {
+    const contract = await client.query<{ id: string; customerId: string }>(
+      `
+      SELECT "id", "customerId"::text AS "customerId"
+      FROM "serviceContract"
+      WHERE "id" = $1::uuid
+        AND "siteId" = $2::uuid
+        AND ${siteAccessSql('"siteId"', "$3")}
+      LIMIT 1
+      `,
+      [input.serviceContractId, effectiveSiteId, userId],
+    );
+    const c = contract.rows[0];
+    if (!c) throw new Error("invalid_service_contract");
+    if (input.customerId && c.customerId !== input.customerId) {
+      throw new Error("service_contract_customer_mismatch");
+    }
+  }
+
+  const customerId = input.customerId ?? null;
+  const serviceContractId = input.serviceContractId ?? null;
+
   const inserted = await client.query<{ id: string }>(
     `
     INSERT INTO "workOrder"
       ("name", "description", "siteId", "assetId", "costCenterId", "plannedStart", "plannedEnd",
        "plannedDurationMinutes", "orderType", "status", "workgroupId", "classificationId",
-       "originalWo", "maintenancePlanId", "inspectionRoundId")
+       "originalWo", "maintenancePlanId", "inspectionRoundId", "customerId", "serviceContractId")
     VALUES
       ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6::timestamptz, $7::timestamptz, $8::integer, $9,
-       'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid, $14::uuid)
+       'open', $10::uuid, $11::uuid, $12::uuid, $13::uuid, $14::uuid, $15::uuid, $16::uuid)
     RETURNING "id"
     `,
     [
@@ -257,6 +297,8 @@ export async function createWorkOrderRecord(
       input.originalWo,
       input.maintenancePlanId,
       input.inspectionRoundId,
+      customerId,
+      serviceContractId,
     ],
   );
   const workOrderId = inserted.rows[0]?.id;

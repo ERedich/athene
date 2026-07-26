@@ -1,5 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { CheckSquare, Sparkles } from "lucide-react-native";
+import { CheckSquare, PenLine, Sparkles } from "lucide-react-native";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
@@ -19,11 +19,13 @@ type Props = {
   visible: boolean;
   status: WorkOrderStatus | null;
   showInspectionPoints?: boolean;
+  showSignoff?: boolean;
   onStart: () => void;
   onPause: () => void;
   onStop: () => void;
   onFeedback: () => void;
   onOpenInspectionPoints?: () => void;
+  onOpenSignoff?: () => void;
   onAskAthene: () => void;
   onClose: () => void;
   atheneBusy?: boolean;
@@ -33,11 +35,13 @@ export function WorkOrderActionsSheet({
   visible,
   status,
   showInspectionPoints = false,
+  showSignoff = false,
   onStart,
   onPause,
   onStop,
   onFeedback,
   onOpenInspectionPoints,
+  onOpenSignoff,
   onAskAthene,
   onClose,
   atheneBusy = false,
@@ -159,6 +163,16 @@ export function WorkOrderActionsSheet({
         >
           <CheckSquare size={20} color={colors.primary} />
           <Text style={styles.rowText}>{t("workOrders.contextMenuInspectionPoints")}</Text>
+        </HapticPressable>
+      ) : null}
+      {showSignoff && onOpenSignoff ? (
+        <HapticPressable
+          {...androidRippleProps(ripple)}
+          style={({ pressed }) => [styles.row, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+          onPress={() => run(onOpenSignoff)}
+        >
+          <PenLine size={20} color={colors.primary} />
+          <Text style={styles.rowText}>{t("workOrders.contextMenuSignoff")}</Text>
         </HapticPressable>
       ) : null}
       <HapticPressable

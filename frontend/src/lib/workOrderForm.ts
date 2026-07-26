@@ -16,6 +16,8 @@ export type WorkOrderFormFields = {
   classificationId: string;
   inspectionRoundId: string;
   originalWoId: string;
+  customerId: string;
+  serviceContractId: string;
   /** Shown in create dialog when copying; not sent to API. */
   copySourceOrderNumber: number | null;
 };
@@ -37,6 +39,8 @@ export type WorkOrderFormSource = {
   inspectionRoundId?: string | null;
   originalWo?: string | null;
   originalWoOrderNumber?: number | null;
+  customerId?: string | null;
+  serviceContractId?: string | null;
 };
 
 export function parseIsoDate(value: string | null | undefined): Date | null {
@@ -63,6 +67,8 @@ export function emptyWorkOrderForm(): WorkOrderFormFields {
     classificationId: "",
     inspectionRoundId: "",
     originalWoId: "",
+    customerId: "",
+    serviceContractId: "",
     copySourceOrderNumber: null,
   };
 }
@@ -92,6 +98,8 @@ export function workOrderRowToFormState(
     classificationId: row.classificationId ?? "",
     inspectionRoundId: row.inspectionRoundId ?? "",
     originalWoId: asCopy ? row.id : (row.originalWo ?? ""),
+    customerId: row.customerId ?? "",
+    serviceContractId: row.serviceContractId ?? "",
     copySourceOrderNumber: asCopy
       ? row.orderNumber
       : row.originalWoOrderNumber ?? null,

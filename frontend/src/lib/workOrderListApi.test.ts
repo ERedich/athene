@@ -7,6 +7,7 @@ import {
   parseWorkOrderListResponse,
 } from "./workOrderListApi";
 import type { WorkOrder } from "./workOrderTypes";
+import { WORK_ORDER_FSM_NULLS } from "./workOrderTypes";
 
 function sampleRow(partial: Partial<WorkOrder> & Pick<WorkOrder, "id" | "orderNumber">): WorkOrder {
   return {
@@ -61,6 +62,7 @@ function sampleRow(partial: Partial<WorkOrder> & Pick<WorkOrder, "id" | "orderNu
     inspectionRoundId: null,
     inspectionRoundKey: null,
     inspectionRoundName: null,
+    ...WORK_ORDER_FSM_NULLS,
   };
 }
 

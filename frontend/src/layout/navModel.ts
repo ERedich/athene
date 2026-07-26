@@ -34,6 +34,9 @@ import {
   Wrench,
   type LucideIcon,
   Users,
+  UserCircle,
+  FileSignature,
+  LayoutDashboard,
 } from "lucide-react";
 
 export type NavRouteItem = {
@@ -232,6 +235,21 @@ export const navGroups: NavGroup[] = [
         to: "/monitoring",
         Icon: Monitor,
         labelKey: "monitoring.navMonitoring",
+      },
+      {
+        to: "/customers",
+        Icon: UserCircle,
+        labelKey: "customers.navCustomers",
+      },
+      {
+        to: "/service-contracts",
+        Icon: FileSignature,
+        labelKey: "serviceContracts.navServiceContracts",
+      },
+      {
+        to: "/disposition",
+        Icon: LayoutDashboard,
+        labelKey: "disposition.navDisposition",
       },
       {
         to: "/mitteilungszentrale",

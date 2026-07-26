@@ -43,6 +43,9 @@ import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
 import { ReportDesignerPage } from "./pages/ReportDesignerPage";
+import { CustomersPage } from "./pages/CustomersPage";
+import { ServiceContractsPage } from "./pages/ServiceContractsPage";
+import { DispositionPage } from "./pages/DispositionPage";
 
 export default function App() {
   return (
@@ -63,6 +66,9 @@ export default function App() {
           <Route path="kalendar" element={<KalendarPage />} />
           <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="service-contracts" element={<ServiceContractsPage />} />
+          <Route path="disposition" element={<DispositionPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="layout-editor" element={<LayoutEditorPage />} />

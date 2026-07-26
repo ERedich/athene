@@ -13,6 +13,8 @@ export type WorkOrderStatus =
   | "done"
   | "cancelled";
 
+export type WorkOrderSlaState = "ok" | "warn" | "overdue";
+
 export type WorkOrder = {
   id: string;
   orderNumber: number;
@@ -75,6 +77,57 @@ export type WorkOrder = {
   inspectionRoundId: string | null;
   inspectionRoundKey: string | null;
   inspectionRoundName: string | null;
+  customerId: string | null;
+  customerKey: string | null;
+  customerName: string | null;
+  serviceContractId: string | null;
+  serviceContractKey: string | null;
+  serviceContractName: string | null;
+  slaReactionDueAt: string | null;
+  slaResolutionDueAt: string | null;
+  slaReactionState: WorkOrderSlaState | null;
+  slaResolutionState: WorkOrderSlaState | null;
+  signoffRemark: string | null;
+  signoffSatisfaction: string | null;
+  signedOffAt: string | null;
+  signedOffBy: string | null;
+  signedOffByLoginName: string | null;
+};
+
+/** Default null FSM/signoff fields for stubs and preload rows. */
+export const WORK_ORDER_FSM_NULLS: Pick<
+  WorkOrder,
+  | "customerId"
+  | "customerKey"
+  | "customerName"
+  | "serviceContractId"
+  | "serviceContractKey"
+  | "serviceContractName"
+  | "slaReactionDueAt"
+  | "slaResolutionDueAt"
+  | "slaReactionState"
+  | "slaResolutionState"
+  | "signoffRemark"
+  | "signoffSatisfaction"
+  | "signedOffAt"
+  | "signedOffBy"
+  | "signedOffByLoginName"
+> = {
+  customerId: null,
+  customerKey: null,
+  customerName: null,
+  serviceContractId: null,
+  serviceContractKey: null,
+  serviceContractName: null,
+  slaReactionDueAt: null,
+  slaResolutionDueAt: null,
+  slaReactionState: null,
+  slaResolutionState: null,
+  signoffRemark: null,
+  signoffSatisfaction: null,
+  signedOffAt: null,
+  signedOffBy: null,
+  signedOffByLoginName: null,
 };
 
 export type WorkOrderAssignment = {
@@ -199,6 +252,21 @@ export type WorkOrderEditMeta = {
   problemId?: string | null;
   causeId?: string | null;
   remedyId?: string | null;
+  customerId?: string | null;
+  customerKey?: string | null;
+  customerName?: string | null;
+  serviceContractId?: string | null;
+  serviceContractKey?: string | null;
+  serviceContractName?: string | null;
+  slaReactionDueAt?: string | null;
+  slaResolutionDueAt?: string | null;
+  slaReactionState?: WorkOrderSlaState | null;
+  slaResolutionState?: WorkOrderSlaState | null;
+  signoffRemark?: string | null;
+  signoffSatisfaction?: string | null;
+  signedOffAt?: string | null;
+  signedOffBy?: string | null;
+  signedOffByLoginName?: string | null;
 };
 
 export function workOrderToEditMeta(row: WorkOrder | WorkOrderEditMeta): WorkOrderEditMeta {
@@ -223,6 +291,21 @@ export function workOrderToEditMeta(row: WorkOrder | WorkOrderEditMeta): WorkOrd
     problemId: "problemId" in row ? (row.problemId ?? null) : undefined,
     causeId: "causeId" in row ? (row.causeId ?? null) : undefined,
     remedyId: "remedyId" in row ? (row.remedyId ?? null) : undefined,
+    customerId: "customerId" in row ? (row.customerId ?? null) : undefined,
+    customerKey: "customerKey" in row ? (row.customerKey ?? null) : undefined,
+    customerName: "customerName" in row ? (row.customerName ?? null) : undefined,
+    serviceContractId: "serviceContractId" in row ? (row.serviceContractId ?? null) : undefined,
+    serviceContractKey: "serviceContractKey" in row ? (row.serviceContractKey ?? null) : undefined,
+    serviceContractName: "serviceContractName" in row ? (row.serviceContractName ?? null) : undefined,
+    slaReactionDueAt: "slaReactionDueAt" in row ? (row.slaReactionDueAt ?? null) : undefined,
+    slaResolutionDueAt: "slaResolutionDueAt" in row ? (row.slaResolutionDueAt ?? null) : undefined,
+    slaReactionState: "slaReactionState" in row ? (row.slaReactionState ?? null) : undefined,
+    slaResolutionState: "slaResolutionState" in row ? (row.slaResolutionState ?? null) : undefined,
+    signoffRemark: "signoffRemark" in row ? (row.signoffRemark ?? null) : undefined,
+    signoffSatisfaction: "signoffSatisfaction" in row ? (row.signoffSatisfaction ?? null) : undefined,
+    signedOffAt: "signedOffAt" in row ? (row.signedOffAt ?? null) : undefined,
+    signedOffBy: "signedOffBy" in row ? (row.signedOffBy ?? null) : undefined,
+    signedOffByLoginName: "signedOffByLoginName" in row ? (row.signedOffByLoginName ?? null) : undefined,
   };
 }
 

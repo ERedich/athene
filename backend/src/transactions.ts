@@ -50,8 +50,8 @@ const router = Router();
 const uuidRe =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const allowedTypes = new Set(["IN", "EX", "RM", "RT", "IV", "ZU"]);
-const creatableTypes = new Set(["RM", "ZU"]);
+const allowedTypes = new Set(["IN", "EX", "RM", "RT", "IV", "ZU", "TR"]);
+const creatableTypes = new Set(["RM", "ZU", "TR"]);
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuidRe.test(value);
@@ -360,14 +360,6 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const sparePartId = typeof body.sparePartId === "string" ? body.sparePartId.trim() : "";
-  const storageLocationId =
-    typeof body.storageLocationId === "string" ? body.storageLocationId.trim() : "";
-  if (!isUuid(sparePartId) || !isUuid(storageLocationId)) {
-    res.status(400).json({ error: "invalid_material_refs" });
-    return;
-  }
-
   const quantity = parsePositiveQuantity(body.quantity);
   if (quantity === null) {
     res.status(400).json({ error: "invalid_quantity" });
@@ -382,6 +374,111 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
     remark = trimmed.length ? trimmed : null;
+  }
+
+  // TR — Anfahrt / Reisezeit (hours against work order, no stock)
+  if (typeRaw === "TR") {
+    const workOrderIdRaw =
+      typeof body.workOrderId === "string" && body.workOrderId.trim()
+        ? body.workOrderId.trim()
+        : "";
+    if (!isUuid(workOrderIdRaw)) {
+      res.status(400).json({ error: "work_order_required" });
+      return;
+    }
+    try {
+      const meta = auditMeta(req);
+      const created = await withAuditContext(meta, async (client) => {
+        const woRes = await client.query<{
+          id: string;
+          siteId: string;
+          assetId: string;
+          costCenterId: string;
+        }>(
+          `
+          SELECT w."id", w."siteId", w."assetId", w."costCenterId"
+          FROM "workOrder" w
+          WHERE w."id" = $1::uuid
+            AND ${siteAccessSql('w."siteId"', "$2")}
+          LIMIT 1
+          `,
+          [workOrderIdRaw, meta.userId],
+        );
+        const wo = woRes.rows[0];
+        if (!wo) return { kind: "work_order_not_found" as const };
+
+        const empRes = await client.query<{ employeeId: string | null }>(
+          `SELECT "employeeId" FROM "users" WHERE "id" = $1::uuid LIMIT 1`,
+          [meta.userId],
+        );
+        const sessionEmployeeId = empRes.rows[0]?.employeeId ?? null;
+
+        const insertRes = await client.query<{ id: string }>(
+          `
+          INSERT INTO "transaction" (
+            "siteId",
+            "type",
+            "quantity",
+            "remark",
+            "employeeId",
+            "workOrderId",
+            "assetId",
+            "costCenterId"
+          )
+          VALUES (
+            $1::uuid,
+            'TR',
+            $2::numeric,
+            $3,
+            $4::uuid,
+            $5::uuid,
+            $6::uuid,
+            $7::uuid
+          )
+          RETURNING "id"
+          `,
+          [
+            wo.siteId,
+            quantity,
+            remark,
+            sessionEmployeeId,
+            wo.id,
+            wo.assetId,
+            wo.costCenterId,
+          ],
+        );
+        const transactionId = insertRes.rows[0]!.id;
+        const rowRes = await client.query<TransactionRow>(
+          `
+          ${transactionSelectSql}
+          WHERE t."id" = $1::uuid
+          LIMIT 1
+          `,
+          [transactionId],
+        );
+        return { kind: "ok" as const, row: rowRes.rows[0]! };
+      });
+      if (created.kind === "work_order_not_found") {
+        res.status(404).json({ error: "work_order_not_found" });
+        return;
+      }
+      res.status(201).json(created.row);
+    } catch (err) {
+      if ((err as Error).message === "missing_session_user") {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      sendPgError(res, err);
+    }
+    return;
+  }
+
+  const sparePartId = typeof body.sparePartId === "string" ? body.sparePartId.trim() : "";
+  const storageLocationId =
+    typeof body.storageLocationId === "string" ? body.storageLocationId.trim() : "";
+  if (!isUuid(sparePartId) || !isUuid(storageLocationId)) {
+    res.status(400).json({ error: "invalid_material_refs" });
+    return;
   }
 
   if (typeRaw === "ZU") {

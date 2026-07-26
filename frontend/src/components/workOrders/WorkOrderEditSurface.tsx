@@ -14,6 +14,7 @@ import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
 import { ReportCodePreview } from "../ReportCodePreview";
 import { AssetSelItem } from "../selItem/AssetSelItem";
 import { WorkOrderFeedbackTabContent } from "./WorkOrderFeedbackTabContent";
+import { WorkOrderCustomerServiceTabContent } from "./WorkOrderCustomerServiceTabContent";
 import { WorkOrderFeedbackTransactionsSection } from "./WorkOrderFeedbackTransactionsSection";
 import { WorkOrderInspectionPointsTabContent } from "./WorkOrderInspectionPointsTabContent";
 import { WorkOrderMessagesTabContent } from "./WorkOrderMessagesTabContent";
@@ -150,6 +151,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     t,
     editingId,
     editingMeta,
+    editingRow,
     form,
     setForm,
     activeTabIndex,
@@ -159,6 +161,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     statusLabel,
     orderStatusForUi,
     orderTypeOptions,
+    selectedAsset,
     assetKeyDisplay,
     setAssetKeyDisplay,
     handleAssetSelect,
@@ -254,7 +257,8 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
             idx === orderDialogTabs.InspectionPoints ||
             idx === orderDialogTabs.Feedback ||
             idx === orderDialogTabs.Transactions ||
-            idx === orderDialogTabs.Messages
+            idx === orderDialogTabs.Messages ||
+            idx === orderDialogTabs.CustomerService
           ) {
             setActiveTabIndex(idx);
           }
@@ -952,6 +956,18 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               onSend={sendMessage}
             />
           </div>
+        </TabPanel>
+        <TabPanel header={<AppTabHeader label={t("workOrders.tabCustomerService")} />}>
+          <WorkOrderCustomerServiceTabContent
+            siteId={editingMeta?.siteId ?? selectedAsset?.siteId}
+            customerId={form.customerId}
+            serviceContractId={form.serviceContractId}
+            onCustomerIdChange={(value) => setForm((cur) => ({ ...cur, customerId: value }))}
+            onServiceContractIdChange={(value) => setForm((cur) => ({ ...cur, serviceContractId: value }))}
+            editingRow={editingRow}
+            editingId={editingId}
+            disabled={saving}
+          />
         </TabPanel>
       </TabView>
     </div>

@@ -58,7 +58,7 @@ import {
   isSamePresetId,
 } from "../lib/workOrderSearchPresetApi";
 import { workOrderStatusAllowsFeedbackTab } from "../lib/workOrderStatus";
-import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
+import { formatOriginalWoCell, WORK_ORDER_FSM_NULLS, type WorkOrder, WorkOrderStatus, WorkOrderType } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import {
@@ -178,6 +178,7 @@ export function WorkOrdersPage() {
             transactionCount: 0,
             inspectionPointCount: 0,
             checkedInspectionPointCount: 0,
+            ...WORK_ORDER_FSM_NULLS,
           }))
         : [],
     [loading, orders.length],
