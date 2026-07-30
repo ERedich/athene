@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import { sql } from "@codemirror/lang-sql";
 import CodeMirror from "@uiw/react-codemirror";
-import { GripVertical, Plus, Trash2, X } from "lucide-react";
+import { GripVertical, Play, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
+import { Column } from "primereact/column";
+import { DataTable } from "primereact/datatable";
 
 import { AppDialog } from "../AppDialog";
 import { apiFetch } from "../../lib/api";
@@ -42,9 +44,28 @@ type QueryDesignerModalProps = {
   onApply: (sqlText: string) => void;
 };
 
+type RunPreviewResponse = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+};
+
 const TABLE_MIME = "application/x-qd-table";
 const COLUMN_MIME = "application/x-qd-column";
 const SELECT_MIME = "application/x-qd-select";
+const RUN_PREVIEW_LIMIT = 50;
+
+function toRunCellText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value instanceof Date) return value.toISOString();
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
 
 const WHERE_OPS: DesignerWhereOp[] = [
   "eq",
@@ -78,6 +99,7 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState(false);
   const [tableFilter, setTableFilter] = useState("");
+  const [columnFilter, setColumnFilter] = useState("");
   const [activeCatalogTable, setActiveCatalogTable] = useState<TableMetaRow | null>(null);
   const [columnsByKey, setColumnsByKey] = useState<Record<string, ColumnMetaRow[]>>({});
   const [columnsLoading, setColumnsLoading] = useState(false);
@@ -87,6 +109,9 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
   const [state, setState] = useState<QueryDesignerState>(emptyState);
   const [applyError, setApplyError] = useState<BuildSqlError | null>(null);
   const [dropHighlight, setDropHighlight] = useState<"tables" | "select" | null>(null);
+  const [runLoading, setRunLoading] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<RunPreviewResponse | null>(null);
 
   const tableKey = (schema: string, table: string) => `${schema}.${table}`;
 
@@ -134,11 +159,15 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
     setApplyError(null);
     setActiveCatalogTable(null);
     setTableFilter("");
+    setColumnFilter("");
+    setRunError(null);
+    setRunResult(null);
     void loadTables();
   }, [visible, loadTables]);
 
   useEffect(() => {
     if (!visible || !activeCatalogTable) return;
+    setColumnFilter("");
     void ensureColumns(activeCatalogTable.schema, activeCatalogTable.table);
   }, [visible, activeCatalogTable, ensureColumns]);
 
@@ -157,6 +186,16 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
     return columnsByKey[tableKey(activeCatalogTable.schema, activeCatalogTable.table)] ?? [];
   }, [activeCatalogTable, columnsByKey]);
 
+  const filteredActiveColumns = useMemo(() => {
+    const q = columnFilter.trim().toLowerCase();
+    if (!q) return activeColumns;
+    return activeColumns.filter(
+      (col) =>
+        col.name.toLowerCase().includes(q) ||
+        col.dataType.toLowerCase().includes(q),
+    );
+  }, [activeColumns, columnFilter]);
+
   const columnsForDesignerTable = useCallback(
     (table: DesignerTable): ColumnMetaRow[] => {
       return columnsByKey[tableKey(table.schema, table.table)] ?? [];
@@ -166,6 +205,11 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
 
   const preview = useMemo(() => buildSqlFromDesigner(state), [state]);
   const previewSql = "sql" in preview ? preview.sql : "";
+
+  useEffect(() => {
+    setRunResult(null);
+    setRunError(null);
+  }, [previewSql]);
 
   const errorMessage = (error: BuildSqlError | null) => {
     if (!error) return "";
@@ -447,6 +491,53 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
     onApply(result.sql);
   };
 
+  const handleRun = async () => {
+    const result = buildSqlFromDesigner(state);
+    if ("error" in result) {
+      setRunError(errorMessage(result.error));
+      setRunResult(null);
+      return;
+    }
+    setRunLoading(true);
+    setRunError(null);
+    try {
+      const res = await apiFetch("/api/report-designer/query-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: result.sql, limit: RUN_PREVIEW_LIMIT, recordId: null }),
+      });
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const errBody = (await res.json()) as { error?: string };
+          if (errBody.error === "invalid_query") detail = t("reportDesigner.queryInvalid");
+          else if (errBody.error === "query_failed") detail = t("reportDesigner.queryFailed");
+        } catch {
+          /* ignore */
+        }
+        if (!detail && (res.status === 401 || res.status === 403)) {
+          detail = t("reportDesigner.queryAuthError");
+        } else if (!detail && res.status === 404) {
+          detail = t("reportDesigner.queryUnavailable");
+        }
+        throw new Error(detail || "query");
+      }
+      const data = (await res.json()) as RunPreviewResponse;
+      setRunResult({
+        columns: Array.isArray(data.columns) ? data.columns : [],
+        rows: Array.isArray(data.rows) ? data.rows : [],
+        rowCount: typeof data.rowCount === "number" ? data.rowCount : (data.rows?.length ?? 0),
+      });
+    } catch (err) {
+      const detail =
+        err instanceof Error && err.message && err.message !== "query" ? err.message : "";
+      setRunResult(null);
+      setRunError(detail || t("reportDesigner.queryError"));
+    } finally {
+      setRunLoading(false);
+    }
+  };
+
   const fieldSelect =
     "h-8 w-full rounded-sm border border-outline-variant bg-surface px-1.5 text-xs text-on-surface outline-none focus-visible:border-primary";
 
@@ -484,128 +575,142 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
       <div className="grid h-full min-h-0 grid-cols-1 gap-0 lg:grid-cols-[220px_minmax(0,1fr)_280px]">
         {/* Catalog */}
         <div className="flex min-h-0 flex-col border-b border-outline-variant lg:border-b-0 lg:border-r">
-          <div className="border-b border-outline-variant px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
-            {t("reportDesigner.queryDesignerCatalog")}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b border-outline-variant px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              {t("reportDesigner.queryDesignerCatalog")}
+            </div>
+            <div className="border-b border-outline-variant p-2">
+              <input
+                type="search"
+                className={fieldSelect}
+                value={tableFilter}
+                onChange={(e) => setTableFilter(e.target.value)}
+                placeholder={t("reportDesigner.queryDesignerSearchTables")}
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-1">
+              {catalogLoading ? (
+                <div className="px-2 py-3 text-xs text-on-surface-variant">
+                  {t("reportDesigner.loading")}
+                </div>
+              ) : catalogError ? (
+                <div className="px-2 py-3 text-xs text-red-400">
+                  {t("reportDesigner.queryDesignerCatalogError")}
+                </div>
+              ) : filteredCatalog.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-on-surface-variant">
+                  {t("reportDesigner.queryDesignerNoTables")}
+                </div>
+              ) : (
+                filteredCatalog.map((row) => {
+                  const active =
+                    activeCatalogTable?.schema === row.schema &&
+                    activeCatalogTable?.table === row.table;
+                  return (
+                    <button
+                      key={`${row.schema}.${row.table}`}
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        const payload = JSON.stringify({ schema: row.schema, table: row.table });
+                        event.dataTransfer.setData(TABLE_MIME, payload);
+                        event.dataTransfer.setData("text/plain", payload);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onClick={() => setActiveCatalogTable(row)}
+                      onDoubleClick={() => addTable(row.schema, row.table)}
+                      className={`mb-0.5 flex w-full items-center gap-1 rounded-sm px-2 py-1.5 text-left text-xs ${
+                        active
+                          ? "bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
+                          : "text-on-surface hover:bg-surface"
+                      }`}
+                    >
+                      <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-50" strokeWidth={2} />
+                      <span className="truncate font-mono">{row.table}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-          <div className="border-b border-outline-variant p-2">
-            <input
-              type="search"
-              className={fieldSelect}
-              value={tableFilter}
-              onChange={(e) => setTableFilter(e.target.value)}
-              placeholder={t("reportDesigner.queryDesignerSearchTables")}
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto p-1">
-            {catalogLoading ? (
-              <div className="px-2 py-3 text-xs text-on-surface-variant">
-                {t("reportDesigner.loading")}
-              </div>
-            ) : catalogError ? (
-              <div className="px-2 py-3 text-xs text-red-400">
-                {t("reportDesigner.queryDesignerCatalogError")}
-              </div>
-            ) : filteredCatalog.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-on-surface-variant">
-                {t("reportDesigner.queryDesignerNoTables")}
-              </div>
-            ) : (
-              filteredCatalog.map((row) => {
-                const active =
-                  activeCatalogTable?.schema === row.schema &&
-                  activeCatalogTable?.table === row.table;
-                return (
-                  <button
-                    key={`${row.schema}.${row.table}`}
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      const payload = JSON.stringify({ schema: row.schema, table: row.table });
-                      event.dataTransfer.setData(TABLE_MIME, payload);
-                      event.dataTransfer.setData("text/plain", payload);
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
-                    onClick={() => setActiveCatalogTable(row)}
-                    onDoubleClick={() => addTable(row.schema, row.table)}
-                    className={`mb-0.5 flex w-full items-center gap-1 rounded-sm px-2 py-1.5 text-left text-xs ${
-                      active
-                        ? "bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]"
-                        : "text-on-surface hover:bg-surface"
-                    }`}
-                  >
-                    <GripVertical className="h-3.5 w-3.5 shrink-0 opacity-50" strokeWidth={2} />
-                    <span className="truncate font-mono">{row.table}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-          <div className="max-h-40 min-h-0 overflow-auto border-t border-outline-variant p-2">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+          <div className="flex min-h-0 flex-1 flex-col border-t border-outline-variant">
+            <div className="border-b border-outline-variant px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
               {t("reportDesigner.queryDesignerColumns")}
             </div>
-            {!activeCatalogTable ? (
-              <div className="text-[11px] text-on-surface-variant">
-                {t("reportDesigner.queryDesignerPickTable")}
-              </div>
-            ) : columnsLoading && activeColumns.length === 0 ? (
-              <div className="text-[11px] text-on-surface-variant">{t("reportDesigner.loading")}</div>
-            ) : activeColumns.length === 0 ? (
-              <div className="text-[11px] text-on-surface-variant">
-                {t("reportDesigner.queryDesignerNoColumns")}
-              </div>
-            ) : (
-              activeColumns.map((col) => (
-                <div
-                  key={col.name}
-                  className="mb-0.5 flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] text-on-surface hover:bg-surface"
-                  title={col.dataType}
-                >
-                  <button
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      if (!activeCatalogTable) return;
-                      const payload = JSON.stringify({
-                        schema: activeCatalogTable.schema,
-                        table: activeCatalogTable.table,
-                        column: col.name,
-                      });
-                      event.dataTransfer.setData(COLUMN_MIME, payload);
-                      event.dataTransfer.setData("text/plain", payload);
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
-                    onDoubleClick={() => {
-                      if (!activeCatalogTable) return;
-                      addColumnFromCatalog(
-                        activeCatalogTable.schema,
-                        activeCatalogTable.table,
-                        col.name,
-                      );
-                    }}
-                    className="flex min-w-0 flex-1 items-center gap-1 rounded-sm px-1 py-1 text-left"
-                  >
-                    <GripVertical className="h-3 w-3 shrink-0 opacity-50" strokeWidth={2} />
-                    <span className="truncate font-mono">{col.name}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-primary"
-                    title={t("reportDesigner.queryDesignerSelect")}
-                    onClick={() => {
-                      if (!activeCatalogTable) return;
-                      addColumnFromCatalog(
-                        activeCatalogTable.schema,
-                        activeCatalogTable.table,
-                        col.name,
-                      );
-                    }}
-                  >
-                    <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                  </button>
+            <div className="border-b border-outline-variant p-2">
+              <input
+                type="search"
+                className={fieldSelect}
+                value={columnFilter}
+                onChange={(e) => setColumnFilter(e.target.value)}
+                placeholder={t("reportDesigner.queryDesignerSearchColumns")}
+                disabled={!activeCatalogTable}
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-2">
+              {!activeCatalogTable ? (
+                <div className="text-[11px] text-on-surface-variant">
+                  {t("reportDesigner.queryDesignerPickTable")}
                 </div>
-              ))
-            )}
+              ) : columnsLoading && activeColumns.length === 0 ? (
+                <div className="text-[11px] text-on-surface-variant">{t("reportDesigner.loading")}</div>
+              ) : filteredActiveColumns.length === 0 ? (
+                <div className="text-[11px] text-on-surface-variant">
+                  {t("reportDesigner.queryDesignerNoColumns")}
+                </div>
+              ) : (
+                filteredActiveColumns.map((col) => (
+                  <div
+                    key={col.name}
+                    className="mb-0.5 flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-[11px] text-on-surface hover:bg-surface"
+                    title={col.dataType}
+                  >
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        if (!activeCatalogTable) return;
+                        const payload = JSON.stringify({
+                          schema: activeCatalogTable.schema,
+                          table: activeCatalogTable.table,
+                          column: col.name,
+                        });
+                        event.dataTransfer.setData(COLUMN_MIME, payload);
+                        event.dataTransfer.setData("text/plain", payload);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onDoubleClick={() => {
+                        if (!activeCatalogTable) return;
+                        addColumnFromCatalog(
+                          activeCatalogTable.schema,
+                          activeCatalogTable.table,
+                          col.name,
+                        );
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-1 rounded-sm px-1 py-1 text-left"
+                    >
+                      <GripVertical className="h-3 w-3 shrink-0 opacity-50" strokeWidth={2} />
+                      <span className="truncate font-mono">{col.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-primary"
+                      title={t("reportDesigner.queryDesignerSelect")}
+                      onClick={() => {
+                        if (!activeCatalogTable) return;
+                        addColumnFromCatalog(
+                          activeCatalogTable.schema,
+                          activeCatalogTable.table,
+                          col.name,
+                        );
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
@@ -663,84 +768,86 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                 {t("reportDesigner.queryDesignerJoins")}
               </div>
-              <div className="flex flex-col gap-2">
-                {state.joins.map((join) => {
-                  const left = state.tables.find((table) => table.id === join.leftTableId);
-                  const right = state.tables.find((table) => table.id === join.rightTableId);
-                  const leftCols = left ? columnsForDesignerTable(left) : [];
-                  const rightCols = right ? columnsForDesignerTable(right) : [];
-                  return (
-                    <div
-                      key={join.id}
-                      className="grid grid-cols-1 gap-1.5 rounded-sm border border-outline-variant bg-surface p-2 sm:grid-cols-[5rem_1fr_1fr_1fr_1fr]"
-                    >
-                      <select
-                        className={fieldSelect}
-                        value={join.type}
-                        onChange={(e) =>
-                          updateJoin(join.id, { type: e.target.value as DesignerJoinType })
-                        }
+              <div className="rounded-sm border border-dashed border-outline-variant p-2">
+                <div className="flex flex-col gap-2">
+                  {state.joins.map((join) => {
+                    const left = state.tables.find((table) => table.id === join.leftTableId);
+                    const right = state.tables.find((table) => table.id === join.rightTableId);
+                    const leftCols = left ? columnsForDesignerTable(left) : [];
+                    const rightCols = right ? columnsForDesignerTable(right) : [];
+                    return (
+                      <div
+                        key={join.id}
+                        className="grid grid-cols-1 gap-1.5 rounded-sm border border-outline-variant bg-surface p-2 sm:grid-cols-[5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"
                       >
-                        <option value="inner">INNER</option>
-                        <option value="left">LEFT</option>
-                      </select>
-                      <select
-                        className={fieldSelect}
-                        value={join.leftTableId}
-                        onChange={(e) =>
-                          updateJoin(join.id, { leftTableId: e.target.value, leftColumn: "" })
-                        }
-                      >
-                        {state.tables.map((table) => (
-                          <option key={table.id} value={table.id}>
-                            {table.alias}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className={fieldSelect}
-                        value={join.leftColumn}
-                        onChange={(e) => updateJoin(join.id, { leftColumn: e.target.value })}
-                      >
-                        <option value="">{t("reportDesigner.queryDesignerPickColumn")}</option>
-                        {leftCols.map((col) => (
-                          <option key={col.name} value={col.name}>
-                            {col.name}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className={fieldSelect}
-                        value={join.rightTableId}
-                        onChange={(e) =>
-                          updateJoin(join.id, { rightTableId: e.target.value, rightColumn: "" })
-                        }
-                      >
-                        {state.tables.map((table) => (
-                          <option key={table.id} value={table.id}>
-                            {table.alias}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className={fieldSelect}
-                        value={join.rightColumn}
-                        onChange={(e) => updateJoin(join.id, { rightColumn: e.target.value })}
-                      >
-                        <option value="">{t("reportDesigner.queryDesignerPickColumn")}</option>
-                        {rightCols.map((col) => (
-                          <option key={col.name} value={col.name}>
-                            {col.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
+                        <select
+                          className={fieldSelect}
+                          value={join.type}
+                          onChange={(e) =>
+                            updateJoin(join.id, { type: e.target.value as DesignerJoinType })
+                          }
+                        >
+                          <option value="inner">INNER</option>
+                          <option value="left">LEFT</option>
+                        </select>
+                        <select
+                          className={fieldSelect}
+                          value={join.leftTableId}
+                          onChange={(e) =>
+                            updateJoin(join.id, { leftTableId: e.target.value, leftColumn: "" })
+                          }
+                        >
+                          {state.tables.map((table) => (
+                            <option key={table.id} value={table.id}>
+                              {table.alias}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className={fieldSelect}
+                          value={join.leftColumn}
+                          onChange={(e) => updateJoin(join.id, { leftColumn: e.target.value })}
+                        >
+                          <option value="">{t("reportDesigner.queryDesignerPickColumn")}</option>
+                          {leftCols.map((col) => (
+                            <option key={col.name} value={col.name}>
+                              {col.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className={fieldSelect}
+                          value={join.rightTableId}
+                          onChange={(e) =>
+                            updateJoin(join.id, { rightTableId: e.target.value, rightColumn: "" })
+                          }
+                        >
+                          {state.tables.map((table) => (
+                            <option key={table.id} value={table.id}>
+                              {table.alias}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className={fieldSelect}
+                          value={join.rightColumn}
+                          onChange={(e) => updateJoin(join.id, { rightColumn: e.target.value })}
+                        >
+                          <option value="">{t("reportDesigner.queryDesignerPickColumn")}</option>
+                          {rightCols.map((col) => (
+                            <option key={col.name} value={col.name}>
+                              {col.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[10px] text-on-surface-variant">
+                  {t("reportDesigner.queryDesignerJoinHint")}
+                </p>
               </div>
-              <p className="mt-1 text-[10px] text-on-surface-variant">
-                {t("reportDesigner.queryDesignerJoinHint")}
-              </p>
             </section>
           ) : null}
 
@@ -903,6 +1010,17 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
                 <Plus className="h-3 w-3" strokeWidth={2} />
                 {t("reportDesigner.queryDesignerAddOrder")}
               </button>
+              <button
+                type="button"
+                className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-sm bg-primary px-2.5 text-[11px] font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void handleRun()}
+                disabled={runLoading || state.tables.length === 0}
+              >
+                <Play className="h-3 w-3" strokeWidth={2.5} fill="currentColor" />
+                {runLoading
+                  ? t("reportDesigner.loading")
+                  : t("reportDesigner.queryDesignerRun")}
+              </button>
             </div>
             <div className="flex flex-col gap-1.5">
               {state.orders.map((order) => {
@@ -959,6 +1077,46 @@ export function QueryDesignerModal({ visible, onHide, onApply }: QueryDesignerMo
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+              {t("reportDesigner.queryDesignerResults")}
+              {runResult ? (
+                <span className="ml-2 font-normal normal-case tracking-normal">
+                  {t("reportDesigner.previewRows", { count: runResult.rowCount })}
+                </span>
+              ) : null}
+            </div>
+            {runError ? (
+              <div className="mb-2 rounded-sm border border-red-400/40 bg-[color-mix(in_srgb,red_8%,transparent)] px-2 py-1.5 text-[11px] text-red-400">
+                {runError}
+              </div>
+            ) : null}
+            <div className="overflow-hidden rounded-sm border border-outline-variant">
+              <DataTable
+                value={runResult?.rows ?? []}
+                scrollable
+                scrollHeight="220px"
+                size="small"
+                className="app-data-table text-xs"
+                emptyMessage={
+                  runLoading
+                    ? t("reportDesigner.loading")
+                    : t("reportDesigner.emptyPreview")
+                }
+              >
+                {(runResult?.columns ?? []).map((columnName) => (
+                  <Column
+                    key={columnName}
+                    field={columnName}
+                    header={columnName}
+                    body={(row: Record<string, unknown>) => toRunCellText(row[columnName])}
+                    style={{ minWidth: "8rem" }}
+                  />
+                ))}
+              </DataTable>
             </div>
           </section>
         </div>
