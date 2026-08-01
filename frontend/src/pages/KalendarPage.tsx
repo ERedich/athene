@@ -13,6 +13,7 @@ import { CalendarMoveConfirmPanel } from "../components/calendar/CalendarMoveCon
 import { CalendarDayTimeline } from "../components/calendar/CalendarDayTimeline";
 import { CalendarGrid } from "../components/calendar/CalendarGrid";
 import { CalendarToolbar } from "../components/calendar/CalendarToolbar";
+import { CalendarViewToggle } from "../components/calendar/CalendarViewToggle";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import {
   buildMonthGrid,
@@ -463,14 +464,16 @@ export function KalendarPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li className="min-w-0 flex-1">
+        <CalendarViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+        <li className="flex items-center" aria-hidden>
+          <span className="app-calendar-toolbar-divider" />
+        </li>
+        <li className="min-w-0 shrink-0">
           <CalendarToolbar
             periodTitle={periodTitle}
-            viewMode={viewMode}
             onPrev={handlePrev}
             onNext={handleNext}
             onToday={handleToday}
-            onViewModeChange={setViewMode}
           />
         </li>
         <li className="ml-auto flex shrink-0 items-center gap-2">
@@ -483,7 +486,7 @@ export function KalendarPage() {
             placeholder={t("kalendar.workgroupFilterPlaceholder")}
             showClear
             onChange={(e) => setWorkgroupFilterId((e.value as string | null) ?? null)}
-            className="app-header-preset-dropdown app-inline-icon-dropdown h-9 min-w-[14rem] w-60 shrink-0 text-sm"
+            className="app-header-preset-dropdown app-inline-icon-dropdown h-9 w-52 shrink-0 text-sm"
             panelClassName="app-header-preset-dropdown-panel"
             appendTo={overlayAppendTo}
           />
