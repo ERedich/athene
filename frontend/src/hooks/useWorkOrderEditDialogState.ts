@@ -57,6 +57,11 @@ import {
   type PcrSelectOption,
 } from "../lib/workOrderPcr";
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
+import {
+  defaultDescriptionView,
+  todosToPayload,
+  type DescriptionViewMode,
+} from "../lib/todoTypes";
 import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
 
 export const PENDING_AUTO_UPLOAD_MS = 5_000;
@@ -121,6 +126,7 @@ type WorkOrderSavePayload = {
   classificationId: string | null;
   inspectionRoundId: string | null;
   originalWo?: string | null;
+  todos: { text: string }[];
 };
 
 type WorkOrderAssetConflictPayload = {
@@ -176,6 +182,8 @@ function workOrderRowFromMeta(
     transactionCount: meta.transactionCount ?? 0,
     inspectionPointCount: 0,
     checkedInspectionPointCount: 0,
+    todoCount: todosToPayload(form.todos).length,
+    uncheckedTodoCount: todosToPayload(form.todos).length,
     workgroupId: (meta.workgroupId ?? form.workgroupId) || null,
     workgroupKey: null,
     workgroupName: null,
@@ -219,6 +227,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingMeta, setEditingMeta] = useState<WorkOrderEditMeta | null>(null);
   const [form, setForm] = useState<FormState>(emptyWorkOrderForm());
+  const [descriptionView, setDescriptionView] = useState<DescriptionViewMode>("text");
+  const descriptionViewOverrideRef = useRef<DescriptionViewMode | undefined>(undefined);
   const [selectedAsset, setSelectedAsset] = useState<WorkOrderReferenceAsset | null>(null);
   const [assetKeyDisplay, setAssetKeyDisplay] = useState("");
   const prevCreateAssetIdForDefaultWgRef = useRef<string | null>(null);
@@ -1131,6 +1141,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     toastRef,
   ]);
 
+  const setDescriptionViewOverride = useCallback((mode?: DescriptionViewMode) => {
+    descriptionViewOverrideRef.current = mode;
+  }, []);
+
   const resetOrderDialogForCreate = useCallback(() => {
     setDocuments([]);
     setAssignments([]);
@@ -1164,6 +1178,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     setSelectedAsset(null);
     setAssetKeyDisplay("");
     setForm(emptyWorkOrderForm());
+    setDescriptionView("text");
     resetOrderDialogForCreate();
     setActiveTabIndex(orderDialogTabs.General);
     setDialogVisible(true);
@@ -1194,7 +1209,9 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         setSelectedAsset(null);
       }
       setAssetKeyDisplay(key);
-      setForm(workOrderRowToFormState(row, { name, asCopy: true }));
+      const nextForm = workOrderRowToFormState(row, { name, asCopy: true });
+      setForm(nextForm);
+      setDescriptionView(defaultDescriptionView(nextForm.todos));
       resetOrderDialogForCreate();
       setActiveTabIndex(orderDialogTabs.General);
       setDialogVisible(true);
@@ -1230,7 +1247,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         setSelectedAsset(null);
       }
       setAssetKeyDisplay(key);
-      setForm(workOrderRowToFormState(row));
+      const nextForm = workOrderRowToFormState(row);
+      setForm(nextForm);
+      setDescriptionView(defaultDescriptionView(nextForm.todos, descriptionViewOverrideRef.current));
+      descriptionViewOverrideRef.current = undefined;
       setPendingFiles([]);
       setAssignmentEmployeeIds([]);
       setDocumentsSearchTerm("");
@@ -1544,6 +1564,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
         workgroupId: form.workgroupId.trim(),
         classificationId: form.classificationId.trim() || null,
         inspectionRoundId: form.inspectionRoundId.trim() || null,
+        todos: todosToPayload(form.todos),
         ...(editingId ? {} : { originalWo: form.originalWoId.trim() || null }),
       };
 
@@ -1935,6 +1956,9 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     editingRow,
     form,
     setForm,
+    descriptionView,
+    setDescriptionView,
+    setDescriptionViewOverride,
     activeTabIndex,
     setActiveTabIndex,
     openCreate,

@@ -21,7 +21,15 @@ import {
   createWorkOrderRecord,
   setWorkOrderResponsibles,
   type WorkOrderCreateInput,
+  type DbClient,
 } from "./workOrderCreate.js";
+import {
+  copyWorkOrderTodos,
+  loadWorkOrderTodos,
+  parseTodoItems,
+  replaceWorkOrderTodos,
+  type TodoRow,
+} from "./todos.js";
 import {
   assertInspectionRoundForSite,
   syncWorkOrderInspectionPointsSnapshot,
@@ -128,6 +136,8 @@ type WorkOrderRow = {
   transactionCount: number;
   inspectionPointCount: number;
   checkedInspectionPointCount: number;
+  todoCount: number;
+  uncheckedTodoCount: number;
   originalWo: string | null;
   originalWoOrderNumber: number | null;
   originalWoName: string | null;
@@ -148,6 +158,8 @@ type WorkOrderAssignmentRow = {
   createdAt: string;
   createdBy: string;
 };
+
+type WorkOrderDetailRow = WorkOrderRow & { todos: TodoRow[] };
 
 type ParsedBody = WorkOrderCreateInput;
 
@@ -356,6 +368,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const inspectionRoundIdRaw = readTrimmedOptionalString(o.inspectionRoundId);
   if (inspectionRoundIdRaw !== null && !isUuid(inspectionRoundIdRaw)) return null;
 
+  const todos = parseTodoItems(o.todos);
+  if (todos === null) return null;
+
   return {
     name,
     description: descriptionRaw,
@@ -371,6 +386,7 @@ function parseBody(body: unknown): ParsedBody | null {
     originalWo: originalWoRaw,
     maintenancePlanId: maintenancePlanIdRaw,
     inspectionRoundId: inspectionRoundIdRaw,
+    todos,
   };
 }
 
@@ -505,6 +521,14 @@ const workOrderListCountJoinsSql = `
     FROM "workOrderInspectionPoint"
     GROUP BY "workOrderId"
   ) ip_counts ON ip_counts."workOrderId" = w."id"
+  LEFT JOIN (
+    SELECT
+      "workOrderId",
+      COUNT(*)::int AS "todoCount",
+      COUNT(*) FILTER (WHERE NOT "checked")::int AS "uncheckedTodoCount"
+    FROM "workOrderTodo"
+    GROUP BY "workOrderId"
+  ) todo_counts ON todo_counts."workOrderId" = w."id"
 `;
 
 const currentSegmentStartedAtSql = `
@@ -579,7 +603,9 @@ const selectWorkOrdersSql = `
     COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
     COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount",
     COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
-    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount"
+    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount",
+    COALESCE(todo_counts."todoCount", 0)::int AS "todoCount",
+    COALESCE(todo_counts."uncheckedTodoCount", 0)::int AS "uncheckedTodoCount"
   FROM "workOrder" w
   JOIN "site" s ON s."id" = w."siteId"
   JOIN "asset" a ON a."id" = w."assetId"
@@ -650,7 +676,9 @@ const selectWorkOrdersListSql = `
     COALESCE(assign_counts."assignedEmployeeCount", 0)::int AS "assignedEmployeeCount",
     COALESCE(tx_counts."transactionCount", 0)::int AS "transactionCount",
     COALESCE(ip_counts."inspectionPointCount", 0)::int AS "inspectionPointCount",
-    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount"
+    COALESCE(ip_counts."checkedInspectionPointCount", 0)::int AS "checkedInspectionPointCount",
+    COALESCE(todo_counts."todoCount", 0)::int AS "todoCount",
+    COALESCE(todo_counts."uncheckedTodoCount", 0)::int AS "uncheckedTodoCount"
   FROM "workOrder" w
   JOIN "site" s ON s."id" = w."siteId"
   JOIN "asset" a ON a."id" = w."assetId"
@@ -696,6 +724,32 @@ async function fetchWorkOrderRow(
     [workOrderId],
   );
   return rows[0] ?? null;
+}
+
+async function fetchWorkOrderDetailRow(
+  client: { query: <T extends QueryResultRow>(queryText: string, values?: unknown[]) => Promise<QueryResult<T>> },
+  workOrderId: string,
+): Promise<WorkOrderDetailRow | null> {
+  const row = await fetchWorkOrderRow(client, workOrderId);
+  if (!row) return null;
+  const todos = await loadWorkOrderTodos(client, workOrderId);
+  return { ...row, todos };
+}
+
+async function persistWorkOrderTodos(
+  client: DbClient,
+  workOrderId: string,
+  parsed: ParsedBody,
+): Promise<void> {
+  if (parsed.todos.length > 0) {
+    await replaceWorkOrderTodos(client, workOrderId, parsed.todos);
+    return;
+  }
+  if (parsed.originalWo) {
+    await copyWorkOrderTodos(client, parsed.originalWo, workOrderId);
+    return;
+  }
+  await replaceWorkOrderTodos(client, workOrderId, []);
 }
 
 async function assertResponsiblesCompatibleWithWorkgroup(
@@ -992,7 +1046,8 @@ router.get("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(row);
+    const todos = await loadWorkOrderTodos(pool, id);
+    res.json({ ...row, todos });
   } catch (err) {
     sendPgError(res, err);
   }
@@ -1994,7 +2049,8 @@ router.post("/", async (req: Request, res: Response) => {
     const meta = auditMeta(req);
     const row = await withAuditContext(meta, async (client) => {
       const created = await createWorkOrderRecord(client, meta.userId, parsed);
-      return await fetchWorkOrderRow(client, created.id);
+      await persistWorkOrderTodos(client, created.id, parsed);
+      return await fetchWorkOrderDetailRow(client, created.id);
     });
     if (!row) {
       res.status(500).json({ error: "no_row" });
@@ -2222,7 +2278,8 @@ router.put("/:id", async (req: Request, res: Response) => {
       if (existingRow.inspectionRoundId !== parsed.inspectionRoundId) {
         await syncWorkOrderInspectionPointsSnapshot(client, id, parsed.inspectionRoundId);
       }
-      return await fetchWorkOrderRow(client, id);
+      await replaceWorkOrderTodos(client, id, parsed.todos);
+      return await fetchWorkOrderDetailRow(client, id);
     });
     if (!row) {
       res.status(404).json({ error: "not_found" });
@@ -2928,6 +2985,122 @@ router.patch("/:id/inspection-points/:pointId", async (req: Request, res: Respon
       });
     }
     res.json(result.point);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.get("/:id/todos", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const rows = await withAuditContext(meta, async (client) => {
+      const access = await client.query<{ id: string }>(
+        `
+        SELECT "id"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      if (!access.rows[0]) throw new Error("not_found");
+      return loadWorkOrderTodos(client, id);
+    });
+    res.json(rows);
+  } catch (err) {
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
+router.patch("/:id/todos/:todoId", async (req: Request, res: Response) => {
+  const { id, todoId } = req.params;
+  if (!isUuid(id) || !isUuid(todoId)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const checked = req.body?.checked;
+  if (typeof checked !== "boolean") {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const result = await withAuditContext(meta, async (client) => {
+      const access = await client.query<{ id: string }>(
+        `
+        SELECT "id"
+        FROM "workOrder"
+        WHERE "id" = $1::uuid
+          AND ${siteAccessSql('"siteId"', "$2")}
+        `,
+        [id, meta.userId],
+      );
+      if (!access.rows[0]) throw new Error("not_found");
+      const { rows } = await client.query<TodoRow>(
+        `
+        WITH updated AS (
+          UPDATE "workOrderTodo"
+          SET
+            "checked" = $1,
+            "checkedAt" = CASE WHEN $1 THEN now() ELSE NULL END,
+            "checkedBy" = CASE WHEN $1 THEN $2::uuid ELSE NULL END
+          WHERE "id" = $3::uuid AND "workOrderId" = $4::uuid
+          RETURNING *
+        )
+        SELECT
+          u."id",
+          u."pos",
+          u."text",
+          u."checked",
+          u."checkedAt",
+          u."checkedBy",
+          usr."loginName" AS "checkedByLoginName"
+        FROM updated u
+        LEFT JOIN "users" usr ON usr."id" = u."checkedBy"
+        `,
+        [checked, meta.userId, todoId, id],
+      );
+      const todo = rows[0] ?? null;
+      if (!todo) return null;
+      const order = await fetchWorkOrderRow(client, id);
+      return { todo, order };
+    });
+    if (!result) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (result.order) {
+      void broadcastWorkOrderUpdated(result.order.siteId, result.order).catch((err) => {
+        console.error("[work-order-realtime] broadcast updated failed", err);
+      });
+    }
+    res.json(result.todo);
   } catch (err) {
     if ((err as Error).message === "not_found") {
       res.status(404).json({ error: "not_found" });

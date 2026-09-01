@@ -185,6 +185,18 @@
     "name": "Short name",
     "description": "Description",
     "descriptionCounter": "{{count}} / {{max}} characters",
+    "descriptionModeLegend": "Description view",
+    "descriptionMode": {
+      "text": "Long text",
+      "instructions": "Instructions"
+    },
+    "instructionsEmpty": "No instructions yet. Add items below.",
+    "instructionAdd": "Add instruction",
+    "instructionDelete": "Delete instruction",
+    "instructionMoveUp": "Move instruction up",
+    "instructionMoveDown": "Move instruction down",
+    "instructionPlaceholder": "Instruction text",
+    "instructionsReferenceTitle": "Instructions ({{count}} open)",
     "asset": "Asset",
     "assetPlaceholder": "Select asset",
     "costCenter": "Cost center",

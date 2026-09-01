@@ -11,6 +11,8 @@ import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
 
 export type WorkOrderType = string;
 
+import type { TodoInput } from "./todos.js";
+
 export type WorkOrderCreateInput = {
   name: string;
   description: string | null;
@@ -26,6 +28,7 @@ export type WorkOrderCreateInput = {
   originalWo: string | null;
   maintenancePlanId: string | null;
   inspectionRoundId: string | null;
+  todos: TodoInput[];
 };
 
 export type DbClient = PoolClient;

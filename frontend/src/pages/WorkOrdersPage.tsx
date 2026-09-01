@@ -178,6 +178,8 @@ export function WorkOrdersPage() {
             transactionCount: 0,
             inspectionPointCount: 0,
             checkedInspectionPointCount: 0,
+            todoCount: 0,
+            uncheckedTodoCount: 0,
           }))
         : [],
     [loading, orders.length],
@@ -426,6 +428,12 @@ export function WorkOrdersPage() {
     },
     [onDialogSaved, woDialog],
   );
+
+  const handleInstructionCountsChange = useCallback((workOrderId: string, uncheckedTodoCount: number) => {
+    setOrders((prev) =>
+      prev.map((order) => (order.id === workOrderId ? { ...order, uncheckedTodoCount } : order)),
+    );
+  }, []);
 
   const showSaveError = useCallback(async (res: Response) => {
     let code: string | undefined;
@@ -769,10 +777,11 @@ export function WorkOrdersPage() {
         onOpenDocuments={openDocumentsTab}
         onOpenPlanning={openPlanningTab}
         onOpenInspectionPoints={openInspectionPointsTab}
+        onInstructionCountsChange={handleInstructionCountsChange}
         emptyBadgePlaceholder={false}
       />
     ),
-    [openDocumentsTab, openInspectionPointsTab, openPlanningTab],
+    [handleInstructionCountsChange, openDocumentsTab, openInspectionPointsTab, openPlanningTab],
   );
 
   const statusLabel = useCallback((status: WorkOrderStatus) => t(`workOrders.statusValues.${status}`), [t]);

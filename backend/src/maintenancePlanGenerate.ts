@@ -11,6 +11,7 @@ import {
   startOfCalendarDay,
 } from "./workOrderScheduling.js";
 import { createWorkOrderRecord } from "./workOrderCreate.js";
+import { copyMaintenancePlanTodosToWorkOrder } from "./todos.js";
 import { getWorkOrderRowForRealtime } from "./workOrders.js";
 import { broadcastWorkOrderCreated } from "./workOrderRealtime.js";
 import { reindexWorkOrder, scheduleReindex } from "./assistant/embedding/index.js";
@@ -244,7 +245,9 @@ export async function generateWorkOrderForPlan(params: {
         originalWo: null,
         maintenancePlanId: plan.id,
         inspectionRoundId: plan.inspectionRoundId,
+        todos: [],
       });
+      await copyMaintenancePlanTodosToWorkOrder(client, plan.id, created.id);
 
       const nextDue = advanceNextDueAtPastNow(
         new Date(plan.nextDueAt),

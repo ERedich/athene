@@ -3,7 +3,6 @@ import { Check, ExternalLink, File, History, Image as ImageIcon, Pencil, Plus, T
 import { useTranslation } from "react-i18next";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { Button } from "primereact/button";
-import { Calendar } from "primereact/calendar";
 import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
@@ -13,7 +12,6 @@ import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
-import { InputTextarea } from "primereact/inputtextarea";
 import { MultiSelect } from "primereact/multiselect";
 import { Paginator, type PaginatorPageChangeEvent } from "primereact/paginator";
 import { Sidebar } from "primereact/sidebar";
@@ -24,6 +22,7 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { SparePartEditPageView } from "../components/spareParts/SparePartEditPageView";
 import { SparePartEditTabHost } from "../components/spareParts/SparePartEditSurface";
 import { SparePartListThumb } from "../components/spareParts/SparePartListThumb";
+import { SparePartSuppliersTab } from "../components/spareParts/SparePartSuppliersTab";
 import { AppTabHeader } from "../components/tabs/AppTabHeader";
 import { LucideSpinner, lucidePrimeBtnIcon } from "../icons/lucide";
 
@@ -1791,8 +1790,10 @@ export function SparePartsPage() {
     );
   };
 
-  const addSupplierLine = () => {
-    setSupplierLines((lines) => [...lines, newSupplierLine()]);
+  const addSupplierLine = (): string => {
+    const newLine = newSupplierLine();
+    setSupplierLines((lines) => [newLine, ...lines]);
+    return newLine.localId;
   };
 
   const removeSupplierLine = (localId: string) => {
@@ -2633,305 +2634,20 @@ export function SparePartsPage() {
                         <AppTabHeader label={t("spareParts.tabSuppliers")} count={suppliersTabCount} />
                       }
                     >
-                      {stockDetailLoading && editingId ? (
-                        <p className="m-0 pt-1 text-sm text-on-surface-variant">{t("spareParts.loadError")}</p>
-                      ) : (
-                        <div className="flex flex-col gap-3 pt-1">
-                          {supplierLines.length === 0 ? (
-                            <p className="m-0 text-sm text-on-surface-variant">
-                              {t("spareParts.suppliersEmpty")}
-                            </p>
-                          ) : (
-                            <div className="flex flex-col gap-3">
-                              {supplierLines.map((line) => (
-                                <div
-                                  key={line.localId}
-                                  className="grid grid-cols-1 gap-3 rounded-sm border border-outline-variant/40 p-3 md:grid-cols-12"
-                                >
-                                  <div className="space-y-2 md:col-span-8">
-                                    <label
-                                      htmlFor={`sp-supplier-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.supplier")}
-                                    </label>
-                                    <Dropdown
-                                      inputId={`sp-supplier-${line.localId}`}
-                                      value={line.supplierId || null}
-                                      options={supplierDropdownOptions}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          supplierId: String(e.value ?? ""),
-                                        })
-                                      }
-                                      placeholder={t("spareParts.supplierPlaceholder")}
-                                      className="w-full app-inline-icon-dropdown"
-                                      filter
-                                      disabled={!form.siteId}
-                                      appendTo={overlayAppendTo}
-                                    />
-                                  </div>
-                                  <div className="flex flex-wrap items-end gap-4 md:col-span-4">
-                                    <div className="flex items-center gap-2 pb-2">
-                                      <Checkbox
-                                        inputId={`sp-supplier-preferred-${line.localId}`}
-                                        checked={line.isPreferred}
-                                        onChange={(e) =>
-                                          updateSupplierLine(line.localId, {
-                                            isPreferred: Boolean(e.checked),
-                                          })
-                                        }
-                                      />
-                                      <label
-                                        htmlFor={`sp-supplier-preferred-${line.localId}`}
-                                        className="text-[11px] text-outline uppercase tracking-[0.1em]"
-                                      >
-                                        {t("spareParts.isPreferred")}
-                                      </label>
-                                    </div>
-                                    <div className="flex items-center gap-2 pb-2">
-                                      <Checkbox
-                                        inputId={`sp-supplier-active-${line.localId}`}
-                                        checked={line.isActive}
-                                        onChange={(e) =>
-                                          updateSupplierLine(line.localId, {
-                                            isActive: Boolean(e.checked),
-                                          })
-                                        }
-                                      />
-                                      <label
-                                        htmlFor={`sp-supplier-active-${line.localId}`}
-                                        className="text-[11px] text-outline uppercase tracking-[0.1em]"
-                                      >
-                                        {t("spareParts.supplierActive")}
-                                      </label>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      severity="danger"
-                                      text
-                                      rounded
-                                      className="mb-0.5 ml-auto"
-                                      aria-label={t("spareParts.removeSupplier")}
-                                      icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-                                      onClick={() => removeSupplierLine(line.localId)}
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-4">
-                                    <label
-                                      htmlFor={`sp-supplier-artnr-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.supplierArticleNumber")}
-                                    </label>
-                                    <InputText
-                                      id={`sp-supplier-artnr-${line.localId}`}
-                                      value={line.supplierArticleNumber}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          supplierArticleNumber: e.target.value,
-                                        })
-                                      }
-                                      className="w-full"
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-8">
-                                    <label
-                                      htmlFor={`sp-supplier-arttext-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.supplierArticleText")}
-                                    </label>
-                                    <InputText
-                                      id={`sp-supplier-arttext-${line.localId}`}
-                                      value={line.supplierArticleText}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          supplierArticleText: e.target.value,
-                                        })
-                                      }
-                                      className="w-full"
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-3">
-                                    <label
-                                      htmlFor={`sp-supplier-price-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.unitPrice")}
-                                    </label>
-                                    <InputNumber
-                                      inputId={`sp-supplier-price-${line.localId}`}
-                                      value={line.unitPrice}
-                                      onValueChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          unitPrice: e.value ?? null,
-                                        })
-                                      }
-                                      min={0}
-                                      minFractionDigits={0}
-                                      maxFractionDigits={4}
-                                      className="w-full"
-                                      inputClassName="w-full"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-2">
-                                    <label
-                                      htmlFor={`sp-supplier-currency-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.currency")}
-                                    </label>
-                                    <InputText
-                                      id={`sp-supplier-currency-${line.localId}`}
-                                      value={line.currency}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          currency: e.target.value,
-                                        })
-                                      }
-                                      className="w-full"
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-4">
-                                    <label
-                                      htmlFor={`sp-supplier-valid-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.priceValidFrom")}
-                                    </label>
-                                    <Calendar
-                                      inputId={`sp-supplier-valid-${line.localId}`}
-                                      value={line.priceValidFrom}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          priceValidFrom: e.value instanceof Date ? e.value : null,
-                                        })
-                                      }
-                                      dateFormat="yy-mm-dd"
-                                      showIcon
-                                      className="w-full"
-                                      appendTo={overlayAppendTo}
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-3">
-                                    <label
-                                      htmlFor={`sp-supplier-lead-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.leadTimeDays")}
-                                    </label>
-                                    <InputNumber
-                                      inputId={`sp-supplier-lead-${line.localId}`}
-                                      value={line.leadTimeDays}
-                                      onValueChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          leadTimeDays:
-                                            typeof e.value === "number" ? Math.trunc(e.value) : null,
-                                        })
-                                      }
-                                      min={0}
-                                      className="w-full"
-                                      inputClassName="w-full"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-6">
-                                    <label
-                                      htmlFor={`sp-supplier-minqty-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.minOrderQuantity")}
-                                    </label>
-                                    <InputNumber
-                                      inputId={`sp-supplier-minqty-${line.localId}`}
-                                      value={line.minOrderQuantity}
-                                      onValueChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          minOrderQuantity: e.value ?? null,
-                                        })
-                                      }
-                                      min={0}
-                                      className="w-full"
-                                      inputClassName="w-full"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-6">
-                                    <label
-                                      htmlFor={`sp-supplier-mult-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.orderMultiple")}
-                                    </label>
-                                    <InputNumber
-                                      inputId={`sp-supplier-mult-${line.localId}`}
-                                      value={line.orderMultiple}
-                                      onValueChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          orderMultiple: e.value ?? null,
-                                        })
-                                      }
-                                      min={0}
-                                      className="w-full"
-                                      inputClassName="w-full"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-12">
-                                    <label
-                                      htmlFor={`sp-supplier-longtext-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.supplierArticleLongText")}
-                                    </label>
-                                    <InputTextarea
-                                      id={`sp-supplier-longtext-${line.localId}`}
-                                      value={line.supplierArticleLongText}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, {
-                                          supplierArticleLongText: e.target.value,
-                                        })
-                                      }
-                                      rows={2}
-                                      className="w-full"
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                  <div className="space-y-2 md:col-span-12">
-                                    <label
-                                      htmlFor={`sp-supplier-remark-${line.localId}`}
-                                      className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-                                    >
-                                      {t("spareParts.supplierRemark")}
-                                    </label>
-                                    <InputText
-                                      id={`sp-supplier-remark-${line.localId}`}
-                                      value={line.remark}
-                                      onChange={(e) =>
-                                        updateSupplierLine(line.localId, { remark: e.target.value })
-                                      }
-                                      className="w-full"
-                                      autoComplete="off"
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <div>
-                            <Button
-                              type="button"
-                              label={t("spareParts.addSupplier")}
-                              icon={<Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-                              severity="secondary"
-                              outlined
-                              disabled={!form.siteId}
-                              onClick={addSupplierLine}
-                            />
-                          </div>
-                        </div>
-                      )}
+                      <SparePartSuppliersTab
+                        key={editingId ?? "new"}
+                        tabHostRef={tabHostRef}
+                        suppliersTabActive={activeTabIndex === sparePartDialogTabs.Suppliers}
+                        supplierLines={supplierLines}
+                        supplierDropdownOptions={supplierDropdownOptions}
+                        suppliersCatalog={suppliersCatalog}
+                        siteId={form.siteId}
+                        loading={stockDetailLoading}
+                        editingId={editingId}
+                        onAddLine={addSupplierLine}
+                        onUpdateLine={updateSupplierLine}
+                        onRemoveLine={removeSupplierLine}
+                      />
                     </TabPanel>
                     <TabPanel
                       header={

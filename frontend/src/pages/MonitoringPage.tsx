@@ -231,6 +231,8 @@ export function MonitoringPage() {
             transactionCount: 0,
             inspectionPointCount: 0,
             checkedInspectionPointCount: 0,
+            todoCount: 0,
+            uncheckedTodoCount: 0,
           }))
         : [],
     [loading, orders.length],
@@ -614,6 +616,12 @@ export function MonitoringPage() {
     [onDialogSaved, woDialog],
   );
 
+  const handleInstructionCountsChange = useCallback((workOrderId: string, uncheckedTodoCount: number) => {
+    setOrders((prev) =>
+      prev.map((order) => (order.id === workOrderId ? { ...order, uncheckedTodoCount } : order)),
+    );
+  }, []);
+
   const deleteRow = useCallback(
     async (id: string) => {
       try {
@@ -799,10 +807,11 @@ export function MonitoringPage() {
         onOpenDocuments={openDocumentsTab}
         onOpenPlanning={openPlanningTab}
         onOpenInspectionPoints={openInspectionPointsTab}
+        onInstructionCountsChange={handleInstructionCountsChange}
         emptyBadgePlaceholder
       />
     ),
-    [openDocumentsTab, openInspectionPointsTab, openPlanningTab],
+    [handleInstructionCountsChange, openDocumentsTab, openInspectionPointsTab, openPlanningTab],
   );
 
   const statusLabel = useCallback((status: WorkOrderStatus) => t(`workOrders.statusValues.${status}`), [t]);

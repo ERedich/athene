@@ -1,6 +1,7 @@
 import type { QueryResultRow } from "pg";
 
 import { pool } from "../../db.js";
+import { loadWorkOrderTodoTextsForEmbedding } from "../../todos.js";
 import {
   buildAssetText,
   buildSparePartText,
@@ -221,11 +222,12 @@ export async function reindexWorkOrder(workOrderId: string): Promise<void> {
     await deleteChunks(EMBEDDING_SOURCE_KIND.workOrder, workOrderId);
     return;
   }
+  const todoTexts = await loadWorkOrderTodoTextsForEmbedding(workOrderId);
   await upsertEntityChunks(
     EMBEDDING_SOURCE_KIND.workOrder,
     row.id,
     row.siteId,
-    buildWorkOrderText(row),
+    buildWorkOrderText(row, todoTexts),
   );
 }
 

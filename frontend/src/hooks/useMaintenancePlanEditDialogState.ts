@@ -24,6 +24,11 @@ import {
   type MaintenancePlanFormState,
   type MaintenancePlanIntervalUnit,
 } from "../lib/maintenancePlanTypes";
+import {
+  defaultDescriptionView,
+  todosToPayload,
+  type DescriptionViewMode,
+} from "../lib/todoTypes";
 import { useTabInk } from "../lib/tabs";
 
 type SelectOption = { label: string; value: string };
@@ -47,6 +52,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
   const [editingRow, setEditingRow] = useState<MaintenancePlan | null>(null);
   const [activeTabIndex, setActiveTabIndex] = useState<number>(maintenancePlanDialogTabs.General);
   const [form, setForm] = useState<MaintenancePlanFormState>(emptyMaintenancePlanForm());
+  const [descriptionView, setDescriptionView] = useState<DescriptionViewMode>("text");
   const [saving, setSaving] = useState(false);
   const [inspectionRounds, setInspectionRounds] = useState<
     Array<{ id: string; key: string; name: string; siteId: string }>
@@ -235,6 +241,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     setEditingRow(null);
     setActiveTabIndex(maintenancePlanDialogTabs.General);
     setForm(emptyMaintenancePlanForm(defaultSiteId));
+    setDescriptionView("text");
     setDialogVisible(true);
   }, [user?.workingSiteId]);
 
@@ -242,7 +249,9 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     setEditingId(row.id);
     setEditingRow(row);
     setActiveTabIndex(maintenancePlanDialogTabs.General);
-    setForm(maintenancePlanToFormState(row));
+    const nextForm = maintenancePlanToFormState(row);
+    setForm(nextForm);
+    setDescriptionView(defaultDescriptionView(nextForm.todos));
     setDialogVisible(true);
   }, []);
 
@@ -291,6 +300,7 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
         isActive: form.isActive,
         ignoreOpenWorkOrders: form.ignoreOpenWorkOrders,
         responsibleEmployeeIds: form.responsibleEmployeeIds,
+        todos: todosToPayload(form.todos),
       };
       const res = await apiFetch(editingId ? `/api/maintenance-plans/${editingId}` : "/api/maintenance-plans", {
         method: editingId ? "PUT" : "POST",
@@ -332,6 +342,8 @@ export function useMaintenancePlanEditDialogState(options: UseMaintenancePlanEdi
     setActiveTabIndex: setActiveTab,
     form,
     setForm,
+    descriptionView,
+    setDescriptionView,
     saving,
     siteFieldLocked,
     tabHostRef,

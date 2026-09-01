@@ -176,6 +176,19 @@ export type WorkOrderRow = {
   inspectionRoundName: string | null;
   inspectionPointCount: number;
   checkedInspectionPointCount: number;
+  todoCount: number;
+  uncheckedTodoCount: number;
+  todos?: WorkOrderTodoRow[];
+};
+
+export type WorkOrderTodoRow = {
+  id: string;
+  pos: number;
+  text: string;
+  checked?: boolean;
+  checkedAt?: string | null;
+  checkedBy?: string | null;
+  checkedByLoginName?: string | null;
 };
 
 export type WorkOrderInspectionPointRow = {

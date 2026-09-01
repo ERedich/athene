@@ -185,6 +185,18 @@
     "name": "Kurzbezeichnung",
     "description": "Beschreibung",
     "descriptionCounter": "{{count}} / {{max}} Zeichen",
+    "descriptionModeLegend": "Beschreibungsansicht",
+    "descriptionMode": {
+      "text": "Langtext",
+      "instructions": "Anweisungen"
+    },
+    "instructionsEmpty": "Noch keine Anweisungen. Fügen Sie Einträge hinzu.",
+    "instructionAdd": "Anweisung hinzufügen",
+    "instructionDelete": "Anweisung löschen",
+    "instructionMoveUp": "Anweisung nach oben",
+    "instructionMoveDown": "Anweisung nach unten",
+    "instructionPlaceholder": "Anweisungstext",
+    "instructionsReferenceTitle": "Anweisungen ({{count}} offen)",
     "asset": "Asset",
     "assetPlaceholder": "Asset auswählen",
     "costCenter": "Kostenstelle",

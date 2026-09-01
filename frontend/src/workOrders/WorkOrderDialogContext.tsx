@@ -27,11 +27,13 @@ import {
 } from "../lib/workOrderPresentation";
 import { orderDialogTabs, type FeedbackEntryMode, type OrderDialogTab } from "../lib/workOrderDialog";
 import type { WorkOrderFormSource } from "../lib/workOrderForm";
+import type { DescriptionViewMode } from "../lib/todoTypes";
 import type { WorkOrder } from "../lib/workOrderTypes";
 
 export type OpenWorkOrderOptions = {
   tab?: OrderDialogTab;
   feedbackMode?: FeedbackEntryMode;
+  descriptionView?: DescriptionViewMode;
   onSaved?: (order: WorkOrder) => void;
   onClosed?: () => void;
 };
@@ -139,6 +141,9 @@ export function WorkOrderDialogProvider({ children, atheneSource, onRefresh }: P
   const applyOpenOptions = useCallback(async (row: WorkOrderEditOpenSource, options?: OpenWorkOrderOptions) => {
     const d = dialogRef.current;
     if (!d) return;
+    if (options?.descriptionView != null) {
+      d.setDescriptionViewOverride(options.descriptionView);
+    }
     await d.openEdit(row);
     if (options?.tab != null) {
       d.setActiveTabIndex(options.tab);

@@ -35,6 +35,7 @@ import {
   type ShiftedPlanningAssignment,
 } from "./workOrderScheduling.js";
 import { createWorkOrderRecord } from "./workOrderCreate.js";
+import { copyWorkOrderTodos, replaceWorkOrderTodos } from "./todos.js";
 import { generateWorkOrderForPlan } from "./maintenancePlanGenerate.js";
 import {
   buildPresetPayloadFromPartial,
@@ -262,6 +263,7 @@ type ParsedCreateWorkOrder = {
   originalWo: string | null;
   maintenancePlanId: string | null;
   inspectionRoundId: string | null;
+  todos: { text: string }[];
 };
 
 type WorkOrderStatusCountResult = {
@@ -678,6 +680,7 @@ function parseCreateWorkOrderArgs(args: Record<string, unknown>): ParsedCreateWo
     originalWo,
     maintenancePlanId: null,
     inspectionRoundId: null,
+    todos: [],
   };
 }
 
@@ -3091,6 +3094,11 @@ async function createWorkOrder(userId: string, args: Record<string, unknown>): P
     },
     async (client) => {
       const created = await createWorkOrderRecord(client, userId, parsed);
+      if (parsed.todos.length > 0) {
+        await replaceWorkOrderTodos(client, created.id, parsed.todos);
+      } else if (parsed.originalWo) {
+        await copyWorkOrderTodos(client, parsed.originalWo, created.id);
+      }
       const { rows } = await client.query<WorkOrderRow>(
         `
         ${selectWorkOrdersSql}

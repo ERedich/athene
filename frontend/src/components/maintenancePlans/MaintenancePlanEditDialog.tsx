@@ -10,6 +10,7 @@ import { InputText } from "primereact/inputtext";
 import { MultiSelect } from "primereact/multiselect";
 import { TabPanel, TabView } from "primereact/tabview";
 
+import { DescriptionTodoField } from "../DescriptionTodoField";
 import { lucidePrimeBtnIcon } from "../../icons/lucide";
 import type {
   MaintenancePlanEditDialogProps,
@@ -32,6 +33,8 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
     setActiveTabIndex,
     form,
     setForm,
+    descriptionView,
+    setDescriptionView,
     saving,
     siteFieldLocked,
     tabHostRef,
@@ -172,21 +175,16 @@ export function MaintenancePlanEditDialog(props: MaintenancePlanEditDialogProps)
                 />
               </div>
 
-              <div className="space-y-2 md:col-span-6">
-                <label htmlFor="mp-description" className={fieldLabelClass}>
-                  {t("workOrders.description")}
-                </label>
-                <textarea
-                  id="mp-description"
-                  value={form.description}
-                  maxLength={2000}
-                  onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
-                  className="w-full p-inputtext p-component min-h-28 resize-y"
-                />
-                <div className="text-xs text-on-surface-variant text-right">
-                  {t("workOrders.descriptionCounter", { count: form.description.length, max: 2000 })}
-                </div>
-              </div>
+              <DescriptionTodoField
+                descriptionLabel={t("workOrders.description")}
+                description={form.description}
+                onDescriptionChange={(value) => setForm((c) => ({ ...c, description: value }))}
+                todos={form.todos}
+                onTodosChange={(todos) => setForm((c) => ({ ...c, todos }))}
+                viewMode={descriptionView}
+                onViewModeChange={setDescriptionView}
+                textareaId="mp-description"
+              />
 
               <div className="space-y-2 md:col-span-3">
                 <label htmlFor="mp-asset" className={fieldLabelClass}>

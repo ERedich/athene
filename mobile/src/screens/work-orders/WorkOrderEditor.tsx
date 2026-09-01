@@ -49,6 +49,7 @@ import {
   patchWorkOrderDocument,
   postWorkOrder,
   putWorkOrder,
+  fetchWorkOrderById,
   queryKeys,
   uploadWorkOrderDocument,
   useAssetsQuery,
@@ -106,10 +107,33 @@ type PendingDoc = {
   size?: number;
   addedAt: number;
 };
+type TodoFormItem = { localId: string; text: string };
+type DescriptionViewMode = "text" | "instructions";
+
+function newTodoFormItem(text = ""): TodoFormItem {
+  return {
+    localId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    text,
+  };
+}
+
+function todosFromRecords(records: WorkOrderRow["todos"]): TodoFormItem[] {
+  return (records ?? []).map((record) => ({ localId: record.id, text: record.text }));
+}
+
+function todosToPayload(items: TodoFormItem[]): { text: string }[] {
+  return items
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .slice(0, 50)
+    .map((text) => ({ text }));
+}
+
 type FormState = {
   orderNumber: number | null;
   name: string;
   description: string;
+  todos: TodoFormItem[];
   assetId: string;
   costCenterId: string;
   classificationId: string;
@@ -143,6 +167,7 @@ function emptyForm(): FormState {
     orderNumber: null as number | null,
     name: "",
     description: "",
+    todos: [],
     assetId: "",
     costCenterId: "",
     classificationId: "",
@@ -185,6 +210,7 @@ export function WorkOrderEditor({ orderId }: Props) {
   const row = useMemo(() => (orderId ? orders.find((o) => o.id === orderId) : undefined), [orderId, orders]);
   const [tabIndex, setTabIndex] = useState(0);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [descriptionView, setDescriptionView] = useState<DescriptionViewMode>("text");
   const [hydrated, setHydrated] = useState(false);
   const [saving, setSaving] = useState(false);
   const [typeModal, setTypeModal] = useState(false);
@@ -532,28 +558,58 @@ export function WorkOrderEditor({ orderId }: Props) {
   ]);
 
   useEffect(() => {
-    if (isNew || !row || hydrated) return;
-    setForm({
-      orderNumber: row.orderNumber,
-      name: row.name,
-      description: row.description ?? "",
-      assetId: row.assetId,
-      costCenterId: row.costCenterId,
-      classificationId: row.classificationId ?? "",
-      workgroupId: row.workgroupId ?? "",
-      responsibleEmployeeIds: [...(row.responsibleEmployeeIds ?? [])],
-      plannedStart: parseIso(row.plannedStart) ?? new Date(),
-      plannedEnd: parseIso(row.plannedEnd),
-      plannedDurationHours:
-        row.plannedDurationMinutes == null
-          ? ""
-          : Number.isInteger(row.plannedDurationMinutes / 60)
-            ? String(row.plannedDurationMinutes / 60)
-            : (row.plannedDurationMinutes / 60).toFixed(2),
-      orderType: row.orderType,
-    });
-    setHydrated(true);
-  }, [hydrated, isNew, row]);
+    if (isNew || !orderId || hydrated) return;
+    void (async () => {
+      try {
+        const full = await fetchWorkOrderById(orderId);
+        setForm({
+          orderNumber: full.orderNumber,
+          name: full.name,
+          description: full.description ?? "",
+          todos: todosFromRecords(full.todos),
+          assetId: full.assetId,
+          costCenterId: full.costCenterId,
+          classificationId: full.classificationId ?? "",
+          workgroupId: full.workgroupId ?? "",
+          responsibleEmployeeIds: [...(full.responsibleEmployeeIds ?? [])],
+          plannedStart: parseIso(full.plannedStart) ?? new Date(),
+          plannedEnd: parseIso(full.plannedEnd),
+          plannedDurationHours:
+            full.plannedDurationMinutes == null
+              ? ""
+              : Number.isInteger(full.plannedDurationMinutes / 60)
+                ? String(full.plannedDurationMinutes / 60)
+                : (full.plannedDurationMinutes / 60).toFixed(2),
+          orderType: full.orderType,
+        });
+        setDescriptionView(full.todos && full.todos.length > 0 ? "instructions" : "text");
+        setHydrated(true);
+      } catch {
+        if (!row) return;
+        setForm({
+          orderNumber: row.orderNumber,
+          name: row.name,
+          description: row.description ?? "",
+          todos: [],
+          assetId: row.assetId,
+          costCenterId: row.costCenterId,
+          classificationId: row.classificationId ?? "",
+          workgroupId: row.workgroupId ?? "",
+          responsibleEmployeeIds: [...(row.responsibleEmployeeIds ?? [])],
+          plannedStart: parseIso(row.plannedStart) ?? new Date(),
+          plannedEnd: parseIso(row.plannedEnd),
+          plannedDurationHours:
+            row.plannedDurationMinutes == null
+              ? ""
+              : Number.isInteger(row.plannedDurationMinutes / 60)
+                ? String(row.plannedDurationMinutes / 60)
+                : (row.plannedDurationMinutes / 60).toFixed(2),
+          orderType: row.orderType,
+        });
+        setHydrated(true);
+      }
+    })();
+  }, [hydrated, isNew, orderId, row]);
 
   const accessibleAssets = useMemo(
     () => assets.filter((a) => !siteFieldLocked || (user ? a.siteId === user.workingSiteId : true)),
@@ -815,6 +871,38 @@ export function WorkOrderEditor({ orderId }: Props) {
           marginBottom: 10,
         },
         description: { minHeight: 96, textAlignVertical: "top" },
+        descriptionHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 6,
+        },
+        segmentRow: { flexDirection: "row", borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: colors.outline },
+        segmentBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface },
+        segmentBtnActive: { backgroundColor: colors.primaryContainer },
+        segmentBtnText: { fontSize: 12, color: colors.onSurfaceVariant },
+        segmentBtnTextActive: { color: colors.onSurface, fontWeight: "700" },
+        todoBox: {
+          borderWidth: 1,
+          borderColor: colors.outline,
+          borderRadius: 8,
+          padding: 10,
+          gap: 8,
+          marginBottom: 8,
+        },
+        todoRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+        todoAction: { padding: 6 },
+        addTodoBtn: {
+          alignSelf: "flex-start",
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: colors.outline,
+        },
+        addTodoBtnText: { color: colors.primary, fontWeight: "600" },
+        muted: { color: colors.onSurfaceVariant, fontSize: 13 },
         counter: { fontSize: 12, color: colors.outline, marginTop: -8, marginBottom: 14 },
         durationRow: { flexDirection: "row", gap: 10 },
         half: { flex: 1 },
@@ -927,6 +1015,7 @@ export function WorkOrderEditor({ orderId }: Props) {
         orderType: form.orderType,
         workgroupId: form.workgroupId.trim(),
         responsibleEmployeeIds: [...form.responsibleEmployeeIds],
+        todos: todosToPayload(form.todos),
       };
     })();
     if (!payload) return null;
@@ -1083,6 +1172,7 @@ export function WorkOrderEditor({ orderId }: Props) {
       orderType: form.orderType,
       workgroupId: form.workgroupId.trim(),
       responsibleEmployeeIds: [...form.responsibleEmployeeIds],
+      todos: todosToPayload(form.todos),
     };
 
     setSaving(true);
@@ -1294,14 +1384,121 @@ export function WorkOrderEditor({ orderId }: Props) {
             style={[styles.input, showRequiredHints && requiredMissing.name && styles.requiredInput]}
           />
 
-          <Text style={styles.label}>{t("workOrders.description")}</Text>
-          <TextInput
-            value={form.description}
-            onChangeText={(txt) => setForm((cur) => ({ ...cur, description: txt }))}
-            style={[styles.input, styles.description]}
-            multiline
-          />
-          <Text style={styles.counter}>{t("workOrders.descriptionCounter", { count: form.description.length, max: 2000 })}</Text>
+          <View style={styles.descriptionHeader}>
+            <Text style={styles.label}>{t("workOrders.description")}</Text>
+            <View style={styles.segmentRow}>
+              {(["text", "instructions"] as const).map((mode) => (
+                <HapticPressable
+                  key={mode}
+                  {...androidRippleProps(ripple)}
+                  style={({ pressed }) => [
+                    styles.segmentBtn,
+                    descriptionView === mode && styles.segmentBtnActive,
+                    pressedOpacity(pressed, PRESSED_OPACITY_CONTROL),
+                  ]}
+                  onPress={() => setDescriptionView(mode)}
+                >
+                  <Text
+                    style={[
+                      styles.segmentBtnText,
+                      descriptionView === mode && styles.segmentBtnTextActive,
+                    ]}
+                  >
+                    {t(`workOrders.descriptionMode.${mode}`)}
+                  </Text>
+                </HapticPressable>
+              ))}
+            </View>
+          </View>
+
+          {descriptionView === "text" ? (
+            <>
+              <TextInput
+                value={form.description}
+                onChangeText={(txt) => setForm((cur) => ({ ...cur, description: txt }))}
+                style={[styles.input, styles.description]}
+                multiline
+              />
+              <Text style={styles.counter}>
+                {t("workOrders.descriptionCounter", { count: form.description.length, max: 2000 })}
+              </Text>
+            </>
+          ) : (
+            <View style={styles.todoBox}>
+              {form.todos.length === 0 ? (
+                <Text style={styles.muted}>{t("workOrders.instructionsEmpty")}</Text>
+              ) : (
+                form.todos.map((item, index) => (
+                  <View key={item.localId} style={styles.todoRow}>
+                    <TextInput
+                      value={item.text}
+                      onChangeText={(txt) =>
+                        setForm((cur) => ({
+                          ...cur,
+                          todos: cur.todos.map((todo) =>
+                            todo.localId === item.localId ? { ...todo, text: txt } : todo,
+                          ),
+                        }))
+                      }
+                      style={[styles.input, { flex: 1 }]}
+                      placeholder={t("workOrders.instructionPlaceholder")}
+                    />
+                    <HapticPressable
+                      {...androidRippleProps(ripple)}
+                      style={({ pressed }) => [styles.todoAction, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                      disabled={index === 0}
+                      onPress={() => {
+                        if (index === 0) return;
+                        setForm((cur) => {
+                          const next = [...cur.todos];
+                          const [moved] = next.splice(index, 1);
+                          next.splice(index - 1, 0, moved);
+                          return { ...cur, todos: next };
+                        });
+                      }}
+                    >
+                      <MaterialIcons name="arrow-upward" size={18} color={colors.onSurface} />
+                    </HapticPressable>
+                    <HapticPressable
+                      {...androidRippleProps(ripple)}
+                      style={({ pressed }) => [styles.todoAction, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                      disabled={index === form.todos.length - 1}
+                      onPress={() => {
+                        if (index === form.todos.length - 1) return;
+                        setForm((cur) => {
+                          const next = [...cur.todos];
+                          const [moved] = next.splice(index, 1);
+                          next.splice(index + 1, 0, moved);
+                          return { ...cur, todos: next };
+                        });
+                      }}
+                    >
+                      <MaterialIcons name="arrow-downward" size={18} color={colors.onSurface} />
+                    </HapticPressable>
+                    <HapticPressable
+                      {...androidRippleProps(ripple)}
+                      style={({ pressed }) => [styles.todoAction, pressedOpacity(pressed, PRESSED_OPACITY_CONTROL)]}
+                      onPress={() =>
+                        setForm((cur) => ({
+                          ...cur,
+                          todos: cur.todos.filter((todo) => todo.localId !== item.localId),
+                        }))
+                      }
+                    >
+                      <MaterialIcons name="delete-outline" size={18} color="#ef4444" />
+                    </HapticPressable>
+                  </View>
+                ))
+              )}
+              <HapticPressable
+                {...androidRippleProps(ripple)}
+                style={({ pressed }) => [styles.addTodoBtn, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
+                onPress={() => setForm((cur) => ({ ...cur, todos: [...cur.todos, newTodoFormItem()] }))}
+              >
+                <Text style={styles.addTodoBtnText}>{t("workOrders.instructionAdd")}</Text>
+              </HapticPressable>
+            </View>
+          )}
 
           <View style={showRequiredHints && requiredMissing.assetId ? styles.requiredWrap : undefined}>
             <AssetPicker

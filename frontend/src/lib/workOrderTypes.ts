@@ -1,4 +1,5 @@
 import type { AssetDocumentCategory } from "../constants/assetDocumentCategory";
+import type { TodoRecord } from "./todoTypes";
 
 /** Stable key from site Stammdaten `workOrderType` (e.g. plannedRepair, breakdown). */
 export type WorkOrderType = string;
@@ -63,6 +64,9 @@ export type WorkOrder = {
   transactionCount: number;
   inspectionPointCount: number;
   checkedInspectionPointCount: number;
+  todoCount: number;
+  uncheckedTodoCount: number;
+  todos?: TodoRecord[];
   workgroupId: string | null;
   workgroupKey: string | null;
   workgroupName: string | null;

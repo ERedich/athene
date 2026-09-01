@@ -1297,6 +1297,18 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   border-color: rgb(74 222 128) !important;
 }
 
+.app-ref-button--todos.p-button:not(:disabled),
+.app-ref-button--todos.p-button:not(.p-disabled) {
+  background: rgb(134 239 172) !important; /* green-300 */
+  border-color: rgb(134 239 172) !important;
+  color: rgb(15 23 42) !important;
+}
+.app-ref-button--todos.p-button:not(:disabled):hover,
+.app-ref-button--todos.p-button:not(.p-disabled):hover {
+  background: rgb(74 222 128) !important; /* green-400 */
+  border-color: rgb(74 222 128) !important;
+}
+
 .app-ref-button--purchase.p-button:not(:disabled),
 .app-ref-button--purchase.p-button:not(.p-disabled) {
   background: rgb(249 168 212) !important; /* pink-300 */
@@ -3001,6 +3013,78 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   }
 
   .app-sidebar-nav-chevron {
+    transition: none;
+  }
+}
+
+/* Spare-part suppliers tab: search in tab bar + accordion panels */
+.app-sp-edit-page-view .p-tabview-nav-container:has(.app-sp-suppliers-tab-search) {
+  display: flex;
+  align-items: center;
+}
+
+.app-sp-edit-page-view
+  .p-tabview-nav-container:has(.app-sp-suppliers-tab-search)
+  .p-tabview-nav-content,
+.app-sp-edit-page-view
+  .p-tabview-nav-container:has(.app-sp-suppliers-tab-search)
+  .p-tabview-nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-sp-suppliers-tab-search {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding-right: 0.75rem;
+  padding-left: 0.5rem;
+}
+
+.app-sp-supplier-accordion-header {
+  border-radius: 0.125rem;
+  padding: 0.125rem 0;
+  transition: color 0.15s ease;
+}
+
+.app-sp-supplier-accordion-header:hover {
+  color: var(--color-primary);
+}
+
+.app-sp-supplier-accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  transition: grid-template-rows 0.22s ease-out;
+}
+
+.app-sp-supplier-accordion-body--open {
+  grid-template-rows: 1fr;
+}
+
+.app-sp-supplier-accordion-body-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-sp-supplier-accordion-body:not(.app-sp-supplier-accordion-body--open)
+  .app-sp-supplier-accordion-body-inner {
+  pointer-events: none;
+}
+
+.app-sp-supplier-accordion-chevron {
+  transition: transform 0.22s ease-out;
+}
+
+.app-sp-supplier-accordion-chevron--open {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sp-supplier-accordion-body {
+    transition: none;
+  }
+
+  .app-sp-supplier-accordion-chevron {
     transition: none;
   }
 }

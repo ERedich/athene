@@ -1,3 +1,6 @@
+import type { TodoFormItem, TodoRecord } from "./todoTypes";
+import { todosFromRecords } from "./todoTypes";
+
 export type MaintenancePlanIntervalUnit = "day" | "week" | "month" | "year";
 export type MaintenancePlanStatus = "active" | "paused" | "ended";
 
@@ -43,12 +46,14 @@ export type MaintenancePlan = {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  todos?: TodoRecord[];
 };
 
 export type MaintenancePlanFormState = {
   key: string;
   name: string;
   description: string;
+  todos: TodoFormItem[];
   siteId: string;
   assetId: string;
   costCenterId: string;
@@ -70,6 +75,7 @@ export const emptyMaintenancePlanForm = (siteId = ""): MaintenancePlanFormState 
   key: "",
   name: "",
   description: "",
+  todos: [],
   siteId,
   assetId: "",
   costCenterId: "",
@@ -93,6 +99,7 @@ export function maintenancePlanToFormState(row: MaintenancePlan): MaintenancePla
     key: row.key,
     name: row.name,
     description: row.description ?? "",
+    todos: todosFromRecords(row.todos),
     siteId: row.siteId,
     assetId: row.assetId,
     costCenterId: row.costCenterId,

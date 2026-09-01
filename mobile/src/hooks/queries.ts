@@ -557,7 +557,17 @@ export type WorkOrderSaveBody = {
   orderType: WorkOrderType;
   workgroupId: string;
   responsibleEmployeeIds: string[];
+  todos: { text: string }[];
 };
+
+export async function fetchWorkOrderById(id: string): Promise<WorkOrderRow> {
+  const r = await apiFetch(`/api/work-orders/${encodeURIComponent(id)}`);
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error(err || "fetch");
+  }
+  return r.json() as Promise<WorkOrderRow>;
+}
 
 export async function postWorkOrder(body: WorkOrderSaveBody): Promise<WorkOrderRow> {
   const r = await apiFetch("/api/work-orders", {

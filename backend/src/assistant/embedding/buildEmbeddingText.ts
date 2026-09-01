@@ -85,7 +85,7 @@ export type WorkOrderEmbeddingRow = {
   assignedEmployeeCount: number;
 };
 
-export function buildWorkOrderText(row: WorkOrderEmbeddingRow): string {
+export function buildWorkOrderText(row: WorkOrderEmbeddingRow, todoTexts: string[] = []): string {
   return joinLines([
     "sourceKind: workOrder",
     line("workOrderId", row.id),
@@ -93,6 +93,7 @@ export function buildWorkOrderText(row: WorkOrderEmbeddingRow): string {
     line("Auftragsnummer", row.orderNumber),
     line("name", row.name),
     line("description", row.description),
+    todoTexts.length > 0 ? line("todos", todoTexts.join("; ")) : null,
     line("siteKey", row.siteKey),
     line("siteName", row.siteName),
     line("assetKey", row.assetKey),

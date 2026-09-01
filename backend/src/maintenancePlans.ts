@@ -23,6 +23,12 @@ import {
 } from "./workOrderCreate.js";
 import { assertInspectionRoundForSite } from "./inspectionRoundSnapshot.js";
 import { assertWorkOrderTypeForSite } from "./workOrderTypes.js";
+import {
+  loadMaintenancePlanTodos,
+  parseTodoItems,
+  replaceMaintenancePlanTodos,
+  type TodoRow,
+} from "./todos.js";
 
 export type MaintenancePlanStatus = "active" | "paused" | "ended";
 
@@ -90,7 +96,10 @@ type ParsedBody = {
   status: MaintenancePlanStatus;
   ignoreOpenWorkOrders: boolean;
   responsibleEmployeeIds: string[];
+  todos: { text: string }[];
 };
+
+type MaintenancePlanDetailRow = MaintenancePlanRow & { todos: TodoRow[] };
 
 const router = Router();
 
@@ -228,6 +237,9 @@ function parseBody(body: unknown): ParsedBody | null {
   const responsibleEmployeeIds = normalizeEmployeeIds(o.responsibleEmployeeIds);
   if (!responsibleEmployeeIds || responsibleEmployeeIds.length === 0) return null;
 
+  const todos = parseTodoItems(o.todos);
+  if (todos === null) return null;
+
   return {
     key,
     name,
@@ -248,6 +260,7 @@ function parseBody(body: unknown): ParsedBody | null {
     status,
     ignoreOpenWorkOrders,
     responsibleEmployeeIds,
+    todos,
   };
 }
 
@@ -423,6 +436,13 @@ async function fetchPlanRow(client: DbClient, planId: string): Promise<Maintenan
   return rows[0] ?? null;
 }
 
+async function fetchPlanDetailRow(client: DbClient, planId: string): Promise<MaintenancePlanDetailRow | null> {
+  const row = await fetchPlanRow(client, planId);
+  if (!row) return null;
+  const todos = await loadMaintenancePlanTodos(client, planId);
+  return { ...row, todos };
+}
+
 async function assertPlanContext(
   client: DbClient,
   userId: string,
@@ -525,7 +545,8 @@ router.get("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(row);
+    const todos = await loadMaintenancePlanTodos(pool, id);
+    res.json({ ...row, todos });
   } catch (err) {
     sendPgError(res, err);
   }
@@ -657,7 +678,8 @@ router.post("/", async (req: Request, res: Response) => {
       const planId = inserted.rows[0]?.id;
       if (!planId) return null;
       await setPlanResponsibles(client, planId, parsed.responsibleEmployeeIds);
-      return await fetchPlanRow(client, planId);
+      await replaceMaintenancePlanTodos(client, planId, parsed.todos);
+      return await fetchPlanDetailRow(client, planId);
     });
     if (!row) {
       res.status(500).json({ error: "no_row" });
@@ -746,7 +768,8 @@ router.put("/:id", async (req: Request, res: Response) => {
         ],
       );
       await setPlanResponsibles(client, id, parsed.responsibleEmployeeIds);
-      return await fetchPlanRow(client, id);
+      await replaceMaintenancePlanTodos(client, id, parsed.todos);
+      return await fetchPlanDetailRow(client, id);
     });
     if (!row) {
       res.status(404).json({ error: "not_found" });

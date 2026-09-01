@@ -10,6 +10,7 @@ import { MultiSelect } from "primereact/multiselect";
 import { TabPanel, TabView } from "primereact/tabview";
 
 import { DocumentMimeIcon } from "../documents/DocumentMimeIcon";
+import { DescriptionTodoField } from "../DescriptionTodoField";
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
 import { ReportCodePreview } from "../ReportCodePreview";
 import { AssetSelItem } from "../selItem/AssetSelItem";
@@ -152,6 +153,8 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     editingMeta,
     form,
     setForm,
+    descriptionView,
+    setDescriptionView,
     activeTabIndex,
     setActiveTabIndex,
     fileInputRef,
@@ -362,21 +365,16 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               />
             </div>
 
-            <div className="space-y-2 md:col-span-6">
-              <label htmlFor="order-description" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-                {t("workOrders.description")}
-              </label>
-              <textarea
-                id="order-description"
-                value={form.description}
-                maxLength={2000}
-                onChange={(e) => setForm((cur) => ({ ...cur, description: e.target.value }))}
-                className="w-full p-inputtext p-component min-h-28 resize-y"
-              />
-              <div className="text-xs text-on-surface-variant text-right">
-                {t("workOrders.descriptionCounter", { count: form.description.length, max: 2000 })}
-              </div>
-            </div>
+            <DescriptionTodoField
+              descriptionLabel={t("workOrders.description")}
+              description={form.description}
+              onDescriptionChange={(value) => setForm((cur) => ({ ...cur, description: value }))}
+              todos={form.todos}
+              onTodosChange={(todos) => setForm((cur) => ({ ...cur, todos }))}
+              viewMode={descriptionView}
+              onViewModeChange={setDescriptionView}
+              textareaId="order-description"
+            />
 
             <div className="space-y-2 md:col-span-3">
               <label htmlFor="order-asset" className="block text-[11px] text-outline uppercase tracking-[0.1em]">

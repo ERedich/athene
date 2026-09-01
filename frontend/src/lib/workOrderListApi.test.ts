@@ -49,6 +49,8 @@ function sampleRow(partial: Partial<WorkOrder> & Pick<WorkOrder, "id" | "orderNu
     transactionCount: 0,
     inspectionPointCount: 0,
     checkedInspectionPointCount: 0,
+    todoCount: 0,
+    uncheckedTodoCount: 0,
     workgroupId: null,
     workgroupKey: null,
     workgroupName: null,
@@ -134,6 +136,8 @@ describe("parseWorkOrderListResponse", () => {
       transactionCount: 0,
       inspectionPointCount: 0,
       checkedInspectionPointCount: 0,
+    todoCount: 0,
+    uncheckedTodoCount: 0,
     };
     const parsed = parseWorkOrderListResponse({ rows: [slim], hasMore: false, limit: 50, offset: 0 });
     expect(parsed.rows[0]?.doneBy).toBeNull();

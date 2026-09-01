@@ -53,6 +53,8 @@ export type WorkOrderRealtimePayload = {
   transactionCount?: number;
   inspectionPointCount?: number;
   checkedInspectionPointCount?: number;
+  todoCount?: number;
+  uncheckedTodoCount?: number;
 };
 
 const sockets = new Map<WebSocket, string>();

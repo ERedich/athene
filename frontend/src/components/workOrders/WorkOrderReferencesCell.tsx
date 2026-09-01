@@ -1,15 +1,21 @@
 import { memo, useCallback, type ReactNode } from "react";
+
 import { CheckSquare, File, UserPlus } from "lucide-react";
+
 import { useTranslation } from "react-i18next";
 
 import { lucidePrimeBtnIcon } from "../../icons/lucide";
+
 import type { WorkOrder } from "../../lib/workOrderTypes";
+
+import { WorkOrderInstructionsPopover } from "./WorkOrderInstructionsPopover";
 
 type Props = {
   row: WorkOrder;
   onOpenDocuments: (row: WorkOrder) => void;
   onOpenPlanning: (row: WorkOrder) => void;
   onOpenInspectionPoints: (row: WorkOrder) => void;
+  onInstructionCountsChange?: (workOrderId: string, uncheckedTodoCount: number) => void;
   /** Monitoring keeps empty badges as a space so column width stays stable. */
   emptyBadgePlaceholder?: boolean;
 };
@@ -51,6 +57,7 @@ function WorkOrderReferencesCellInner({
   onOpenDocuments,
   onOpenPlanning,
   onOpenInspectionPoints,
+  onInstructionCountsChange,
   emptyBadgePlaceholder = true,
 }: Props) {
   const { t } = useTranslation();
@@ -147,6 +154,11 @@ function WorkOrderReferencesCellInner({
       >
         <CheckSquare className={lucidePrimeBtnIcon} strokeWidth={1.75} />
       </RefIconButton>
+      <WorkOrderInstructionsPopover
+        row={row}
+        emptyBadgePlaceholder={emptyBadgePlaceholder}
+        onCountsChange={onInstructionCountsChange}
+      />
     </div>
   );
 }

@@ -1,3 +1,6 @@
+import type { TodoFormItem, TodoRecord } from "./todoTypes";
+import { todosFromRecords } from "./todoTypes";
+
 /** Stable key from site Stammdaten `workOrderType`. */
 export type WorkOrderType = string;
 
@@ -5,6 +8,7 @@ export type WorkOrderFormFields = {
   orderNumber: number | null;
   name: string;
   description: string;
+  todos: TodoFormItem[];
   assetId: string;
   costCenterId: string;
   plannedStart: Date | null;
@@ -25,6 +29,7 @@ export type WorkOrderFormSource = {
   orderNumber: number;
   name: string;
   description: string | null;
+  todos?: TodoRecord[];
   assetId: string;
   costCenterId: string;
   plannedStart: string;
@@ -52,6 +57,7 @@ export function emptyWorkOrderForm(): WorkOrderFormFields {
     orderNumber: null,
     name: "",
     description: "",
+    todos: [],
     assetId: "",
     costCenterId: "",
     plannedStart: start,
@@ -76,6 +82,7 @@ export function workOrderRowToFormState(
     orderNumber: asCopy ? null : row.orderNumber,
     name: opts?.name ?? row.name,
     description: row.description ?? "",
+    todos: todosFromRecords(row.todos),
     assetId: row.assetId,
     costCenterId: row.costCenterId,
     plannedStart: parseIsoDate(row.plannedStart),
