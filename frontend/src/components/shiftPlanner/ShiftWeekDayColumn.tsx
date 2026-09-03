@@ -30,6 +30,8 @@ type Props = {
   selectedBlockId?: string | null;
   onSelectBlock?: (block: ShiftCalendarBlock) => void;
   onOpenInfo?: (block: ShiftCalendarBlock) => void;
+  onAssignedEmployeeDragStart?: (employeeId: string, block: ShiftCalendarBlock) => void;
+  onAssignedEmployeeDragEnd?: () => void;
 };
 
 export function ShiftWeekDayColumn({
@@ -50,6 +52,8 @@ export function ShiftWeekDayColumn({
   selectedBlockId,
   onSelectBlock,
   onOpenInfo,
+  onAssignedEmployeeDragStart,
+  onAssignedEmployeeDragEnd,
 }: Props) {
   const isSimple = viewMode === "simple";
 
@@ -76,6 +80,8 @@ export function ShiftWeekDayColumn({
               selectedBlockId={selectedBlockId}
               onSelectBlock={onSelectBlock}
               onOpenInfo={onOpenInfo}
+              onAssignedEmployeeDragStart={onAssignedEmployeeDragStart}
+              onAssignedEmployeeDragEnd={onAssignedEmployeeDragEnd}
             />
           ))}
         </div>
@@ -110,6 +116,8 @@ export function ShiftWeekDayColumn({
                   selectedBlockId={selectedBlockId}
                   onSelectBlock={onSelectBlock}
                   onOpenInfo={onOpenInfo}
+                  onAssignedEmployeeDragStart={onAssignedEmployeeDragStart}
+                  onAssignedEmployeeDragEnd={onAssignedEmployeeDragEnd}
                 />
               );
             })}
