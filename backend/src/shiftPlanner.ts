@@ -529,7 +529,9 @@ router.get("/assignments", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_week_start" });
     return;
   }
-  const weekEnd = addDaysIso(weekStart, 6);
+  // Pad one day on each side so Mon/Sun (and overnight Monday morning) have D±1.
+  const rangeStart = addDaysIso(weekStart, -1);
+  const rangeEnd = addDaysIso(weekStart, 7);
 
   try {
     const { rows } = await pool.query<ShiftAssignmentRow>(
@@ -546,7 +548,7 @@ router.get("/assignments", async (req: Request, res: Response) => {
         AND esa."assignmentDate" <= $3::date
       ORDER BY esa."assignmentDate" ASC, e."name" ASC
       `,
-      [userId, weekStart, weekEnd],
+      [userId, rangeStart, rangeEnd],
     );
     res.json(rows);
   } catch (err) {

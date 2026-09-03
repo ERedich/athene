@@ -9,9 +9,15 @@ import {
 } from "../../lib/calendar/calendarEventLayout";
 import type { CalendarWeekRow as WeekRow } from "../../lib/calendar/calendarDates";
 import { isBeforeToday, isValidMoveTarget } from "../../lib/calendar/calendarMove";
-import type { CalendarMaintenancePlan } from "../../lib/calendar/calendarMaintenancePlans";
+import {
+  maintenancePlanMatchesWorkgroupFilter,
+  type CalendarMaintenancePlan,
+} from "../../lib/calendar/calendarMaintenancePlans";
 import { CALENDAR_MONTH_MAX_EVENT_LANES, type CalendarEvent } from "../../lib/calendar/calendarTypes";
-import type { CalendarWorkOrder } from "../../lib/calendar/calendarWorkOrders";
+import {
+  workOrderMatchesWorkgroupFilter,
+  type CalendarWorkOrder,
+} from "../../lib/calendar/calendarWorkOrders";
 import { CalendarDayCell } from "./CalendarDayCell";
 import { CalendarEventBar } from "./CalendarEventBar";
 import { CalendarMonthOverflowHint } from "./CalendarMonthOverflowHint";
@@ -142,8 +148,8 @@ export function CalendarWeekRow({
           const filterDisabled =
             workgroupFilterId != null &&
             (isPlan
-              ? plan != null && plan.workgroupId !== workgroupFilterId
-              : wo != null && wo.workgroupId !== workgroupFilterId);
+              ? plan != null && !maintenancePlanMatchesWorkgroupFilter(plan, workgroupFilterId)
+              : wo != null && !workOrderMatchesWorkgroupFilter(wo, workgroupFilterId));
           return (
           <CalendarEventBar
             key={`${seg.eventId}-${seg.colStart}-${seg.laneIndex}`}

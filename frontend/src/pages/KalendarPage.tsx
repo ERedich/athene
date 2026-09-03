@@ -24,6 +24,7 @@ import {
   getVisibleRange,
   shiftAnchorDate,
 } from "../lib/calendar/calendarDates";
+import { WORKGROUP_FILTER_NONE } from "../lib/calendar/calendarWorkgroupFilter";
 import {
   buildPendingMove,
   isBeforeToday,
@@ -48,6 +49,7 @@ import {
   fetchCalendarWorkOrders,
   filterCalendarEventsBySearch,
   workOrderMatchesWorkgroupFilter,
+  workOrderMeetsCalendarMinDuration,
   workOrderToCalendarEvent,
   type CalendarWorkOrder,
 } from "../lib/calendar/calendarWorkOrders";
@@ -60,6 +62,7 @@ import {
 } from "../lib/workOrderApi";
 import { apiFetch } from "../lib/api";
 import type { WorkOrderReferenceEmployee, WorkOrderReferenceWorkgroup } from "../lib/workOrderTypes";
+import { useAuth } from "../auth/AuthContext";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useMaintenancePlanDialog } from "../maintenancePlans/MaintenancePlanDialogContext";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
@@ -69,6 +72,7 @@ export function KalendarPage() {
   const woDialog = useWorkOrderDialog();
   const mpDialog = useMaintenancePlanDialog();
   const athene = useAtheneAssistant();
+  const { appParameterCalendarMinDurationHours } = useAuth();
   const toastRef = useRef<Toast>(null);
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
 
@@ -191,12 +195,20 @@ export function KalendarPage() {
     void loadData();
   }, [loadData]);
 
+  const calendarWorkOrders = useMemo(
+    () =>
+      workOrders.filter((wo) =>
+        workOrderMeetsCalendarMinDuration(wo, appParameterCalendarMinDurationHours),
+      ),
+    [appParameterCalendarMinDurationHours, workOrders],
+  );
+
   const allEvents = useMemo(
     () => [
-      ...workOrders.map(workOrderToCalendarEvent),
+      ...calendarWorkOrders.map(workOrderToCalendarEvent),
       ...maintenancePlans.map(maintenancePlanToCalendarEvent),
     ],
-    [maintenancePlans, workOrders],
+    [calendarWorkOrders, maintenancePlans],
   );
 
   const filteredEvents = useMemo(
@@ -205,17 +217,25 @@ export function KalendarPage() {
   );
 
   const workgroupFilterOptions = useMemo(
-    () =>
-      workgroups
+    () => [
+      { label: t("kalendar.workgroupFilterNone"), value: WORKGROUP_FILTER_NONE },
+      ...workgroups
         .filter((wg) => wg.isActive)
         .sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }))
         .map((wg) => ({ label: `${wg.key} - ${wg.name}`, value: wg.id })),
-    [workgroups],
+    ],
+    [t, workgroups],
   );
 
   const droppableWorkOrderIds = useMemo(
-    () => buildDroppableWorkOrderIds(draggingEmployeeId, assignableEmployees, workOrders, workgroupMap),
-    [assignableEmployees, draggingEmployeeId, workOrders, workgroupMap],
+    () =>
+      buildDroppableWorkOrderIds(
+        draggingEmployeeId,
+        assignableEmployees,
+        calendarWorkOrders,
+        workgroupMap,
+      ),
+    [assignableEmployees, calendarWorkOrders, draggingEmployeeId, workgroupMap],
   );
 
   const activeDraggingEmployeeId = draggingEmployeeId ?? assigningEmployeeId;
@@ -550,12 +570,15 @@ export function KalendarPage() {
       ) : (
         <div className="app-calendar-layout flex min-h-0 flex-1 overflow-hidden bg-surface-container-low">
           <div className="app-calendar-layout__main flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-            {!loading && filteredEvents.length === 0 && workOrders.length === 0 && maintenancePlans.length === 0 ? (
+            {!loading &&
+            filteredEvents.length === 0 &&
+            calendarWorkOrders.length === 0 &&
+            maintenancePlans.length === 0 ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEvents")}</p>
             ) : null}
             {!loading &&
             filteredEvents.length === 0 &&
-            (workOrders.length > 0 || maintenancePlans.length > 0) ? (
+            (calendarWorkOrders.length > 0 || maintenancePlans.length > 0) ? (
               <p className="p-4 text-center text-sm text-on-surface-variant">{t("kalendar.noEventsFiltered")}</p>
             ) : null}
             {viewMode === "day" ? (

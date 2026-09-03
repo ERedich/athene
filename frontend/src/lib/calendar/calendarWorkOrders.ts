@@ -3,6 +3,7 @@ import type { WorkOrderFormSource } from "../workOrderForm";
 import type { WorkOrderType } from "../workOrderForm";
 import type { WorkOrderEditMeta, WorkOrderStatus } from "../workOrderTypes";
 import type { CalendarEvent } from "./calendarTypes";
+import { matchesWorkgroupFilter } from "./calendarWorkgroupFilter";
 
 /** Statuses shown in Kalendar — excludes Beendet (ended), Erledigt (done) and Storniert (cancelled). */
 export const CALENDAR_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
@@ -169,7 +170,7 @@ export function filterCalendarEventsByWorkgroup(
   if (!workgroupId) return events;
   return events.filter((ev) => {
     const wo = ev.meta?.workOrder as CalendarWorkOrder | undefined;
-    return wo?.workgroupId === workgroupId;
+    return wo != null && workOrderMatchesWorkgroupFilter(wo, workgroupId);
   });
 }
 
@@ -177,6 +178,24 @@ export function workOrderMatchesWorkgroupFilter(
   workOrder: CalendarWorkOrder,
   workgroupFilterId: string | null,
 ): boolean {
-  if (!workgroupFilterId) return true;
-  return workOrder.workgroupId === workgroupFilterId;
+  return matchesWorkgroupFilter(workOrder.workgroupId, workgroupFilterId);
+}
+
+export function calendarWorkOrderDurationMinutes(workOrder: CalendarWorkOrder): number {
+  if (workOrder.plannedDurationMinutes != null && workOrder.plannedDurationMinutes > 0) {
+    return workOrder.plannedDurationMinutes;
+  }
+  const start = new Date(workOrder.plannedStart).getTime();
+  const end = workOrder.plannedEnd ? new Date(workOrder.plannedEnd).getTime() : start;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.round((end - start) / 60_000);
+}
+
+/** True when the order should appear in the calendar for WO-CLMD (hours). 0 hours = show all. */
+export function workOrderMeetsCalendarMinDuration(
+  workOrder: CalendarWorkOrder,
+  minHours: number,
+): boolean {
+  if (!Number.isFinite(minHours) || minHours <= 0) return true;
+  return calendarWorkOrderDurationMinutes(workOrder) >= minHours * 60;
 }

@@ -45,6 +45,12 @@ export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH";
 /** Aufträge: tägliche Uhrzeit für Generierung aus Wartungsplänen. */
 export const APP_PARAM_KEY_GENERATE_WO_FROM_MP = "WO-GNWO";
 
+/** Aufträge: Mindest-Auftragsdauer in Stunden für die Kalendar-Darstellung. */
+export const APP_PARAM_KEY_CALENDAR_MIN_DURATION = "WO-CLMD";
+
+/** Default when WO-CLMD is missing or invalid. */
+export const DEFAULT_CALENDAR_MIN_DURATION_HOURS = 4;
+
 const ASSET_TYPE_KEYS = ["site", "structure", "line", "maintenanceObject"] as const;
 
 export type AssetKeyGenerationMode = "manual" | "auto_incremental";
@@ -164,6 +170,22 @@ function parseNumValueBody(raw: unknown): number | null {
     if (Number.isFinite(n) && n > 0) return n;
   }
   return null;
+}
+
+/** Integer hours 0–100 inclusive (WO-CLMD). */
+export function parseCalendarMinDurationHours(raw: unknown): number | null {
+  let n: number;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    n = raw;
+  } else if (typeof raw === "string" && raw.trim() !== "") {
+    n = Number(raw);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  const i = Math.round(n);
+  if (Math.abs(n - i) > 1e-9) return null;
+  return i;
 }
 
 /** Accepts HH:mm or HH:mm:ss; returns HH:mm:ss for Postgres time. */
@@ -301,6 +323,24 @@ export async function getDefaultShiftHours(client: DbQueryable): Promise<number>
     return Number.isFinite(n) && n > 0 ? n : 8;
   } catch {
     return 8;
+  }
+}
+
+export async function getCalendarMinDurationHours(client: DbQueryable): Promise<number> {
+  try {
+    const { rows } = await client.query<{ numValue: string | number }>(
+      `
+      SELECT "numValue"
+      FROM "appParameter"
+      WHERE "key" = $1 AND "valueType" = 'number'
+      LIMIT 1
+      `,
+      [APP_PARAM_KEY_CALENDAR_MIN_DURATION],
+    );
+    const parsed = parseCalendarMinDurationHours(rows[0]?.numValue);
+    return parsed ?? DEFAULT_CALENDAR_MIN_DURATION_HOURS;
+  } catch {
+    return DEFAULT_CALENDAR_MIN_DURATION_HOURS;
   }
 }
 
@@ -566,11 +606,15 @@ router.patch("/:key", async (req: Request, res: Response) => {
     }
 
     if (vt === "number") {
-      if (key !== APP_PARAM_KEY_DEFAULT_SHIFT_HOURS) {
+      let numValue: number | null = null;
+      if (key === APP_PARAM_KEY_DEFAULT_SHIFT_HOURS) {
+        numValue = parseNumValueBody(body.numValue);
+      } else if (key === APP_PARAM_KEY_CALENDAR_MIN_DURATION) {
+        numValue = parseCalendarMinDurationHours(body.numValue);
+      } else {
         res.status(400).json({ error: "unsupported_number_parameter" });
         return;
       }
-      const numValue = parseNumValueBody(body.numValue);
       if (numValue === null) {
         res.status(400).json({ error: "invalid_num_value" });
         return;

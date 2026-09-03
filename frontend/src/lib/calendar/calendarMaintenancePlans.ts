@@ -1,5 +1,6 @@
 import { apiFetch } from "../api";
 import type { CalendarEvent } from "./calendarTypes";
+import { matchesWorkgroupFilter } from "./calendarWorkgroupFilter";
 
 const DEFAULT_PLAN_DURATION_MINUTES = 60;
 
@@ -71,6 +72,5 @@ export function maintenancePlanMatchesWorkgroupFilter(
   plan: CalendarMaintenancePlan,
   workgroupFilterId: string | null,
 ): boolean {
-  if (!workgroupFilterId) return true;
-  return plan.workgroupId === workgroupFilterId;
+  return matchesWorkgroupFilter(plan.workgroupId, workgroupFilterId);
 }

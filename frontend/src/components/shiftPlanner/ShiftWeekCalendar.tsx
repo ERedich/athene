@@ -34,6 +34,8 @@ import {
   ShiftAssignRolloutPanel,
   type ShiftRolloutPending,
 } from "./ShiftAssignRolloutPanel";
+import { ShiftOverviewPanel } from "./ShiftOverviewPanel";
+import { assignmentsForShiftAroundDate } from "../../lib/shiftPlanner/shiftOverview";
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
 import { OverlayPanel } from "primereact/overlaypanel";
 
@@ -56,6 +58,7 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
   const { t } = useTranslation();
   const toastRef = useRef<Toast>(null);
   const rolloutPanelRef = useRef<OverlayPanel>(null);
+  const overviewPanelRef = useRef<OverlayPanel>(null);
   const [shifts, setShifts] = useState<ShiftMasterRow[]>([]);
   const [planningEmployees, setPlanningEmployees] = useState<PlanningEmployee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +71,7 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
   const [infoBlock, setInfoBlock] = useState<ShiftCalendarBlock | null>(null);
+  const [overviewBlock, setOverviewBlock] = useState<ShiftCalendarBlock | null>(null);
   const [pendingRollout, setPendingRollout] = useState<ShiftRolloutPending | null>(null);
   const [rolloutSubmitting, setRolloutSubmitting] = useState(false);
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([]);
@@ -124,10 +128,14 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
   useEffect(() => {
     setSelectedBlockId(null);
     setSelectedDayIso(null);
+    setOverviewBlock(null);
+    overviewPanelRef.current?.hide();
   }, [weekStartIso]);
 
   useEffect(() => {
     setSelectedBlockId(null);
+    setOverviewBlock(null);
+    overviewPanelRef.current?.hide();
   }, [viewMode]);
 
   const disabledEmployeeIds = useMemo(() => {
@@ -325,6 +333,29 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
     setInfoBlock(block);
   }, []);
 
+  const overviewAround = useMemo(() => {
+    if (!overviewBlock) return null;
+    const centerDate = assignmentDateForBlock(overviewBlock);
+    return assignmentsForShiftAroundDate(assignments, overviewBlock.shiftId, centerDate);
+  }, [assignments, overviewBlock]);
+
+  const handleOpenShiftOverview = useCallback(
+    (block: ShiftCalendarBlock, event: React.MouseEvent) => {
+      if (overviewBlock?.id === block.id) {
+        setOverviewBlock(null);
+        overviewPanelRef.current?.hide();
+        return;
+      }
+      setOverviewBlock(block);
+      const target = event.currentTarget;
+      const nativeEvent = event.nativeEvent;
+      queueMicrotask(() => {
+        overviewPanelRef.current?.show(nativeEvent, target);
+      });
+    },
+    [overviewBlock],
+  );
+
   const handleRequestRollout = useCallback(
     (block: ShiftCalendarBlock, employeeId: string, event: React.SyntheticEvent) => {
       const fromDate = assignmentDateForBlock(block);
@@ -406,6 +437,12 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
     <div className="app-shift-planner-calendar flex min-h-0 flex-1 flex-col">
       <Toast ref={toastRef} position="top-right" appendTo={overlayAppendTo} />
       <ShiftBlockInfoModal block={infoBlock} onHide={() => setInfoBlock(null)} />
+      <ShiftOverviewPanel
+        panelRef={overviewPanelRef}
+        block={overviewBlock}
+        around={overviewAround}
+        onHide={() => setOverviewBlock(null)}
+      />
       <ShiftAssignRolloutPanel
         panelRef={rolloutPanelRef}
         pending={pendingRollout}
@@ -443,6 +480,7 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
             onSelectBlock={handleSelectBlock}
             onSelectDay={handleSelectDay}
             onOpenInfo={handleOpenInfo}
+            onOpenShiftOverview={handleOpenShiftOverview}
             disabledEmployeeIds={disabledEmployeeIds}
             disabledEmployeeContext={disabledEmployeeContext}
           />

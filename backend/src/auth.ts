@@ -1,10 +1,12 @@
 import { Router, type Request, type Response } from "express";
 
 import {
+  DEFAULT_CALENDAR_MIN_DURATION_HOURS,
   DEFAULT_PRIMARY_COLOR_HEX,
   fetchAppParameterBooleans,
   getAssetKeyGenerationMode,
   getAssetTypeDisplayConfig,
+  getCalendarMinDurationHours,
   getDefaultShiftHours,
   getDefaultWorkOrderWorkgroupId,
   getPrimaryColorHex,
@@ -131,6 +133,7 @@ router.get("/me", async (req: Request, res: Response) => {
     let appParameterAssetTypes: Awaited<ReturnType<typeof getAssetTypeDisplayConfig>> = null;
     let appParameterDefaultWorkgroupId: string | null = null;
     let appParameterDefaultShiftHours = 8;
+    let appParameterCalendarMinDurationHours = DEFAULT_CALENDAR_MIN_DURATION_HOURS;
     let appParameterAssetKeyMode: Awaited<ReturnType<typeof getAssetKeyGenerationMode>> = "manual";
     let appParameterShowAssetKeyPath = false;
     let appParameterAssetKeyPathSeparator = ".";
@@ -156,6 +159,11 @@ router.get("/me", async (req: Request, res: Response) => {
       console.warn("[athene-backend] SH-DSH load skipped:", dshErr);
     }
     try {
+      appParameterCalendarMinDurationHours = await getCalendarMinDurationHours(pool);
+    } catch (clmdErr) {
+      console.warn("[athene-backend] WO-CLMD load skipped:", clmdErr);
+    }
+    try {
       appParameterAssetKeyMode = await getAssetKeyGenerationMode(pool);
     } catch (aakgErr) {
       console.warn("[athene-backend] GN-AAKG load skipped:", aakgErr);
@@ -178,6 +186,7 @@ router.get("/me", async (req: Request, res: Response) => {
       appParameterAssetTypes,
       appParameterDefaultWorkgroupId,
       appParameterDefaultShiftHours,
+      appParameterCalendarMinDurationHours,
       appParameterAssetKeyMode,
       appParameterShowAssetKeyPath,
       appParameterAssetKeyPathSeparator,

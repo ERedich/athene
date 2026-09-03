@@ -9,9 +9,15 @@ import {
   timelineTrackHeight,
   type CalendarTimelineSegment,
 } from "../../lib/calendar/calendarDayTimelineLayout";
-import type { CalendarMaintenancePlan } from "../../lib/calendar/calendarMaintenancePlans";
+import {
+  maintenancePlanMatchesWorkgroupFilter,
+  type CalendarMaintenancePlan,
+} from "../../lib/calendar/calendarMaintenancePlans";
 import type { CalendarEvent } from "../../lib/calendar/calendarTypes";
-import type { CalendarWorkOrder } from "../../lib/calendar/calendarWorkOrders";
+import {
+  workOrderMatchesWorkgroupFilter,
+  type CalendarWorkOrder,
+} from "../../lib/calendar/calendarWorkOrders";
 import { CalendarTimelineEventBar } from "./CalendarTimelineEventBar";
 import { CalendarTimelineHourHeader } from "./CalendarTimelineHourHeader";
 
@@ -97,8 +103,8 @@ export function CalendarDayTimeline({
                 const filterDisabled =
                   workgroupFilterId != null &&
                   (isPlan
-                    ? plan != null && plan.workgroupId !== workgroupFilterId
-                    : wo != null && wo.workgroupId !== workgroupFilterId);
+                    ? plan != null && !maintenancePlanMatchesWorkgroupFilter(plan, workgroupFilterId)
+                    : wo != null && !workOrderMatchesWorkgroupFilter(wo, workgroupFilterId));
                 return (
                 <CalendarTimelineEventBar
                   key={`${seg.eventId}-${seg.startMinute}-${seg.laneIndex}`}

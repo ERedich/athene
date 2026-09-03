@@ -65,12 +65,12 @@ export function DescriptionTodoField({
 
   return (
     <div className="space-y-2 md:col-span-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="space-y-2">
         <label htmlFor={textareaId} className="block text-[11px] text-outline uppercase tracking-[0.1em]">
           {descriptionLabel}
         </label>
         <div
-          className="app-segmented-control app-segmented-control--match-input"
+          className="app-segmented-control app-segmented-control--compact"
           role="group"
           aria-label={t("workOrders.descriptionModeLegend")}
         >

@@ -40,6 +40,7 @@ type Props = {
   selectedBlockId?: string | null;
   onSelectBlock?: (block: ShiftCalendarBlock) => void;
   onOpenInfo?: (block: ShiftCalendarBlock) => void;
+  onOpenShiftOverview?: (block: ShiftCalendarBlock, event: React.MouseEvent) => void;
 };
 
 export function ShiftBlockBar({
@@ -57,6 +58,7 @@ export function ShiftBlockBar({
   selectedBlockId,
   onSelectBlock,
   onOpenInfo,
+  onOpenShiftOverview,
 }: Props) {
   const { t, i18n } = useTranslation();
   const panelRef = useRef<OverlayPanel>(null);
@@ -104,7 +106,23 @@ export function ShiftBlockBar({
   const handleBlockClick = (e: React.MouseEvent) => {
     if (draggingEmployeeId) return;
     if ((e.target as HTMLElement).closest("button")) return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenShiftOverview?.(block, e);
+      return;
+    }
     onSelectBlock?.(block);
+  };
+
+  const handleBlockContextMenu = (e: React.MouseEvent) => {
+    // Ctrl+click on macOS can surface as contextmenu; treat as overview trigger.
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (draggingEmployeeId) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onOpenShiftOverview?.(block, e);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -177,6 +195,7 @@ export function ShiftBlockBar({
         }}
         title={`${block.shiftName} · ${timeLabel}`}
         onClick={handleBlockClick}
+        onContextMenu={handleBlockContextMenu}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

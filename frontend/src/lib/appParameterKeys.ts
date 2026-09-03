@@ -40,6 +40,23 @@ export const APP_PARAM_KEY_DEFAULT_SHIFT_HOURS = "SH-DSH" as const;
 /** Must match backend `APP_PARAM_KEY_GENERATE_WO_FROM_MP` (WO-GNWO). */
 export const APP_PARAM_KEY_GENERATE_WO_FROM_MP = "WO-GNWO" as const;
 
+/** Must match backend `APP_PARAM_KEY_CALENDAR_MIN_DURATION` (WO-CLMD). */
+export const APP_PARAM_KEY_CALENDAR_MIN_DURATION = "WO-CLMD" as const;
+
+/** Must match backend `DEFAULT_CALENDAR_MIN_DURATION_HOURS`. */
+export const DEFAULT_CALENDAR_MIN_DURATION_HOURS = 4;
+
+export function parseCalendarMinDurationHours(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const i = Math.round(raw);
+    if (i >= 0 && i <= 100 && Math.abs(raw - i) < 1e-9) return i;
+  }
+  if (typeof raw === "string" && raw.trim() !== "") {
+    return parseCalendarMinDurationHours(Number(raw));
+  }
+  return DEFAULT_CALENDAR_MIN_DURATION_HOURS;
+}
+
 /** Must match backend `SITE_APP_PARAM_KEY_WO_PCR` (site-scoped). */
 export const SITE_APP_PARAM_KEY_WO_PCR = "WO-PCR" as const;
 

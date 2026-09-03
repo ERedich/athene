@@ -1,3 +1,4 @@
+import { WORKGROUP_FILTER_NONE } from "./calendarWorkgroupFilter";
 import type { CalendarWorkOrder } from "./calendarWorkOrders";
 import type { WorkOrderReferenceEmployee, WorkOrderReferenceWorkgroup, WorkOrderStatus } from "../workOrderTypes";
 
@@ -58,7 +59,11 @@ export function employeeMatchesWorkgroupFilter(
   workgroupFilterId: string | null,
 ): boolean {
   if (!workgroupFilterId) return true;
-  return workgroupMap.get(employeeId)?.has(workgroupFilterId) ?? false;
+  const memberships = workgroupMap.get(employeeId);
+  if (workgroupFilterId === WORKGROUP_FILTER_NONE) {
+    return memberships == null || memberships.size === 0;
+  }
+  return memberships?.has(workgroupFilterId) ?? false;
 }
 
 export function canAssignEmployeeToWorkOrder(

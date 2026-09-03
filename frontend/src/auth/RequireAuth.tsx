@@ -11,7 +11,10 @@ import { apiFetch } from "../lib/api";
 import { applyUiTranslationOverrides } from "../lib/applyUiTranslationOverrides";
 
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
-import { DEFAULT_PRIMARY_COLOR_HEX } from "../lib/appParameterKeys";
+import {
+  DEFAULT_PRIMARY_COLOR_HEX,
+  parseCalendarMinDurationHours,
+} from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
 import { applyPrimaryColor } from "../theme";
 
@@ -24,6 +27,7 @@ type MeResponse = {
   appParameterAssetTypes?: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId?: string | null;
   appParameterDefaultShiftHours?: number;
+  appParameterCalendarMinDurationHours?: number;
   appParameterAssetKeyMode?: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath?: boolean;
   appParameterAssetKeyPathSeparator?: string;
@@ -36,6 +40,7 @@ type SessionBase = {
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;
   appParameterDefaultShiftHours: number;
+  appParameterCalendarMinDurationHours: number;
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   appParameterShowAssetKeyPath: boolean;
   appParameterAssetKeyPathSeparator: string;
@@ -62,6 +67,9 @@ function sessionFromMe(data: MeResponse): SessionBase {
       typeof data.appParameterDefaultShiftHours === "number" && data.appParameterDefaultShiftHours > 0
         ? data.appParameterDefaultShiftHours
         : 8,
+    appParameterCalendarMinDurationHours: parseCalendarMinDurationHours(
+      data.appParameterCalendarMinDurationHours,
+    ),
     appParameterAssetKeyMode: data.appParameterAssetKeyMode ?? "manual",
     appParameterShowAssetKeyPath: data.appParameterShowAssetKeyPath ?? false,
     appParameterAssetKeyPathSeparator: data.appParameterAssetKeyPathSeparator ?? ".",
@@ -172,6 +180,7 @@ export function RequireAuth() {
     appParameterAssetTypes: sessionBase.appParameterAssetTypes,
     appParameterDefaultWorkgroupId: sessionBase.appParameterDefaultWorkgroupId,
     appParameterDefaultShiftHours: sessionBase.appParameterDefaultShiftHours,
+    appParameterCalendarMinDurationHours: sessionBase.appParameterCalendarMinDurationHours,
     appParameterAssetKeyMode: sessionBase.appParameterAssetKeyMode,
     appParameterShowAssetKeyPath: sessionBase.appParameterShowAssetKeyPath,
     appParameterAssetKeyPathSeparator: sessionBase.appParameterAssetKeyPathSeparator,

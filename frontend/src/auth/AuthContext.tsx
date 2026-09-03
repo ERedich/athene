@@ -25,6 +25,8 @@ export type AuthSession = {
   appParameterDefaultWorkgroupId: string | null;
   /** SH-DSH: default shift hours when employee has no shift details. */
   appParameterDefaultShiftHours: number;
+  /** WO-CLMD: hide calendar work orders shorter than this many hours (0–100). */
+  appParameterCalendarMinDurationHours: number;
   /** GN-AAKG */
   appParameterAssetKeyMode: AppParameterAssetKeyMode;
   /** GN-SAKP */

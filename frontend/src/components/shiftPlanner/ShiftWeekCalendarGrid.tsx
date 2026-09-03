@@ -51,6 +51,7 @@ type Props = {
   onSelectBlock?: (block: ShiftCalendarBlock) => void;
   onSelectDay?: (isoDate: string) => void;
   onOpenInfo?: (block: ShiftCalendarBlock) => void;
+  onOpenShiftOverview?: (block: ShiftCalendarBlock, event: React.MouseEvent) => void;
   disabledEmployeeIds?: ReadonlySet<string>;
   disabledEmployeeContext?: "block" | "day" | null;
 };
@@ -77,6 +78,7 @@ export function ShiftWeekCalendarGrid({
   onSelectBlock,
   onSelectDay,
   onOpenInfo,
+  onOpenShiftOverview,
   disabledEmployeeIds,
   disabledEmployeeContext,
 }: Props) {
@@ -165,6 +167,7 @@ export function ShiftWeekCalendarGrid({
                 selectedBlockId={selectedBlockId}
                 onSelectBlock={onSelectBlock}
                 onOpenInfo={onOpenInfo}
+                onOpenShiftOverview={onOpenShiftOverview}
               />
             ))}
           </div>

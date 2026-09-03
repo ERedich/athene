@@ -30,6 +30,7 @@ import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import {
   APP_PARAM_KEY_ASSET_KEY_GEN,
   APP_PARAM_KEY_ASSET_TYPES,
+  APP_PARAM_KEY_CALENDAR_MIN_DURATION,
   APP_PARAM_KEY_DEFAULT_WORKGROUP,
   APP_PARAM_KEY_DEFAULT_SHIFT_HOURS,
   APP_PARAM_KEY_GENERATE_WO_FROM_MP,
@@ -37,6 +38,7 @@ import {
   APP_PARAM_KEY_SHOW_ASSET_KEY_PATH,
   DEFAULT_PRIMARY_COLOR_HEX,
   SITE_APP_PARAM_KEY_WO_PCR,
+  parseCalendarMinDurationHours,
   type AppParameterAssetKeyMode,
 } from "../lib/appParameterKeys";
 import {
@@ -111,7 +113,10 @@ function primaryColorHexFromJson(raw: unknown): string {
   return DEFAULT_PRIMARY_COLOR_HEX;
 }
 
-function normalizeNumValue(raw: unknown): number {
+function normalizeNumValue(raw: unknown, key?: string): number {
+  if (key === APP_PARAM_KEY_CALENDAR_MIN_DURATION) {
+    return parseCalendarMinDurationHours(raw);
+  }
   const n = typeof raw === "number" ? raw : Number(raw);
   return Number.isFinite(n) && n > 0 ? n : 8;
 }
@@ -193,7 +198,7 @@ export function AppParametersPage() {
       const normalized = data.map((r) => ({
         ...r,
         uuidValue: r.uuidValue ?? null,
-        numValue: normalizeNumValue(r.numValue),
+        numValue: normalizeNumValue(r.numValue, r.key),
         timeValue: normalizeTimeValue(r.timeValue) ?? (r.valueType === "time" ? "06:00" : null),
       }));
       setPersistedRows(normalized);
@@ -496,7 +501,7 @@ export function AppParametersPage() {
             ? {
                 ...updated,
                 uuidValue: updated.uuidValue ?? null,
-                numValue: normalizeNumValue(updated.numValue),
+                numValue: normalizeNumValue(updated.numValue, updated.key),
                 timeValue:
                   normalizeTimeValue(updated.timeValue) ??
                   (updated.valueType === "time" ? "06:00" : null),
@@ -751,6 +756,25 @@ export function AppParametersPage() {
                     onValueChange={(e) => {
                       const next = typeof e.value === "number" && e.value > 0 ? e.value : row.numValue;
                       updateDraftNum(row.key, next);
+                    }}
+                  />
+                </div>
+              ) : row.key === APP_PARAM_KEY_CALENDAR_MIN_DURATION && row.valueType === "number" ? (
+                <div className="max-w-md" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                  <InputNumber
+                    inputId={`app-param-${row.key}`}
+                    value={row.numValue}
+                    min={0}
+                    max={100}
+                    minFractionDigits={0}
+                    maxFractionDigits={0}
+                    step={1}
+                    className="w-full"
+                    disabled={savingAll}
+                    onValueChange={(e) => {
+                      if (typeof e.value !== "number") return;
+                      const next = Math.round(e.value);
+                      if (next >= 0 && next <= 100) updateDraftNum(row.key, next);
                     }}
                   />
                 </div>
