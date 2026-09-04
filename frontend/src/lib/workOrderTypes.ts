@@ -87,6 +87,8 @@ export type WorkOrderAssignment = {
   employeeId: string;
   employeeKey: string;
   employeeName: string;
+  assignedFrom: string;
+  assignedTo: string;
   createdAt: string;
   createdBy: string;
 };

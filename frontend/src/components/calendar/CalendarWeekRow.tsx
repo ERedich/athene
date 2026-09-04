@@ -9,6 +9,7 @@ import {
 } from "../../lib/calendar/calendarEventLayout";
 import type { CalendarWeekRow as WeekRow } from "../../lib/calendar/calendarDates";
 import { isBeforeToday, isValidMoveTarget } from "../../lib/calendar/calendarMove";
+import { isoDateFromWeekClientX } from "../../lib/workOrderAssignmentWindow";
 import {
   maintenancePlanMatchesWorkgroupFilter,
   type CalendarMaintenancePlan,
@@ -42,7 +43,7 @@ type Props = {
     targetDay: Date,
     event: DragEvent | React.MouseEvent,
   ) => void;
-  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string, dropDayIso: string, event: React.DragEvent) => void;
 };
 
 export function CalendarWeekRow({
@@ -173,7 +174,17 @@ export function CalendarWeekRow({
             }
             onDragStart={isPlan ? undefined : onDragStart}
             onDragEnd={isPlan ? undefined : onDragEnd}
-            onAssignEmployee={isPlan ? undefined : onAssignEmployee}
+            onAssignEmployee={
+              isPlan || !onAssignEmployee
+                ? undefined
+                : (workOrderId, employeeId, event) => {
+                    const row = event.currentTarget.closest(".app-calendar-week-row");
+                    const dropDayIso = row
+                      ? isoDateFromWeekClientX(week.weekStart, event.clientX, row as HTMLElement)
+                      : week.days[0]?.isoKey ?? "";
+                    onAssignEmployee(workOrderId, employeeId, dropDayIso, event);
+                  }
+            }
           />
           );
         })}

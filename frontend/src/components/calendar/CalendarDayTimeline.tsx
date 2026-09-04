@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-import { eventIntersectsDay } from "../../lib/calendar/calendarDates";
+import { eventIntersectsDay, formatIsoDate } from "../../lib/calendar/calendarDates";
 import {
   DAY_TIMELINE_TRACK_MIN_WIDTH_PX,
   layoutDayTimelineEvents,
@@ -30,7 +30,7 @@ type Props = {
   workgroupFilterId?: string | null;
   onEventClick: (event: CalendarEvent) => void;
   onAskAthene?: (workOrder: CalendarWorkOrder) => void;
-  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string, dropDayIso: string, event?: React.DragEvent) => void;
 };
 
 export function CalendarDayTimeline({
@@ -125,7 +125,13 @@ export function CalendarDayTimeline({
                         }
                       : undefined
                   }
-                  onAssignEmployee={isPlan ? undefined : onAssignEmployee}
+                  onAssignEmployee={
+                    isPlan || !onAssignEmployee
+                      ? undefined
+                      : (workOrderId, employeeId, event) => {
+                          onAssignEmployee(workOrderId, employeeId, formatIsoDate(anchorDate), event);
+                        }
+                  }
                 />
                 );
               })}

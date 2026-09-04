@@ -7,10 +7,12 @@ import {
   useState,
   type ChangeEvent,
   type RefObject,
+  type SyntheticEvent,
 } from "react";
 import { File, FileText, Image, Video, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Toast } from "primereact/toast";
+import { OverlayPanel } from "primereact/overlaypanel";
 import { confirmDialog } from "primereact/confirmdialog";
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
@@ -45,6 +47,7 @@ import type {
   WorkOrderSelectOption,
   PendingDocumentUpload,
 } from "../lib/workOrderTypes";
+import type { WorkOrderAssignWindowPending } from "../components/workOrders/WorkOrderAssignWindowPanel";
 import { fetchWorkOrderMessages, sendWorkOrderMessage, type WorkOrderMessage } from "../lib/notificationCenter";
 import { workOrderToEditMeta } from "../lib/workOrderTypes";
 import { useTabInk } from "../lib/tabs";
@@ -292,8 +295,10 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
   const [assignmentEmployeeIds, setAssignmentEmployeeIds] = useState<string[]>([]);
   const [assignmentAdding, setAssignmentAdding] = useState(false);
   const [assignmentsCascadeSeed, setAssignmentsCascadeSeed] = useState(0);
+  const assignWindowPanelRef = useRef<OverlayPanel>(null);
+  const [pendingAssignWindow, setPendingAssignWindow] = useState<WorkOrderAssignWindowPending | null>(null);
+  const [assignWindowSubmitting, setAssignWindowSubmitting] = useState(false);
   const prevDialogTabRef = useRef<OrderDialogTab | null>(null);
-  const assignmentAddingRef = useRef(false);
   const pendingFilesRef = useRef(pendingFiles);
   const pendingAutoTimersRef = useRef(new Map<string, number>());
   const editingIdRef = useRef<string | null>(null);
@@ -851,7 +856,7 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     async (
       orderId: string,
       employeeIds: string[],
-      opts?: { checkFormSavedWorkgroup?: boolean },
+      opts?: { checkFormSavedWorkgroup?: boolean; assignedFrom?: string; assignedTo?: string },
     ): Promise<boolean> => {
       const checkSaved = opts?.checkFormSavedWorkgroup !== false;
       if (checkSaved && editingMeta) {
@@ -868,11 +873,21 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       }
       const ids = Array.from(new Set(employeeIds.filter(Boolean)));
       if (ids.length === 0) return true;
+      const assignedFrom = opts?.assignedFrom;
+      const assignedTo = opts?.assignedTo;
+      if (!assignedFrom || !assignedTo) {
+        toastRef.current?.show({
+          severity: "warn",
+          summary: t("workOrders.assignmentWindowInvalid"),
+          life: 5000,
+        });
+        return false;
+      }
       for (const employeeId of ids) {
         const res = await apiFetch(`/api/work-orders/${orderId}/assignments`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ employeeId }),
+          body: JSON.stringify({ employeeId, assignedFrom, assignedTo }),
         });
         if (!res.ok) {
           let code: string | undefined;
@@ -885,6 +900,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
           if (code === "employee_not_in_workgroup") msg = t("workOrders.employeeNotInWorkgroup");
           if (code === "employee_site_mismatch") msg = t("workOrders.assignmentEmployeeSiteMismatch");
           if (code === "invalid_employee") msg = t("workOrders.assignmentInvalidEmployee");
+          if (code === "invalid_assignment_window") msg = t("workOrders.assignmentWindowInvalid");
+          if (code === "assignment_window_outside_order") msg = t("workOrders.assignmentWindowOutsideOrder");
           toastRef.current?.show({ severity: "warn", summary: msg, life: 5000 });
           return false;
         }
@@ -894,22 +911,89 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     [editingMeta, form.workgroupId, t, toastRef],
   );
 
-  const addAssignments = useCallback(async () => {
-    if (!editingId || assignmentEmployeeIds.length === 0) return;
-    if (assignmentAddingRef.current) return;
-    assignmentAddingRef.current = true;
-    setAssignmentAdding(true);
-    try {
-      const ok = await postAssignmentsForOrder(editingId, assignmentEmployeeIds, { checkFormSavedWorkgroup: true });
-      if (ok) {
-        setAssignmentEmployeeIds([]);
-        await Promise.all([loadAssignments(editingId), refreshExternal()]);
+  const addAssignments = useCallback(
+    (event: SyntheticEvent) => {
+      if (!editingId || assignmentEmployeeIds.length === 0) return;
+      const from = form.plannedStart;
+      const to = form.plannedEnd;
+      if (!from || !to) {
+        toastRef.current?.show({
+          severity: "warn",
+          summary: t("workOrders.assignmentWindowInvalid"),
+          life: 5000,
+        });
+        return;
       }
-    } finally {
-      assignmentAddingRef.current = false;
-      setAssignmentAdding(false);
-    }
-  }, [assignmentEmployeeIds, editingId, loadAssignments, postAssignmentsForOrder, refreshExternal]);
+      const names = assignmentEmployeeIds
+        .map((id) => assignmentEmployeeOptions.find((o) => o.value === id)?.label ?? id)
+        .join(", ");
+      setPendingAssignWindow({
+        workOrderId: editingId,
+        workOrderLabel: form.name || editingId,
+        employeeIds: [...assignmentEmployeeIds],
+        employeeLabel: names,
+        assignedFrom: new Date(from),
+        assignedTo: new Date(to),
+        minDate: new Date(from),
+        maxDate: new Date(to),
+      });
+      assignWindowPanelRef.current?.toggle(event);
+    },
+    [assignmentEmployeeIds, assignmentEmployeeOptions, editingId, form.name, form.plannedEnd, form.plannedStart, t, toastRef],
+  );
+
+  const openAssignmentWindow = useCallback(
+    (assignment: WorkOrderAssignment, event: SyntheticEvent) => {
+      if (!editingId) return;
+      const from = form.plannedStart;
+      const to = form.plannedEnd;
+      if (!from || !to) return;
+      setPendingAssignWindow({
+        workOrderId: editingId,
+        workOrderLabel: form.name || editingId,
+        employeeIds: [assignment.employeeId],
+        employeeLabel: `${assignment.employeeKey} – ${assignment.employeeName}`,
+        assignedFrom: new Date(assignment.assignedFrom),
+        assignedTo: new Date(assignment.assignedTo),
+        minDate: new Date(from),
+        maxDate: new Date(to),
+      });
+      assignWindowPanelRef.current?.toggle(event);
+    },
+    [editingId, form.name, form.plannedEnd, form.plannedStart],
+  );
+
+  const cancelAssignWindow = useCallback(() => {
+    assignWindowPanelRef.current?.hide();
+    setPendingAssignWindow(null);
+  }, []);
+
+  const confirmAssignWindow = useCallback(
+    async (assignedFrom: Date, assignedTo: Date) => {
+      if (!editingId || !pendingAssignWindow) return;
+      setAssignWindowSubmitting(true);
+      setAssignmentAdding(true);
+      try {
+        const ok = await postAssignmentsForOrder(editingId, pendingAssignWindow.employeeIds, {
+          checkFormSavedWorkgroup: true,
+          assignedFrom: assignedFrom.toISOString(),
+          assignedTo: assignedTo.toISOString(),
+        });
+        if (ok) {
+          setAssignmentEmployeeIds((current) =>
+            current.filter((id) => !pendingAssignWindow.employeeIds.includes(id)),
+          );
+          assignWindowPanelRef.current?.hide();
+          setPendingAssignWindow(null);
+          await Promise.all([loadAssignments(editingId), refreshExternal()]);
+        }
+      } finally {
+        setAssignWindowSubmitting(false);
+        setAssignmentAdding(false);
+      }
+    },
+    [editingId, loadAssignments, pendingAssignWindow, postAssignmentsForOrder, refreshExternal],
+  );
 
   useEffect(() => {
     if (!dialogVisible) return;
@@ -1399,6 +1483,8 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
       if (pendingAssignIds.length > 0) {
         const assignOk = await postAssignmentsForOrder(saved.id, pendingAssignIds, {
           checkFormSavedWorkgroup: false,
+          assignedFrom: saved.plannedStart,
+          assignedTo: saved.plannedEnd,
         });
         if (!assignOk) {
           return false;
@@ -2001,6 +2087,12 @@ export function useWorkOrderEditDialogState(options: UseWorkOrderEditDialogState
     assignmentEmployeeOptions,
     assignmentAdding,
     addAssignments,
+    openAssignmentWindow,
+    confirmAssignWindow,
+    cancelAssignWindow,
+    assignWindowPanelRef,
+    pendingAssignWindow,
+    assignWindowSubmitting,
     removeAssignment,
     saving,
     documents,

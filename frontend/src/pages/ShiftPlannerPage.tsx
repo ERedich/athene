@@ -13,6 +13,7 @@ import { TabPanel, TabView } from "primereact/tabview";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { ShiftPlannerViewToggle } from "../components/shiftPlanner/ShiftPlannerViewToggle";
+import { ShiftResourcePlanningWeek } from "../components/shiftPlanner/ShiftResourcePlanningWeek";
 import { ShiftWeekCalendar } from "../components/shiftPlanner/ShiftWeekCalendar";
 import { ShiftWeekCalendarToolbar } from "../components/shiftPlanner/ShiftWeekCalendarToolbar";
 import { shiftWeekAnchor } from "../components/shiftPlanner/ShiftWeekCalendarGrid";
@@ -26,6 +27,7 @@ import type { ShiftPlannerViewMode } from "../lib/shiftPlanner/shiftPlannerViewM
 import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
 
 const TAB_OVERVIEW = 0;
+const TAB_RESOURCES = 1;
 
 export function ShiftPlannerPage() {
   const { t, i18n } = useTranslation();
@@ -67,7 +69,7 @@ export function ShiftPlannerPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        {activeTab === TAB_OVERVIEW ? (
+        {activeTab === TAB_OVERVIEW || activeTab === TAB_RESOURCES ? (
           <>
             <ShiftPlannerViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
             <li className="flex items-center" aria-hidden>
@@ -123,6 +125,15 @@ export function ShiftPlannerPage() {
             <TabPanel header={t("schichtplaner.tabOverview")}>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ShiftWeekCalendar
+                  anchorDate={anchorDate}
+                  searchTerm={searchTerm}
+                  viewMode={viewMode}
+                />
+              </div>
+            </TabPanel>
+            <TabPanel header={t("schichtplaner.tabResources")}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ShiftResourcePlanningWeek
                   anchorDate={anchorDate}
                   searchTerm={searchTerm}
                   viewMode={viewMode}

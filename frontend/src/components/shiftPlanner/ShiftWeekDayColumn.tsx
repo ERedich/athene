@@ -31,6 +31,8 @@ type Props = {
   onSelectBlock?: (block: ShiftCalendarBlock) => void;
   onOpenInfo?: (block: ShiftCalendarBlock) => void;
   onOpenShiftOverview?: (block: ShiftCalendarBlock, event: React.MouseEvent) => void;
+  onAssignedEmployeeDragStart?: (employeeId: string, block: ShiftCalendarBlock) => void;
+  onAssignedEmployeeDragEnd?: () => void;
 };
 
 export function ShiftWeekDayColumn({
@@ -52,6 +54,8 @@ export function ShiftWeekDayColumn({
   onSelectBlock,
   onOpenInfo,
   onOpenShiftOverview,
+  onAssignedEmployeeDragStart,
+  onAssignedEmployeeDragEnd,
 }: Props) {
   const isSimple = viewMode === "simple";
 
@@ -79,6 +83,8 @@ export function ShiftWeekDayColumn({
               onSelectBlock={onSelectBlock}
               onOpenInfo={onOpenInfo}
               onOpenShiftOverview={onOpenShiftOverview}
+              onAssignedEmployeeDragStart={onAssignedEmployeeDragStart}
+              onAssignedEmployeeDragEnd={onAssignedEmployeeDragEnd}
             />
           ))}
         </div>
@@ -114,6 +120,8 @@ export function ShiftWeekDayColumn({
                   onSelectBlock={onSelectBlock}
                   onOpenInfo={onOpenInfo}
                   onOpenShiftOverview={onOpenShiftOverview}
+                  onAssignedEmployeeDragStart={onAssignedEmployeeDragStart}
+                  onAssignedEmployeeDragEnd={onAssignedEmployeeDragEnd}
                 />
               );
             })}

@@ -1,5 +1,5 @@
 import { apiFetch } from "./api";
-import type { WorkOrder } from "./workOrderTypes";
+import type { WorkOrder, WorkOrderAssignment } from "./workOrderTypes";
 
 export type WorkOrderPlanningConflict = {
   id: string;
@@ -164,16 +164,29 @@ export type WorkOrderAssignmentError =
   | "employee_not_in_workgroup"
   | "employee_site_mismatch"
   | "invalid_employee"
+  | "invalid_assignment_window"
+  | "assignment_window_outside_order"
   | "unknown";
+
+const ASSIGNMENT_ERROR_CODES: WorkOrderAssignmentError[] = [
+  "assignment_locked_by_status",
+  "employee_not_in_workgroup",
+  "employee_site_mismatch",
+  "invalid_employee",
+  "invalid_assignment_window",
+  "assignment_window_outside_order",
+];
 
 export async function postWorkOrderAssignment(
   orderId: string,
   employeeId: string,
+  assignedFrom: string,
+  assignedTo: string,
 ): Promise<{ ok: true } | { ok: false; error: WorkOrderAssignmentError }> {
   const res = await apiFetch(`/api/work-orders/${encodeURIComponent(orderId)}/assignments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employeeId }),
+    body: JSON.stringify({ employeeId, assignedFrom, assignedTo }),
   });
   if (res.ok) return { ok: true };
   let code: string | undefined;
@@ -182,13 +195,23 @@ export async function postWorkOrderAssignment(
   } catch {
     /* ignore */
   }
-  if (
-    code === "assignment_locked_by_status" ||
-    code === "employee_not_in_workgroup" ||
-    code === "employee_site_mismatch" ||
-    code === "invalid_employee"
-  ) {
-    return { ok: false, error: code };
+  if (code && (ASSIGNMENT_ERROR_CODES as string[]).includes(code)) {
+    return { ok: false, error: code as WorkOrderAssignmentError };
   }
   return { ok: false, error: "unknown" };
+}
+
+export async function fetchWorkOrderAssignmentsForRange(
+  rangeStart: Date,
+  rangeEnd: Date,
+): Promise<WorkOrderAssignment[]> {
+  const params = new URLSearchParams();
+  params.set("plannedStartTo", rangeEnd.toISOString());
+  params.set("plannedEndFrom", rangeStart.toISOString());
+  const res = await apiFetch(`/api/work-orders/assignments?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`work_order_assignments_fetch_failed_${res.status}`);
+  }
+  const data = (await res.json()) as unknown;
+  return Array.isArray(data) ? (data as WorkOrderAssignment[]) : [];
 }
