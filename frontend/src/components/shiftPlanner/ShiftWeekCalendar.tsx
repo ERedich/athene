@@ -347,10 +347,9 @@ export function ShiftWeekCalendar({ anchorDate, searchTerm, viewMode }: Props) {
         return;
       }
       setOverviewBlock(block);
-      const target = event.currentTarget;
-      const nativeEvent = event.nativeEvent;
+      const target = event.currentTarget as HTMLElement;
       queueMicrotask(() => {
-        overviewPanelRef.current?.show(nativeEvent, target);
+        overviewPanelRef.current?.show(event, target);
       });
     },
     [overviewBlock],

@@ -9,7 +9,7 @@ import type { ShiftOverviewAroundDate } from "../../lib/shiftPlanner/shiftOvervi
 import { overlayAppendTo } from "../../lib/overlayAppendTo";
 
 type Props = {
-  panelRef: RefObject<OverlayPanel | null>;
+  panelRef: RefObject<OverlayPanel>;
   block: ShiftCalendarBlock | null;
   around: ShiftOverviewAroundDate | null;
   onHide?: () => void;
