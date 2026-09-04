@@ -8,10 +8,10 @@ import {
   ONBOARDING_EXPAND_NAV_EVENT,
   type OnboardingExpandNavDetail,
 } from "../onboarding/onboardingDom";
+import { useNavLayout } from "./NavLayoutContext";
 import {
   activeNavGroupIds,
   isNavGroupActive,
-  navGroups,
 } from "./navModel";
 
 const navIconClass = "h-[1.125rem] w-[1.125rem] shrink-0";
@@ -44,12 +44,13 @@ type SidebarNavProps = {
 export function SidebarNav({ collapsed }: SidebarNavProps) {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+  const { sidebarGroups } = useNavLayout();
   const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(activeNavGroupIds(pathname)),
+    () => new Set(activeNavGroupIds(pathname, sidebarGroups)),
   );
 
   useEffect(() => {
-    const activeIds = activeNavGroupIds(pathname);
+    const activeIds = activeNavGroupIds(pathname, sidebarGroups);
     if (activeIds.length === 0) return;
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -58,7 +59,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
       }
       return next;
     });
-  }, [pathname]);
+  }, [pathname, sidebarGroups]);
 
   useEffect(() => {
     const onExpand = (event: Event) => {
@@ -90,8 +91,11 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
 
   return (
     <div className="app-sidebar-nav space-y-1">
-      {navGroups.map((group) => {
-        const groupLabel = t(group.labelKey);
+      {sidebarGroups.map((group) => {
+        const groupLabel =
+          "label" in group && typeof group.label === "string" && group.label
+            ? group.label
+            : t(group.labelKey);
         const isOpen = expanded.has(group.id);
         const groupActive = isNavGroupActive(pathname, group);
         const { Icon: GroupIcon } = group;
@@ -190,11 +194,14 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
               >
                 {group.items.map((item) => {
                   const { Icon } = item;
-                  const itemLabel = t(item.labelKey);
+                  const itemLabel =
+                    "label" in item && typeof item.label === "string" && item.label
+                      ? item.label
+                      : t(item.labelKey);
                   const onboardingTarget = ONBOARDING_ITEM_TARGETS[item.to];
                   return (
                     <NavLink
-                      key={item.to}
+                      key={String(("id" in item && item.id) || item.to)}
                       to={item.to}
                       end={item.end}
                       tabIndex={isOpen ? undefined : -1}

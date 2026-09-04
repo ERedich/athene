@@ -1,8 +1,18 @@
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { DrawerContentScrollView } from "@react-navigation/drawer";
-import { ClipboardList, Factory, FolderTree, Home, Landmark, Moon, Sparkles, Sun } from "lucide-react-native";
+import {
+  ClipboardList,
+  Factory,
+  FolderTree,
+  Home,
+  Landmark,
+  Moon,
+  Sparkles,
+  Sun,
+  type LucideIcon,
+} from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { HapticPressable } from "./HapticPressable";
@@ -10,6 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
+import { apiFetch } from "../lib/api";
 import {
   androidRippleProps,
   pressedOpacity,
@@ -18,6 +29,28 @@ import {
   surfaceRippleColor,
 } from "../styles/pressableFeedback";
 import { useAppTheme } from "../theme/AppThemeContext";
+
+type DrawerLink = {
+  to: string;
+  labelKey?: string;
+  label?: string;
+};
+
+const ICON_BY_TO: Record<string, LucideIcon> = {
+  "/home": Home,
+  "/cost-centers": Landmark,
+  "/assets": Factory,
+  "/baumstruktur": FolderTree,
+  "/work-orders": ClipboardList,
+};
+
+const DEFAULT_LINKS: DrawerLink[] = [
+  { to: "/home", labelKey: "drawer.navStart" },
+  { to: "/cost-centers", labelKey: "drawer.navCostCenters" },
+  { to: "/assets", labelKey: "drawer.navAssets" },
+  { to: "/baumstruktur", labelKey: "drawer.navBaumstruktur" },
+  { to: "/work-orders", labelKey: "drawer.navWorkOrders" },
+];
 
 export function AppDrawerContent(props: DrawerContentComponentProps) {
   const { navigation } = props;
@@ -29,12 +62,52 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const { signOut } = useAuth();
   const athene = useAtheneAssistant();
   const activeLang = i18n.language.startsWith("de") ? "de" : "en";
+  const [links, setLinks] = useState<DrawerLink[]>(DEFAULT_LINKS);
 
-  const activeHome = pathname === "/home" || pathname.endsWith("/home");
-  const activeCc = pathname.startsWith("/cost-centers");
-  const activeAssets = pathname.startsWith("/assets");
-  const activeBaumstruktur = pathname.startsWith("/baumstruktur");
-  const activeWorkOrders = pathname.startsWith("/work-orders");
+  const loadNav = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/nav-layout?platform=mobile");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        navLayout?: {
+          items?: Array<{
+            to?: string;
+            hidden?: boolean;
+            name?: string;
+            source?: string;
+          }>;
+        } | null;
+      };
+      const items = data.navLayout?.items;
+      if (!Array.isArray(items) || items.length === 0) {
+        setLinks(DEFAULT_LINKS);
+        return;
+      }
+      const next: DrawerLink[] = [];
+      const seen = new Set<string>();
+      for (const it of items) {
+        if (!it || it.hidden || typeof it.to !== "string") continue;
+        if (seen.has(it.to)) continue;
+        seen.add(it.to);
+        const fallback = DEFAULT_LINKS.find((d) => d.to === it.to);
+        next.push({
+          to: it.to,
+          label: typeof it.name === "string" ? it.name : undefined,
+          labelKey: fallback?.labelKey,
+        });
+      }
+      for (const d of DEFAULT_LINKS) {
+        if (!seen.has(d.to)) next.push(d);
+      }
+      setLinks(next.length > 0 ? next : DEFAULT_LINKS);
+    } catch {
+      setLinks(DEFAULT_LINKS);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNav();
+  }, [loadNav]);
 
   const styles = useMemo(
     () =>
@@ -82,9 +155,14 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
     [colors, isDark],
   );
 
-  function closeAndGo(href: "/home" | "/cost-centers" | "/assets" | "/baumstruktur" | "/work-orders") {
+  function closeAndGo(href: string) {
     router.push(href as never);
     navigation.closeDrawer();
+  }
+
+  function isActive(to: string): boolean {
+    if (to === "/home") return pathname === "/home" || pathname.endsWith("/home");
+    return pathname.startsWith(to);
   }
 
   return (
@@ -96,64 +174,26 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <Text style={styles.brandText}>ATHENE</Text>
       </View>
 
-      <HapticPressable
-        onPress={() => closeAndGo("/home")}
-        {...androidRippleProps(navRipple)}
-        style={({ pressed }) => [styles.navItem, activeHome && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-      >
-        <Home size={24} color={activeHome ? colors.primary : colors.onSurfaceVariant} />
-        <Text style={activeHome ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navStart")}</Text>
-      </HapticPressable>
-
-      <HapticPressable
-        onPress={() => closeAndGo("/cost-centers")}
-        {...androidRippleProps(navRipple)}
-        style={({ pressed }) => [styles.navItem, activeCc && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-      >
-        <Landmark size={24} color={activeCc ? colors.primary : colors.onSurfaceVariant} />
-        <Text style={activeCc ? styles.navLabel : styles.navLabelMuted}>
-          {t("drawer.navCostCenters")}
-        </Text>
-      </HapticPressable>
-
-      <HapticPressable
-        onPress={() => closeAndGo("/assets")}
-        {...androidRippleProps(navRipple)}
-        style={({ pressed }) => [styles.navItem, activeAssets && styles.navItemActive, pressedOpacity(pressed, PRESSED_OPACITY_ROW)]}
-      >
-        <Factory size={24} color={activeAssets ? colors.primary : colors.onSurfaceVariant} />
-        <Text style={activeAssets ? styles.navLabel : styles.navLabelMuted}>{t("drawer.navAssets")}</Text>
-      </HapticPressable>
-
-      <HapticPressable
-        onPress={() => closeAndGo("/baumstruktur")}
-        {...androidRippleProps(navRipple)}
-        style={({ pressed }) => [
-          styles.navItem,
-          activeBaumstruktur && styles.navItemActive,
-          pressedOpacity(pressed, PRESSED_OPACITY_ROW),
-        ]}
-      >
-        <FolderTree size={24} color={activeBaumstruktur ? colors.primary : colors.onSurfaceVariant} />
-        <Text style={activeBaumstruktur ? styles.navLabel : styles.navLabelMuted}>
-          {t("drawer.navBaumstruktur")}
-        </Text>
-      </HapticPressable>
-
-      <HapticPressable
-        onPress={() => closeAndGo("/work-orders")}
-        {...androidRippleProps(navRipple)}
-        style={({ pressed }) => [
-          styles.navItem,
-          activeWorkOrders && styles.navItemActive,
-          pressedOpacity(pressed, PRESSED_OPACITY_ROW),
-        ]}
-      >
-        <ClipboardList size={24} color={activeWorkOrders ? colors.primary : colors.onSurfaceVariant} />
-        <Text style={activeWorkOrders ? styles.navLabel : styles.navLabelMuted}>
-          {t("drawer.navWorkOrders")}
-        </Text>
-      </HapticPressable>
+      {links.map((link) => {
+        const active = isActive(link.to);
+        const Icon = ICON_BY_TO[link.to] ?? Home;
+        const label = link.label?.trim() || (link.labelKey ? t(link.labelKey) : link.to);
+        return (
+          <HapticPressable
+            key={link.to}
+            onPress={() => closeAndGo(link.to)}
+            {...androidRippleProps(navRipple)}
+            style={({ pressed }) => [
+              styles.navItem,
+              active && styles.navItemActive,
+              pressedOpacity(pressed, PRESSED_OPACITY_ROW),
+            ]}
+          >
+            <Icon size={24} color={active ? colors.primary : colors.onSurfaceVariant} />
+            <Text style={active ? styles.navLabel : styles.navLabelMuted}>{label}</Text>
+          </HapticPressable>
+        );
+      })}
 
       <HapticPressable
         onPress={() => {
@@ -174,7 +214,9 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
       <View style={styles.spacer} />
 
       <View style={styles.footer}>
-        <Text style={{ fontSize: 12, color: colors.onSurfaceVariant, marginBottom: 4 }}>{t("drawer.hint")}</Text>
+        <Text style={{ fontSize: 12, color: colors.onSurfaceVariant, marginBottom: 4 }}>
+          {t("drawer.hint")}
+        </Text>
         <View style={styles.footerRow}>
           <HapticPressable
             onPress={toggleScheme}

@@ -17,6 +17,7 @@ import {
   LayoutTemplate,
   FileText,
   MapPin,
+  Menu,
   MessageSquare,
   FolderTree,
   Gauge,
@@ -34,6 +35,7 @@ import {
   Wrench,
   type LucideIcon,
   Users,
+  UserPlus,
 } from "lucide-react";
 
 export type NavRouteItem = {
@@ -99,6 +101,11 @@ export const navGroups: NavGroup[] = [
         Icon: Calculator,
         labelKey: "calculator.navCalculator",
       },
+      {
+        to: "/customize-menu",
+        Icon: Menu,
+        labelKey: "customizeMenu.nav",
+      },
     ],
   },
   {
@@ -107,6 +114,11 @@ export const navGroups: NavGroup[] = [
     Icon: Shield,
     items: [
       { to: "/users", Icon: Users, labelKey: "users.navUsers" },
+      {
+        to: "/zuweisungen",
+        Icon: UserPlus,
+        labelKey: "assignments.navAssignments",
+      },
       { to: "/sites", Icon: MapPin, labelKey: "sites.navSites" },
       {
         to: "/kpi-builder",
@@ -310,8 +322,11 @@ export function isNavGroupActive(pathname: string, group: NavGroup): boolean {
   );
 }
 
-export function activeNavGroupIds(pathname: string): string[] {
-  return navGroups
+export function activeNavGroupIds(
+  pathname: string,
+  groups: NavGroup[] = navGroups,
+): string[] {
+  return groups
     .filter((group) => isNavGroupActive(pathname, group))
     .map((group) => group.id);
 }

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { Check, Filter, Pencil, Trash2, TriangleAlert, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { Button } from "primereact/button";
 import { Checkbox } from "primereact/checkbox";
 import { Column } from "primereact/column";
@@ -9,36 +9,30 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { AppDialog } from "../components/AppDialog";
 import { InputText } from "primereact/inputtext";
-import { MultiSelect } from "primereact/multiselect";
 import { Toast } from "primereact/toast";
 
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { apiFetch } from "../lib/api";
-import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { coerceWorkOrderAdvancedSearch, emptyWorkOrderAdvancedSearch, type WorkOrderAdvancedSearchState } from "../lib/workOrderApiFilters";
 import {
   buildWorkOrderSearchPresetPayload,
   deleteWorkOrderSearchPreset,
   fetchWorkOrderSearchPresetDefaults,
   fetchWorkOrderSearchPresetDetail,
-  fetchWorkOrderSearchPresetShares,
   fetchWorkOrderSearchPresets,
   isSamePresetId,
   normalizeSearchPresetDefaults,
   patchWorkOrderSearchPreset,
   putWorkOrderSearchPresetDefaults,
-  putWorkOrderSearchPresetShares,
   type WorkOrderSearchPresetDefaults,
   type WorkOrderSearchPresetListItem,
 } from "../lib/workOrderSearchPresetApi";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
 import { lucidePrimeBtnIcon } from "../icons/lucide";
 
-type UserDirectoryRow = { id: string; loginName: string; name: string };
-
 export function SearchPresetsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const refData = useWorkOrderSearchReferenceData({ includeAssets: false });
@@ -57,14 +51,6 @@ export function SearchPresetsPage() {
     defaultsRef.current = defaults;
   }, [defaults]);
 
-  const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryRow[]>([]);
-
-  const [shareDialogVisible, setShareDialogVisible] = useState(false);
-  const [dialogPreset, setDialogPreset] = useState<WorkOrderSearchPresetListItem | null>(null);
-  const [shareUserIds, setShareUserIds] = useState<string[]>([]);
-  const [shareLoading, setShareLoading] = useState(false);
-  const [shareSaving, setShareSaving] = useState(false);
-
   const [editVisible, setEditVisible] = useState(false);
   const [editPreset, setEditPreset] = useState<WorkOrderSearchPresetListItem | null>(null);
   const [editName, setEditName] = useState("");
@@ -75,11 +61,6 @@ export function SearchPresetsPage() {
   const [filterSidebarVisible, setFilterSidebarVisible] = useState(false);
   /** Bumps after save so DataTable remounts; avoids stale row body after controlled updates. */
   const [dataTableEpoch, setDataTableEpoch] = useState(0);
-
-  const userSelectOptions = useMemo(
-    () => directoryUsers.map((u) => ({ label: `${u.loginName} — ${u.name}`, value: u.id })),
-    [directoryUsers],
-  );
 
   const fetchOwnedPresetsAndDefaults = useCallback(async () => {
     const [list, def] = await Promise.all([fetchWorkOrderSearchPresets(), fetchWorkOrderSearchPresetDefaults()]);
@@ -110,63 +91,14 @@ export function SearchPresetsPage() {
     }
   }, [fetchOwnedPresetsAndDefaults, t]);
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const res = await apiFetch("/api/users");
-      if (!res.ok) throw new Error("users");
-      const data = (await res.json()) as UserDirectoryRow[];
-      setDirectoryUsers(Array.isArray(data) ? data.map((u) => ({ id: u.id, loginName: u.loginName, name: u.name })) : []);
-    } catch {
-      setDirectoryUsers([]);
-    }
-  }, []);
-
   useEffect(() => {
     void loadPresets();
-    void loadUsers();
-  }, [loadPresets, loadUsers]);
+  }, [loadPresets]);
 
   useEffect(() => {
     setHeaderRowCount(rows.length);
     return () => setHeaderRowCount(null);
   }, [rows.length, setHeaderRowCount]);
-
-  const openShareDialog = useCallback(
-    (preset: WorkOrderSearchPresetListItem) => {
-      setDialogPreset(preset);
-      setShareUserIds([]);
-      setShareDialogVisible(true);
-      setShareLoading(true);
-      void fetchWorkOrderSearchPresetShares(preset.id)
-        .then((shareRows) => setShareUserIds(shareRows.map((r) => r.userId)))
-        .catch(() => {
-          toastRef.current?.show({ severity: "error", summary: t("suchkonfig.shareLoadError"), life: 6000 });
-          setShareUserIds([]);
-        })
-        .finally(() => setShareLoading(false));
-    },
-    [t],
-  );
-
-  const closeShareDialog = useCallback(() => {
-    setShareDialogVisible(false);
-    setDialogPreset(null);
-    setShareUserIds([]);
-  }, []);
-
-  const saveShares = useCallback(async () => {
-    if (!dialogPreset) return;
-    setShareSaving(true);
-    try {
-      await putWorkOrderSearchPresetShares(dialogPreset.id, shareUserIds);
-      toastRef.current?.show({ severity: "success", summary: t("suchkonfig.shareSuccess"), life: 4000 });
-      closeShareDialog();
-    } catch {
-      toastRef.current?.show({ severity: "error", summary: t("suchkonfig.shareError"), life: 6000 });
-    } finally {
-      setShareSaving(false);
-    }
-  }, [closeShareDialog, dialogPreset, shareUserIds, t]);
 
   const confirmDelete = useCallback(
     (preset: WorkOrderSearchPresetListItem) => {
@@ -329,20 +261,6 @@ export function SearchPresetsPage() {
     }
   }, [closeEdit, editAdvanced, editName, editPreset, editQuick, reloadPresetsAfterSave, t]);
 
-  const shareDialogFooter = (
-    <div className="flex justify-end gap-2">
-      <Button type="button" label={t("workOrders.cancel")} className="p-button-text" disabled={shareSaving} onClick={closeShareDialog} />
-      <Button
-        type="button"
-        label={t("suchkonfig.shareApply")}
-        icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        loading={shareSaving}
-        disabled={shareLoading || !dialogPreset}
-        onClick={() => void saveShares()}
-      />
-    </div>
-  );
-
   const stopDefaultCellBubble = (e: SyntheticEvent) => {
     e.stopPropagation();
   };
@@ -418,7 +336,7 @@ export function SearchPresetsPage() {
         icon={<Users className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
         className="p-button-text p-button-sm"
         label={t("suchkonfig.assignments")}
-        onClick={() => openShareDialog(preset)}
+        onClick={() => navigate(`/zuweisungen/search-preset/${preset.id}`)}
       />
       <Button
         type="button"
@@ -492,31 +410,6 @@ export function SearchPresetsPage() {
         />
         <Column header={t("suchkonfig.columnActions")} body={actionsBody} style={{ width: "20rem" }} />
       </DataTable>
-
-      <AppDialog
-        visible={shareDialogVisible}
-        onHide={closeShareDialog}
-        header={dialogPreset ? t("suchkonfig.dialogTitle", { name: dialogPreset.name }) : ""}
-        style={{ width: "min(32rem, 95vw)" }}
-        footer={shareDialogFooter}
-      >
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-on-surface-variant">{t("suchkonfig.shareUsers")}</span>
-          <MultiSelect
-            value={shareUserIds}
-            options={userSelectOptions}
-            onChange={(e) => setShareUserIds((e.value as string[]) ?? [])}
-            optionLabel="label"
-            optionValue="value"
-            display="chip"
-            className="w-full"
-            filter
-            disabled={shareLoading}
-            appendTo={overlayAppendTo}
-            placeholder={t("workOrders.searchPanel.selectPlaceholder")}
-          />
-        </div>
-      </AppDialog>
 
       <AppDialog
         visible={editVisible}

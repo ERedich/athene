@@ -18,6 +18,8 @@ import { WarehousesPage } from "./pages/WarehousesPage";
 import { StorageLocationsPage } from "./pages/StorageLocationsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { CalculatorPage } from "./pages/CalculatorPage";
+import { CustomizeMenuPage } from "./pages/CustomizeMenuPage";
+import { CustomizeMenuEditorPage } from "./pages/CustomizeMenuEditorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackPage } from "./pages/FeedbackPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -43,6 +45,9 @@ import { InspectionRoundsPage } from "./pages/InspectionRoundsPage";
 import { StammdatenManagerPage } from "./pages/StammdatenManagerPage";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
 import { ReportDesignerPage } from "./pages/ReportDesignerPage";
+import { AssignmentsPage } from "./pages/AssignmentsPage";
+import { AssignmentsTypePage } from "./pages/AssignmentsTypePage";
+import { AssignmentsUserPage } from "./pages/AssignmentsUserPage";
 
 export default function App() {
   return (
@@ -54,6 +59,9 @@ export default function App() {
           <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="getting-started/:guideId" element={<GettingStartedPage />} />
           <Route path="calculator" element={<CalculatorPage />} />
+          <Route path="customize-menu" element={<CustomizeMenuPage />} />
+          <Route path="customize-menu/new" element={<CustomizeMenuEditorPage />} />
+          <Route path="customize-menu/:id" element={<CustomizeMenuEditorPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="stammdaten-manager" element={<StammdatenManagerPage />} />
           <Route path="assets" element={<AssetsPage />} />
@@ -64,6 +72,10 @@ export default function App() {
           <Route path="schichtplaner" element={<ShiftPlannerPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
           <Route path="suchkonfig" element={<SearchPresetsPage />} />
+          <Route path="zuweisungen" element={<AssignmentsPage />} />
+          <Route path="zuweisungen/user/:userId" element={<AssignmentsUserPage />} />
+          <Route path="zuweisungen/:type" element={<AssignmentsTypePage />} />
+          <Route path="zuweisungen/:type/:recordId" element={<AssignmentsTypePage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="layout-editor" element={<LayoutEditorPage />} />
           <Route path="report-designer" element={<ReportDesignerPage />} />

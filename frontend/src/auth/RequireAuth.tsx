@@ -20,6 +20,7 @@ import { applyPrimaryColor } from "../theme";
 
 import { AuthSessionContext, type AuthUser } from "./AuthContext";
 import { POST_LOGIN_ENTER_FALLBACK_KEY } from "./loginNavigation";
+import { NavLayoutProvider } from "../layout/NavLayoutContext";
 
 type MeResponse = {
   user: AuthUser;
@@ -197,20 +198,22 @@ export function RequireAuth() {
 
   return (
     <AuthSessionContext.Provider value={session}>
-      <AtheneAssistantProvider>
-        <WorkOrderSubscriptionProvider>
-          <WorkOrderDialogProvider>
-            <NotificationToastBridge />
-            <MaintenancePlanDialogProvider>
-              <OnboardingProvider shellReady={shellReady}>
-                <div className={`h-full max-h-full w-full overflow-hidden ${shellEnterClass}`}>
-                  <Outlet />
-                </div>
-              </OnboardingProvider>
-            </MaintenancePlanDialogProvider>
-          </WorkOrderDialogProvider>
-        </WorkOrderSubscriptionProvider>
-      </AtheneAssistantProvider>
+      <NavLayoutProvider>
+        <AtheneAssistantProvider>
+          <WorkOrderSubscriptionProvider>
+            <WorkOrderDialogProvider>
+              <NotificationToastBridge />
+              <MaintenancePlanDialogProvider>
+                <OnboardingProvider shellReady={shellReady}>
+                  <div className={`h-full max-h-full w-full overflow-hidden ${shellEnterClass}`}>
+                    <Outlet />
+                  </div>
+                </OnboardingProvider>
+              </MaintenancePlanDialogProvider>
+            </WorkOrderDialogProvider>
+          </WorkOrderSubscriptionProvider>
+        </AtheneAssistantProvider>
+      </NavLayoutProvider>
     </AuthSessionContext.Provider>
   );
 }
