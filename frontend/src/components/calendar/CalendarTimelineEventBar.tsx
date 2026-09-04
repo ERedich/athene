@@ -20,7 +20,7 @@ type Props = {
   readOnly?: boolean;
   onClick: () => void;
   onAskAthene?: () => void;
-  onAssignEmployee?: (workOrderId: string, employeeId: string, event: React.DragEvent) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 function orderTypeClass(orderType?: string): string {
@@ -86,7 +86,7 @@ export function CalendarTimelineEventBar({
     if (!onAssignEmployee || !employeeDropAllowed || disabled || readOnly) return;
     const employeeId = readCalendarEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
-    onAssignEmployee(segment.eventId, employeeId, e);
+    onAssignEmployee(segment.eventId, employeeId);
   };
 
   return (

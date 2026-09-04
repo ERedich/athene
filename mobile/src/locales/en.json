@@ -337,7 +337,6 @@
     "cannotFeedbackFromStatus": "Feedback is not allowed for this order status.",
     "assignmentsAfterSave": "Employee assignments are available after saving the order for the first time.",
     "assignmentsEmpty": "No employees assigned.",
-    "assignmentWindowChip": "{{from}} – {{to}}",
     "documentsLoadError": "Could not load documents.",
     "documentsExisting": "Existing documents",
     "documentsLoading": "Loading documents…",

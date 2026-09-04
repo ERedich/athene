@@ -23,7 +23,7 @@ type Props = {
   onAskAthene?: () => void;
   onDragStart?: (workOrderId: string) => void;
   onDragEnd?: () => void;
-  onAssignEmployee?: (workOrderId: string, employeeId: string, event: React.DragEvent) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 function orderTypeClass(orderType?: string): string {
@@ -94,7 +94,7 @@ export function CalendarEventBar({
     if (!onAssignEmployee || !employeeDropAllowed || disabled || readOnly) return;
     const employeeId = readCalendarEmployeeDragData(e.dataTransfer, draggingEmployeeId);
     if (!employeeId) return;
-    onAssignEmployee(segment.eventId, employeeId, e);
+    onAssignEmployee(segment.eventId, employeeId);
   };
 
   return (

@@ -155,29 +155,11 @@ type WorkOrderAssignmentRow = {
   employeeId: string;
   employeeKey: string;
   employeeName: string;
-  assignedFrom: string;
-  assignedTo: string;
   createdAt: string;
   createdBy: string;
 };
 
 type WorkOrderDetailRow = WorkOrderRow & { todos: TodoRow[] };
-
-const workOrderAssignmentSelectSql = `
-  SELECT
-    a."id",
-    a."workOrderId",
-    a."employeeId",
-    e."key" AS "employeeKey",
-    e."name" AS "employeeName",
-    a."assignedFrom",
-    a."assignedTo",
-    a."createdAt",
-    COALESCE(cu."loginName", a."createdBy"::text) AS "createdBy"
-  FROM "workOrderEmployeeAssignment" a
-  JOIN "employee" e ON e."id" = a."employeeId"
-  LEFT JOIN "users" cu ON cu."id" = a."createdBy"
-`;
 
 type ParsedBody = WorkOrderCreateInput;
 
@@ -222,28 +204,6 @@ function isWorkOrderStatus(value: unknown): value is WorkOrderStatus {
 
 function workOrderAssignmentsLocked(status: WorkOrderStatus): boolean {
   return status === "ended" || status === "done" || status === "cancelled";
-}
-
-function parseAssignmentWindow(body: unknown): { assignedFrom: string; assignedTo: string } | null {
-  if (body === null || typeof body !== "object") return null;
-  const o = body as Record<string, unknown>;
-  const assignedFrom = parseIsoDatetime(o.assignedFrom);
-  const assignedTo = parseIsoDatetime(o.assignedTo);
-  if (!assignedFrom || !assignedTo) return null;
-  if (new Date(assignedTo).getTime() <= new Date(assignedFrom).getTime()) return null;
-  return { assignedFrom, assignedTo };
-}
-
-function assignmentWindowInsideOrder(
-  window: { assignedFrom: string; assignedTo: string },
-  plannedStart: string,
-  plannedEnd: string,
-): boolean {
-  const fromMs = new Date(window.assignedFrom).getTime();
-  const toMs = new Date(window.assignedTo).getTime();
-  const startMs = new Date(plannedStart).getTime();
-  const endMs = new Date(plannedEnd).getTime();
-  return fromMs >= startMs && toMs <= endMs;
 }
 
 type FeedbackStatusAction = "none" | "pause" | "end";
@@ -1023,36 +983,6 @@ router.get("/by-order-number", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/assignments", async (req: Request, res: Response) => {
-  const userId = req.session.userId;
-  if (!userId) {
-    res.status(401).json({ error: "unauthorized" });
-    return;
-  }
-  const plannedStartTo = parseIsoDatetime(req.query.plannedStartTo);
-  const plannedEndFrom = parseIsoDatetime(req.query.plannedEndFrom);
-  if (!plannedStartTo || !plannedEndFrom) {
-    res.status(400).json({ error: "invalid_range" });
-    return;
-  }
-  try {
-    const { rows } = await pool.query<WorkOrderAssignmentRow>(
-      `
-      ${workOrderAssignmentSelectSql}
-      JOIN "workOrder" w ON w."id" = a."workOrderId"
-      WHERE ${siteAccessSql('w."siteId"', "$1")}
-        AND w."plannedStart" <= $2::timestamptz
-        AND w."plannedEnd" >= $3::timestamptz
-      ORDER BY a."workOrderId" ASC, e."key" ASC
-      `,
-      [userId, plannedStartTo, plannedEndFrom],
-    );
-    res.json(rows);
-  } catch (err) {
-    sendPgError(res, err);
-  }
-});
-
 router.get("/:id/planning-conflicts", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {
@@ -1142,7 +1072,17 @@ router.get("/:id/assignments", async (req: Request, res: Response) => {
     }
     const { rows } = await pool.query<WorkOrderAssignmentRow>(
       `
-      ${workOrderAssignmentSelectSql}
+      SELECT
+        a."id",
+        a."workOrderId",
+        a."employeeId",
+        e."key" AS "employeeKey",
+        e."name" AS "employeeName",
+        a."createdAt",
+        COALESCE(cu."loginName", a."createdBy"::text) AS "createdBy"
+      FROM "workOrderEmployeeAssignment" a
+      JOIN "employee" e ON e."id" = a."employeeId"
+      LEFT JOIN "users" cu ON cu."id" = a."createdBy"
       WHERE a."workOrderId" = $1::uuid
       ORDER BY e."key" ASC
       `,
@@ -1194,13 +1134,8 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
   }
   const { id } = req.params;
   const employeeId = typeof req.body?.employeeId === "string" ? req.body.employeeId.trim() : "";
-  const window = parseAssignmentWindow(req.body);
   if (!isUuid(id) || !isUuid(employeeId)) {
     res.status(400).json({ error: "invalid_id" });
-    return;
-  }
-  if (!window) {
-    res.status(400).json({ error: "invalid_assignment_window" });
     return;
   }
   try {
@@ -1208,23 +1143,10 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
     let statusChangedToAssigned = false;
     const row = await withAuditContext(meta, async (client) => {
       const workOrder = await client.query<
-        QueryResultRow & {
-          id: string;
-          siteId: string;
-          status: string;
-          workgroupId: string | null;
-          plannedStart: string;
-          plannedEnd: string;
-        }
+        QueryResultRow & { id: string; siteId: string; status: string; workgroupId: string | null }
       >(
         `
-        SELECT
-          "id",
-          "siteId"::text AS "siteId",
-          "status",
-          "workgroupId"::text AS "workgroupId",
-          "plannedStart",
-          "plannedEnd"
+        SELECT "id", "siteId"::text AS "siteId", "status", "workgroupId"::text AS "workgroupId"
         FROM "workOrder"
         WHERE "id" = $1::uuid
           AND ${siteAccessSql('"siteId"', "$2")}
@@ -1235,9 +1157,6 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       if (!wo) return null;
       if (!isWorkOrderStatus(wo.status)) throw new Error("invalid_status");
       if (workOrderAssignmentsLocked(wo.status)) throw new Error("assignment_locked_by_status");
-      if (!assignmentWindowInsideOrder(window, wo.plannedStart, wo.plannedEnd)) {
-        throw new Error("assignment_window_outside_order");
-      }
       await assertResponsibleEmployeeContext(
         client,
         meta.userId,
@@ -1248,13 +1167,11 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       );
       await client.query(
         `
-        INSERT INTO "workOrderEmployeeAssignment" ("workOrderId", "employeeId", "assignedFrom", "assignedTo")
-        VALUES ($1::uuid, $2::uuid, $3::timestamptz, $4::timestamptz)
-        ON CONFLICT ("workOrderId", "employeeId") DO UPDATE SET
-          "assignedFrom" = EXCLUDED."assignedFrom",
-          "assignedTo" = EXCLUDED."assignedTo"
+        INSERT INTO "workOrderEmployeeAssignment" ("workOrderId", "employeeId")
+        VALUES ($1::uuid, $2::uuid)
+        ON CONFLICT ("workOrderId", "employeeId") DO NOTHING
         `,
-        [id, employeeId, window.assignedFrom, window.assignedTo],
+        [id, employeeId],
       );
       if (wo.status === "open") {
         await client.query(`UPDATE "workOrder" SET "status" = 'assigned' WHERE "id" = $1::uuid`, [id]);
@@ -1262,7 +1179,17 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
       }
       const { rows } = await client.query<WorkOrderAssignmentRow>(
         `
-        ${workOrderAssignmentSelectSql}
+        SELECT
+          a."id",
+          a."workOrderId",
+          a."employeeId",
+          e."key" AS "employeeKey",
+          e."name" AS "employeeName",
+          a."createdAt",
+          COALESCE(cu."loginName", a."createdBy"::text) AS "createdBy"
+        FROM "workOrderEmployeeAssignment" a
+        JOIN "employee" e ON e."id" = a."employeeId"
+        LEFT JOIN "users" cu ON cu."id" = a."createdBy"
         WHERE a."workOrderId" = $1::uuid
           AND a."employeeId" = $2::uuid
         LIMIT 1
@@ -1312,10 +1239,6 @@ router.post("/:id/assignments", async (req: Request, res: Response) => {
     }
     if (message === "employee_not_in_workgroup") {
       res.status(400).json({ error: "employee_not_in_workgroup" });
-      return;
-    }
-    if (message === "assignment_window_outside_order") {
-      res.status(400).json({ error: "assignment_window_outside_order" });
       return;
     }
     sendPgError(res, err);

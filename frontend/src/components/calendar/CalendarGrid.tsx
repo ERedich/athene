@@ -29,7 +29,7 @@ type Props = {
     targetDay: Date,
     event: DragEvent | React.MouseEvent,
   ) => void;
-  onAssignEmployee?: (workOrderId: string, employeeId: string, dropDayIso: string, event: React.DragEvent) => void;
+  onAssignEmployee?: (workOrderId: string, employeeId: string) => void;
 };
 
 export function CalendarGrid({

@@ -6,15 +6,10 @@ import { Dropdown } from "primereact/dropdown";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
-import { OverlayPanel } from "primereact/overlaypanel";
 
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { CalendarEmployeePanel } from "../components/calendar/CalendarEmployeePanel";
 import { CalendarMoveConfirmPanel } from "../components/calendar/CalendarMoveConfirmPanel";
-import {
-  WorkOrderAssignWindowPanel,
-  type WorkOrderAssignWindowPending,
-} from "../components/workOrders/WorkOrderAssignWindowPanel";
 import { CalendarDayTimeline } from "../components/calendar/CalendarDayTimeline";
 import { CalendarGrid } from "../components/calendar/CalendarGrid";
 import { CalendarToolbar } from "../components/calendar/CalendarToolbar";
@@ -58,7 +53,6 @@ import {
   workOrderToCalendarEvent,
   type CalendarWorkOrder,
 } from "../lib/calendar/calendarWorkOrders";
-import { defaultAssignmentWindow } from "../lib/workOrderAssignmentWindow";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import {
   fetchWorkOrderById,
@@ -80,7 +74,6 @@ export function KalendarPage() {
   const athene = useAtheneAssistant();
   const { appParameterCalendarMinDurationHours } = useAuth();
   const toastRef = useRef<Toast>(null);
-  const assignPanelRef = useRef<OverlayPanel>(null);
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
@@ -100,8 +93,6 @@ export function KalendarPage() {
   const [employeesLoading, setEmployeesLoading] = useState(true);
   const [pendingMove, setPendingMove] = useState<PendingCalendarMove | null>(null);
   const [moveSaving, setMoveSaving] = useState(false);
-  const [pendingAssign, setPendingAssign] = useState<WorkOrderAssignWindowPending | null>(null);
-  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   const weeks = useMemo(() => {
     if (viewMode === "month") return buildMonthGrid(anchorDate);
@@ -362,65 +353,18 @@ export function KalendarPage() {
       if (code === "assignment_locked_by_status") return t("workOrders.assignmentLockedByStatus");
       if (code === "employee_site_mismatch") return t("workOrders.assignmentEmployeeSiteMismatch");
       if (code === "invalid_employee") return t("workOrders.assignmentInvalidEmployee");
-      if (code === "invalid_assignment_window") return t("workOrders.assignmentWindowInvalid");
-      if (code === "assignment_window_outside_order") return t("workOrders.assignmentWindowOutsideOrder");
       return t("kalendar.assignError");
     },
     [t],
   );
 
   const handleAssignEmployee = useCallback(
-    (workOrderId: string, employeeId: string, dropDayIso: string, event?: React.SyntheticEvent) => {
-      const order = workOrders.find((wo) => wo.id === workOrderId);
-      if (!order) return;
-      const employee = assignableEmployees.find((item) => item.id === employeeId);
-      const window = defaultAssignmentWindow(order.plannedStart, order.plannedEnd, dropDayIso);
-      if (!window) {
-        toastRef.current?.show({
-          severity: "warn",
-          summary: t("workOrders.assignmentWindowOutsideOrder"),
-          life: 5000,
-        });
-        return;
-      }
-      setPendingAssign({
-        workOrderId: order.id,
-        workOrderLabel: `#${order.orderNumber} ${order.name}`,
-        employeeIds: [employeeId],
-        employeeLabel: employee ? `${employee.key} – ${employee.name}` : employeeId,
-        assignedFrom: window.assignedFrom,
-        assignedTo: window.assignedTo,
-        minDate: new Date(order.plannedStart),
-        maxDate: new Date(order.plannedEnd),
-      });
-      setDraggingEmployeeId(null);
-      if (event) assignPanelRef.current?.toggle(event);
-    },
-    [assignableEmployees, t, workOrders],
-  );
-
-  const handleAssignCancel = useCallback(() => {
-    assignPanelRef.current?.hide();
-    setPendingAssign(null);
-  }, []);
-
-  const handleAssignConfirm = useCallback(
-    async (assignedFrom: Date, assignedTo: Date) => {
-      if (!pendingAssign) return;
-      const employeeId = pendingAssign.employeeIds[0];
-      if (!employeeId || assigningEmployeeId) return;
+    async (workOrderId: string, employeeId: string) => {
+      if (assigningEmployeeId) return;
       setAssigningEmployeeId(employeeId);
-      setAssignSubmitting(true);
       try {
-        const result = await postWorkOrderAssignment(
-          pendingAssign.workOrderId,
-          employeeId,
-          assignedFrom.toISOString(),
-          assignedTo.toISOString(),
-        );
+        const result = await postWorkOrderAssignment(workOrderId, employeeId);
         if (result.ok) {
-          assignPanelRef.current?.hide();
-          setPendingAssign(null);
           toastRef.current?.show({
             severity: "success",
             summary: t("kalendar.assignSuccess"),
@@ -441,12 +385,11 @@ export function KalendarPage() {
           life: 6000,
         });
       } finally {
-        setAssignSubmitting(false);
         setAssigningEmployeeId(null);
         setDraggingEmployeeId(null);
       }
     },
-    [assigningEmployeeId, assignmentErrorMessage, loadData, pendingAssign, t],
+    [assigningEmployeeId, assignmentErrorMessage, loadData, t],
   );
 
   const handleMoveReject = useCallback(() => {
@@ -608,13 +551,6 @@ export function KalendarPage() {
         onAccept={() => void handleMoveAccept()}
         onReject={handleMoveReject}
       />
-      <WorkOrderAssignWindowPanel
-        panelRef={assignPanelRef}
-        pending={pendingAssign}
-        submitting={assignSubmitting}
-        onConfirm={(from, to) => void handleAssignConfirm(from, to)}
-        onCancel={handleAssignCancel}
-      />
 
       {error ? (
         <div className="mx-4 mt-4 mb-3 rounded-lg bg-surface-container-low p-3 text-sm text-on-surface">
@@ -655,7 +591,7 @@ export function KalendarPage() {
                 workgroupFilterId={workgroupFilterId}
                 onEventClick={handleEventClick}
                 onAskAthene={handleAskAthene}
-                onAssignEmployee={handleAssignEmployee}
+                onAssignEmployee={(workOrderId, employeeId) => void handleAssignEmployee(workOrderId, employeeId)}
               />
             ) : (
               <CalendarGrid
@@ -675,7 +611,7 @@ export function KalendarPage() {
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onMoveProposal={handleMoveProposal}
-                onAssignEmployee={handleAssignEmployee}
+                onAssignEmployee={(workOrderId, employeeId) => void handleAssignEmployee(workOrderId, employeeId)}
               />
             )}
           </div>

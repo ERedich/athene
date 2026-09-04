@@ -337,7 +337,6 @@
     "cannotFeedbackFromStatus": "Rückmeldung ist für diesen Auftragsstatus nicht zulässig.",
     "assignmentsAfterSave": "Mitarbeiterzuordnungen sind nach dem ersten Speichern des Auftrags verfügbar.",
     "assignmentsEmpty": "Keine Mitarbeiter zugewiesen.",
-    "assignmentWindowChip": "{{from}} – {{to}}",
     "documentsLoadError": "Dokumente konnten nicht geladen werden.",
     "documentsExisting": "Vorhandene Dokumente",
     "documentsLoading": "Dokumente werden geladen …",

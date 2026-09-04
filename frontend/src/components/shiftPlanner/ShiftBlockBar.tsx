@@ -8,7 +8,6 @@ import { contrastTextOnBackground, normalizeColorHex } from "../../lib/shiftPlan
 import {
   isShiftEmployeeDrag,
   readShiftEmployeeDragData,
-  setShiftEmployeeDragData,
 } from "../../lib/shiftPlanner/shiftPlannerDrag";
 import { canAssignEmployeeOnDate } from "../../lib/shiftPlanner/shiftPlannerDates";
 import type { ShiftCalendarBlock } from "../../lib/shiftPlanner/shiftCalendarTypes";
@@ -42,8 +41,6 @@ type Props = {
   onSelectBlock?: (block: ShiftCalendarBlock) => void;
   onOpenInfo?: (block: ShiftCalendarBlock) => void;
   onOpenShiftOverview?: (block: ShiftCalendarBlock, event: React.MouseEvent) => void;
-  onAssignedEmployeeDragStart?: (employeeId: string, block: ShiftCalendarBlock) => void;
-  onAssignedEmployeeDragEnd?: () => void;
 };
 
 export function ShiftBlockBar({
@@ -62,8 +59,6 @@ export function ShiftBlockBar({
   onSelectBlock,
   onOpenInfo,
   onOpenShiftOverview,
-  onAssignedEmployeeDragStart,
-  onAssignedEmployeeDragEnd,
 }: Props) {
   const { t, i18n } = useTranslation();
   const panelRef = useRef<OverlayPanel>(null);
@@ -242,19 +237,11 @@ export function ShiftBlockBar({
                     key={assignment.id}
                     assignment={assignment}
                     removing={removingAssignmentId === assignment.id}
-                    draggable={Boolean(onAssignedEmployeeDragStart)}
-                    isDragging={draggingEmployeeId === assignment.employeeId}
                     onRemove={
                       onUnassignEmployee
                         ? (a) => onUnassignEmployee(block, a.id)
                         : undefined
                     }
-                    onDragStart={
-                      onAssignedEmployeeDragStart
-                        ? (employeeId) => onAssignedEmployeeDragStart(employeeId, block)
-                        : undefined
-                    }
-                    onDragEnd={onAssignedEmployeeDragEnd}
                   />
                 ))}
                 {hiddenAssignmentCount > 0 ? (
@@ -301,20 +288,7 @@ export function ShiftBlockBar({
         ) : (
           <ul className="app-shift-planner-assignments-panel__list">
             {block.assignments.map((assignment) => (
-              <li
-                key={assignment.id}
-                className="app-shift-planner-assignments-panel__item"
-                draggable={Boolean(onAssignedEmployeeDragStart)}
-                onDragStart={(e) => {
-                  if (!onAssignedEmployeeDragStart) {
-                    e.preventDefault();
-                    return;
-                  }
-                  setShiftEmployeeDragData(e.dataTransfer, assignment.employeeId);
-                  onAssignedEmployeeDragStart(assignment.employeeId, block);
-                }}
-                onDragEnd={() => onAssignedEmployeeDragEnd?.()}
-              >
+              <li key={assignment.id} className="app-shift-planner-assignments-panel__item">
                 <span className="app-shift-planner-assignments-panel__key">{assignment.employeeKey}</span>
                 <span className="app-shift-planner-assignments-panel__name">{assignment.employeeName}</span>
               </li>

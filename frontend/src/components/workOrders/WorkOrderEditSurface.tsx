@@ -19,9 +19,6 @@ import { WorkOrderFeedbackTransactionsSection } from "./WorkOrderFeedbackTransac
 import { WorkOrderInspectionPointsTabContent } from "./WorkOrderInspectionPointsTabContent";
 import { WorkOrderMessagesTabContent } from "./WorkOrderMessagesTabContent";
 import {
-  WorkOrderAssignWindowPanel,
-} from "./WorkOrderAssignWindowPanel";
-import {
   ASSET_DOCUMENT_CATEGORY_ORDER,
   documentCategoryBadgeClass,
   isAssetDocumentCategory,
@@ -182,12 +179,6 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
     assignmentEmployeeOptions,
     assignmentAdding,
     addAssignments,
-    openAssignmentWindow,
-    confirmAssignWindow,
-    cancelAssignWindow,
-    assignWindowPanelRef,
-    pendingAssignWindow,
-    assignWindowSubmitting,
     removeAssignment,
     documents,
     documentsLoading,
@@ -251,13 +242,6 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
   return (
     <div ref={tabHostRef} className={STANDARD_TAB_HOST_CLASS}>
       {previewPortal}
-      <WorkOrderAssignWindowPanel
-        panelRef={assignWindowPanelRef}
-        pending={pendingAssignWindow}
-        submitting={assignWindowSubmitting}
-        onConfirm={(from, to) => void confirmAssignWindow(from, to)}
-        onCancel={cancelAssignWindow}
-      />
       <TabView
         className={STANDARD_TAB_VIEW_CLASS}
         activeIndex={activeTabIndex}
@@ -637,7 +621,7 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                   icon={<UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                   label={t("workOrders.assignmentsAdd")}
                   loading={assignmentAdding}
-                  onClick={(e) => addAssignments(e)}
+                  onClick={() => void addAssignments()}
                   disabled={saving || assignmentEmployeeIds.length === 0 || assignmentsLocked || !editingId}
                 />
               </div>
@@ -655,23 +639,8 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
                       className="app-card-cascade app-wo-assignment-chip"
                       style={{ ["--app-cascade-index" as string]: index }}
                     >
-                      <button
-                        type="button"
-                        className="app-wo-assignment-chip__open"
-                        onClick={(e) => openAssignmentWindow(item, e)}
-                        disabled={assignmentsLocked}
-                      >
-                        <span className="app-wo-assignment-chip__key">{item.employeeKey}</span>
-                        <span className="app-wo-assignment-chip__name">{item.employeeName}</span>
-                        {item.assignedFrom && item.assignedTo ? (
-                          <span className="app-wo-assignment-chip__window">
-                            {t("workOrders.assignmentWindowChip", {
-                              from: formatShortDt(item.assignedFrom),
-                              to: formatShortDt(item.assignedTo),
-                            })}
-                          </span>
-                        ) : null}
-                      </button>
+                      <span className="app-wo-assignment-chip__key">{item.employeeKey}</span>
+                      <span className="app-wo-assignment-chip__name">{item.employeeName}</span>
                       <Button
                         type="button"
                         text

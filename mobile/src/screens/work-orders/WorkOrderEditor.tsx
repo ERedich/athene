@@ -1780,18 +1780,6 @@ export function WorkOrderEditor({ orderId }: Props) {
                         {a.employeeKey} — {a.employeeName}
                       </Text>
                       <Text style={styles.assignmentMeta}>
-                        {t("workOrders.assignmentWindowChip", {
-                          from: new Intl.DateTimeFormat(i18n.language, {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          }).format(new Date(a.assignedFrom)),
-                          to: new Intl.DateTimeFormat(i18n.language, {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          }).format(new Date(a.assignedTo)),
-                        })}
-                      </Text>
-                      <Text style={styles.assignmentMeta}>
                         {t("workOrders.documentsUploadedBy")}: {a.createdBy}
                       </Text>
                     </View>

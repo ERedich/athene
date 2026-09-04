@@ -234,8 +234,6 @@ export type WorkOrderAssignmentRow = {
   employeeId: string;
   employeeKey: string;
   employeeName: string;
-  assignedFrom: string;
-  assignedTo: string;
   createdAt: string;
   createdBy: string;
 };
