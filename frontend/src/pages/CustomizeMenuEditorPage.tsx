@@ -291,7 +291,7 @@ export function CustomizeMenuEditorPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("customizeMenu.searchPlaceholder")}
-              className="app-header-search-input !rounded-sm text-sm"
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
             />
           </IconField>
         </li>

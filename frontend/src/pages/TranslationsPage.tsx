@@ -19,6 +19,11 @@ import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { applyUiTranslationOverrides, getBuiltInFlattenedBundles } from "../lib/applyUiTranslationOverrides";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
+import { useAppCrud } from "../lib/usePermission";
+import {
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type TranslationRow = {
   messageKey: string;
@@ -26,11 +31,6 @@ type TranslationRow = {
   en: string;
 };
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
 
 const TRANSLATIONS_TABLE_VIRTUAL_ROW_PX = 72;
 const TRANSLATIONS_PAGE_SIZE_DEFAULT = 50;
@@ -47,6 +47,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 export function TranslationsPage() {
   const { t } = useTranslation();
+  const crud = useAppCrud("translations");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const cmRef = useRef<ContextMenu>(null);
@@ -269,17 +270,19 @@ export function TranslationsPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={saving || loading}
-            onClick={() => void save()}
-          >
-            <Check className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{saving ? t("translations.saving") : t("translations.save")}</span>
-          </button>
-        </li>
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={saving || loading}
+              onClick={() => void save()}
+            >
+              <Check className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{saving ? t("translations.saving") : t("translations.save")}</span>
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -294,7 +297,7 @@ export function TranslationsPage() {
       </ul>,
     );
     return () => setHeaderActions(null);
-  }, [loading, save, saving, searchTerm, setHeaderActions, t]);
+  }, [crud.canUpdate, loading, save, saving, searchTerm, setHeaderActions, t]);
 
   const keyBody = (row: TranslationRow) => (
     <span className="font-mono text-xs text-on-surface">{row.messageKey}</span>
@@ -325,7 +328,7 @@ export function TranslationsPage() {
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 p-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} appendTo={overlayAppendTo} position="top-right" />
       <ContextMenu
         ref={cmRef}
@@ -334,15 +337,14 @@ export function TranslationsPage() {
         onHide={() => setCtxRow(null)}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-lg border border-[color-mix(in_srgb,var(--color-on-surface)_12%,transparent)] bg-surface-container-low p-3">
+      <div className="flex min-h-0 flex-1 flex-col">
         <DataTable
           value={paginatedRows}
           loading={loading}
           dataKey="messageKey"
           scrollable
           scrollHeight="flex"
-          size="small"
-          className="app-data-table min-h-0 w-full flex-1 text-sm"
+          className="app-data-table min-h-0 w-full flex-1"
           virtualScrollerOptions={virtualScrollerOptions}
           emptyMessage={
             filteredRows.length === 0 && !loading ? t("translations.emptyFilter") : undefined

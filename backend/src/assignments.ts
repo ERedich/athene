@@ -18,6 +18,12 @@ import {
   type AssignmentUserRow,
 } from "./assignmentTargets.js";
 import { pool } from "./db.js";
+import {
+  applyTemplateToUser,
+  clearPermissionTemplateAssignment,
+  loadTemplateGrantKeys,
+} from "./permissionTemplates.js";
+import { loadUserPermissions } from "./middleware/requirePermission.js";
 import { siteAccessSql } from "./siteAccess.js";
 
 const router = Router();
@@ -212,6 +218,24 @@ router.get("/catalog", async (req: Request, res: Response) => {
       [visibleIds],
     );
 
+    const { rows: tplCountRows } = await pool.query<{ c: number }>(
+      `
+      SELECT COUNT(*)::int AS c
+      FROM "permissionTemplate" t
+      WHERE ${siteAccessSql('t."siteId"', "$1")}
+      `,
+      [userId],
+    );
+    const { rows: tplAssignedRows } = await pool.query<{ c: number }>(
+      `
+      SELECT COUNT(*)::int AS c
+      FROM "users" u
+      WHERE u."permissionTemplateId" IS NOT NULL
+        AND u."id" = ANY($1::uuid[])
+      `,
+      [visibleIds],
+    );
+
     const items = ASSIGNMENT_TYPES.map((t) => {
       if (t.id === "menu") {
         return {
@@ -226,6 +250,14 @@ router.get("/catalog", async (req: Request, res: Response) => {
           ...t,
           recordCount: presetCountRows[0]?.c ?? 0,
           assignedUserCount: presetAssignedRows[0]?.c ?? 0,
+          userCount,
+        };
+      }
+      if (t.id === "permission-template") {
+        return {
+          ...t,
+          recordCount: tplCountRows[0]?.c ?? 0,
+          assignedUserCount: tplAssignedRows[0]?.c ?? 0,
           userCount,
         };
       }
@@ -287,9 +319,30 @@ router.get("/users", async (req: Request, res: Response) => {
     );
     const presetCountByUser = new Map(presetCounts.map((r) => [r.userId, r.c]));
 
+    const { rows: templates } = await pool.query<{
+      userId: string;
+      permissionTemplateId: string | null;
+      permissionTemplateKey: string | null;
+      permissionTemplateName: string | null;
+    }>(
+      `
+      SELECT
+        u."id"::text AS "userId",
+        u."permissionTemplateId"::text AS "permissionTemplateId",
+        t."key" AS "permissionTemplateKey",
+        t."name" AS "permissionTemplateName"
+      FROM "users" u
+      LEFT JOIN "permissionTemplate" t ON t."id" = u."permissionTemplateId"
+      WHERE u."id" = ANY($1::uuid[])
+      `,
+      [ids],
+    );
+    const templateByUser = new Map(templates.map((r) => [r.userId, r]));
+
     res.json(
       visible.map((u) => {
         const m = menuByUser.get(u.id);
+        const tpl = templateByUser.get(u.id);
         return {
           id: u.id,
           loginName: u.loginName,
@@ -303,6 +356,9 @@ router.get("/users", async (req: Request, res: Response) => {
           menuConfigKey: m?.menuConfigKey ?? null,
           menuConfigName: m?.menuConfigName ?? null,
           searchPresetShareCount: presetCountByUser.get(u.id) ?? 0,
+          permissionTemplateId: tpl?.permissionTemplateId ?? null,
+          permissionTemplateKey: tpl?.permissionTemplateKey ?? null,
+          permissionTemplateName: tpl?.permissionTemplateName ?? null,
         };
       }),
     );
@@ -336,6 +392,9 @@ router.get("/users/:userId", async (req: Request, res: Response) => {
       menuConfigId: string | null;
       menuConfigKey: string | null;
       menuConfigName: string | null;
+      permissionTemplateId: string | null;
+      permissionTemplateKey: string | null;
+      permissionTemplateName: string | null;
     }>(
       `
       SELECT
@@ -344,9 +403,13 @@ router.get("/users/:userId", async (req: Request, res: Response) => {
         u."name",
         u."navMenuConfigId"::text AS "menuConfigId",
         c."key" AS "menuConfigKey",
-        c."name" AS "menuConfigName"
+        c."name" AS "menuConfigName",
+        u."permissionTemplateId"::text AS "permissionTemplateId",
+        t."key" AS "permissionTemplateKey",
+        t."name" AS "permissionTemplateName"
       FROM "users" u
       LEFT JOIN "navMenuConfig" c ON c."id" = u."navMenuConfigId"
+      LEFT JOIN "permissionTemplate" t ON t."id" = u."permissionTemplateId"
       WHERE u."id" = $1::uuid
       `,
       [targetId],
@@ -388,6 +451,13 @@ router.get("/users/:userId", async (req: Request, res: Response) => {
           }
         : null,
       searchPresets: presets,
+      permissionTemplate: user.permissionTemplateId
+        ? {
+            id: user.permissionTemplateId,
+            key: user.permissionTemplateKey,
+            name: user.permissionTemplateName,
+          }
+        : null,
     });
   } catch (err) {
     sendPgError(res, err);
@@ -442,6 +512,39 @@ router.get("/:type/records", async (req: Request, res: Response) => {
         rows.map((r) => ({
           ...r,
           sourcePath: `${typeDef.sourcePath}/${r.id}`,
+        })),
+      );
+      return;
+    }
+
+    if (typeParam === "permission-template") {
+      const { rows } = await pool.query<{
+        id: string;
+        key: string;
+        name: string;
+        assignedUserCount: number;
+      }>(
+        `
+        SELECT
+          t."id"::text AS "id",
+          t."key",
+          t."name",
+          (
+            SELECT COUNT(*)::int
+            FROM "users" u
+            WHERE u."permissionTemplateId" = t."id"
+              AND u."id" = ANY($1::uuid[])
+          ) AS "assignedUserCount"
+        FROM "permissionTemplate" t
+        WHERE ${siteAccessSql('t."siteId"', "$2")}
+        ORDER BY t."name" ASC
+        `,
+        [visibleIds, userId],
+      );
+      res.json(
+        rows.map((r) => ({
+          ...r,
+          sourcePath: typeDef.sourcePath,
         })),
       );
       return;
@@ -542,6 +645,57 @@ router.get("/:type/records/:id/users", async (req: Request, res: Response) => {
         JOIN "navMenuConfig" c ON c."id" = u."navMenuConfigId"
         WHERE u."navMenuConfigId" IS NOT NULL
           AND u."navMenuConfigId" <> $1::uuid
+          AND u."id" = ANY($2::uuid[])
+        `,
+        [recordId, visibleIds],
+      );
+
+      res.json({
+        assignedUserIds: assigned.map((r) => r.userId),
+        conflicts,
+      });
+      return;
+    }
+
+    if (typeParam === "permission-template") {
+      const { rows: exists } = await pool.query<{ c: number }>(
+        `
+        SELECT 1 AS c
+        FROM "permissionTemplate" t
+        WHERE t."id" = $1::uuid
+          AND ${siteAccessSql('t."siteId"', "$2")}
+        `,
+        [recordId, actorId],
+      );
+      if (!exists.length) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const { rows: assigned } = await pool.query<{ userId: string }>(
+        `
+        SELECT u."id"::text AS "userId"
+        FROM "users" u
+        WHERE u."permissionTemplateId" = $1::uuid
+          AND u."id" = ANY($2::uuid[])
+        `,
+        [recordId, visibleIds],
+      );
+
+      const { rows: conflicts } = await pool.query<{
+        userId: string;
+        currentRecordId: string;
+        currentName: string;
+      }>(
+        `
+        SELECT
+          u."id"::text AS "userId",
+          u."permissionTemplateId"::text AS "currentRecordId",
+          t."name" AS "currentName"
+        FROM "users" u
+        JOIN "permissionTemplate" t ON t."id" = u."permissionTemplateId"
+        WHERE u."permissionTemplateId" IS NOT NULL
+          AND u."permissionTemplateId" <> $1::uuid
           AND u."id" = ANY($2::uuid[])
         `,
         [recordId, visibleIds],
@@ -661,6 +815,63 @@ router.put("/:type/records/:id", async (req: Request, res: Response) => {
             `,
             [targets, recordId],
           );
+        }
+      }
+
+      await client.query("COMMIT");
+      res.json({
+        ok: true,
+        userIds: targets,
+        skippedWithoutEmployee,
+        selfAffected: targets.includes(actorId),
+      });
+      return;
+    }
+
+    if (typeParam === "permission-template") {
+      const actorPerms = await loadUserPermissions(client, actorId);
+      if (!actorPerms.has("permissions.manage")) {
+        await client.query("ROLLBACK");
+        res.status(403).json({ error: "forbidden", permission: "permissions.manage" });
+        return;
+      }
+
+      const { rows: exists } = await client.query<{ c: number }>(
+        `
+        SELECT 1 AS c
+        FROM "permissionTemplate" t
+        WHERE t."id" = $1::uuid
+          AND ${siteAccessSql('t."siteId"', "$2")}
+        FOR UPDATE
+        `,
+        [recordId, actorId],
+      );
+      if (!exists.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const exclusiveMode = normalizeExclusiveMode(mode);
+      if (targets.length > 0) {
+        if (exclusiveMode === "set") {
+          const keys = await loadTemplateGrantKeys(client, recordId);
+          for (const targetId of targets) {
+            const applied = await applyTemplateToUser(
+              client,
+              actorId,
+              recordId,
+              keys,
+              targetId,
+            );
+            if (!applied.ok) {
+              await client.query("ROLLBACK");
+              res.status(403).json({ error: applied.error });
+              return;
+            }
+          }
+        } else {
+          await clearPermissionTemplateAssignment(client, targets, recordId);
         }
       }
 

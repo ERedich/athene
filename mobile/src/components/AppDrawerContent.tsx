@@ -52,6 +52,14 @@ const DEFAULT_LINKS: DrawerLink[] = [
   { to: "/work-orders", labelKey: "drawer.navWorkOrders" },
 ];
 
+const MOBILE_ROUTE_PERM: Record<string, string> = {
+  "/home": "dashboard.view",
+  "/cost-centers": "cost-centers.view",
+  "/assets": "assets.view",
+  "/baumstruktur": "baumstruktur.view",
+  "/work-orders": "work-orders.view",
+};
+
 export function AppDrawerContent(props: DrawerContentComponentProps) {
   const { navigation } = props;
   const pathname = usePathname();
@@ -59,7 +67,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
   const { t, i18n } = useTranslation();
   const { colors, isDark, toggleScheme } = useAppTheme();
   const navRipple = surfaceRippleColor(isDark);
-  const { signOut } = useAuth();
+  const { signOut, permissions } = useAuth();
   const athene = useAtheneAssistant();
   const activeLang = i18n.language.startsWith("de") ? "de" : "en";
   const [links, setLinks] = useState<DrawerLink[]>(DEFAULT_LINKS);
@@ -165,6 +173,16 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
     return pathname.startsWith(to);
   }
 
+  const visibleLinks = useMemo(
+    () =>
+      links.filter((link) => {
+        const key = MOBILE_ROUTE_PERM[link.to];
+        if (!key) return true;
+        return permissions.includes(key);
+      }),
+    [links, permissions],
+  );
+
   return (
     <DrawerContentScrollView
       {...props}
@@ -174,7 +192,7 @@ export function AppDrawerContent(props: DrawerContentComponentProps) {
         <Text style={styles.brandText}>ATHENE</Text>
       </View>
 
-      {links.map((link) => {
+      {visibleLinks.map((link) => {
         const active = isActive(link.to);
         const Icon = ICON_BY_TO[link.to] ?? Home;
         const label = link.label?.trim() || (link.labelKey ? t(link.labelKey) : link.to);

@@ -68,7 +68,16 @@ import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type AssetType = "site" | "structure" | "line" | "maintenanceObject";
 
@@ -494,16 +503,6 @@ const emptyForm = (): FormState => ({
   remark: "",
 });
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon =
-  "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
-
 const allowedParentTypes: Record<AssetType, AssetType[]> = {
   site: ["site"],
   structure: ["site", "structure"],
@@ -531,6 +530,9 @@ type AssetInspectionPoint = {
 
 type HeaderActionsProps = {
   t: (key: string) => string;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
   /** Edit/Delete only when exactly one asset is selected. */
   canEditOrDelete: boolean;
   onCreate: () => void;
@@ -542,6 +544,9 @@ type HeaderActionsProps = {
 
 function AssetsHeaderActions({
   t,
+  canCreate,
+  canUpdate,
+  canDelete,
   canEditOrDelete,
   onCreate,
   onEdit,
@@ -551,38 +556,44 @@ function AssetsHeaderActions({
 }: HeaderActionsProps) {
   return (
     <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-      <li>
-        <button
-          type="button"
-          className={createActionNavItem}
-          onClick={onCreate}
-        >
-          <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-          <span>{t("assets.new")}</span>
-        </button>
-      </li>
-      <li>
-        <button
-          type="button"
-          className={primaryActionNavItem}
-          disabled={!canEditOrDelete}
-          onClick={onEdit}
-        >
-          <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-          <span>{t("assets.edit")}</span>
-        </button>
-      </li>
-      <li>
-        <button
-          type="button"
-          className={deleteActionNavItem}
-          disabled={!canEditOrDelete}
-          onClick={onDelete}
-        >
-          <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-          <span>{t("assets.delete")}</span>
-        </button>
-      </li>
+      {canCreate ? (
+        <li>
+          <button
+            type="button"
+            className={createActionNavItem}
+            onClick={onCreate}
+          >
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("assets.new")}</span>
+          </button>
+        </li>
+      ) : null}
+      {canUpdate ? (
+        <li>
+          <button
+            type="button"
+            className={primaryActionNavItem}
+            disabled={!canEditOrDelete}
+            onClick={onEdit}
+          >
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("assets.edit")}</span>
+          </button>
+        </li>
+      ) : null}
+      {canDelete ? (
+        <li>
+          <button
+            type="button"
+            className={deleteActionNavItem}
+            disabled={!canEditOrDelete}
+            onClick={onDelete}
+          >
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("assets.delete")}</span>
+          </button>
+        </li>
+      ) : null}
       <li
         aria-hidden
         className="mx-1 h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)]"
@@ -666,6 +677,7 @@ function buildAssetKeyPathPreview(params: {
 
 export function AssetsPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("assets");
   const { user, appParameterBooleans, appParameterAssetTypes, appParameterAssetKeyMode, appParameterShowAssetKeyPath, appParameterAssetKeyPathSeparator } =
     useAuth();
   const langDe = i18n.language?.toLowerCase().startsWith("de");
@@ -1945,10 +1957,13 @@ export function AssetsPage() {
       delete: t("assets.delete"),
     },
     handlers: {
-      onCreate: openCreate,
-      onEdit: openEdit,
-      onDelete: confirmDelete,
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? confirmDelete : undefined,
     },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selectedAssets,
     setSelection: setSelectedAssets,
     leadingItems: atheneContextMenuItems,
@@ -1988,6 +2003,9 @@ export function AssetsPage() {
     () => (
       <AssetsHeaderActions
         t={t}
+        canCreate={crud.canCreate}
+        canUpdate={crud.canUpdate}
+        canDelete={crud.canDelete}
         canEditOrDelete={singleSelected != null}
         onCreate={openCreate}
         onEdit={() => {
@@ -2000,7 +2018,17 @@ export function AssetsPage() {
         onSearchTermInputChange={setSearchTermInput}
       />
     ),
-    [confirmDelete, openCreate, openEdit, searchTermInput, singleSelected, t],
+    [
+      confirmDelete,
+      crud.canCreate,
+      crud.canDelete,
+      crud.canUpdate,
+      openCreate,
+      openEdit,
+      searchTermInput,
+      singleSelected,
+      t,
+    ],
   );
 
   useEffect(() => {

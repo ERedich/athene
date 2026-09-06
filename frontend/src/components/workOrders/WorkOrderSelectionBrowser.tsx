@@ -235,7 +235,6 @@ export function WorkOrderSelectionBrowser({
           <DataTable
             value={paged}
             dataKey="id"
-            size="small"
             selectionMode="single"
             selection={selected}
             onSelectionChange={(e) => setSelected((e.value as WorkOrderSelectionRow | null) ?? null)}
@@ -247,7 +246,7 @@ export function WorkOrderSelectionBrowser({
               setSortOrder((e.sortOrder as 1 | -1 | 0) || -1);
             }}
             emptyMessage={t("workOrders.empty")}
-            className="text-sm"
+            className="app-data-table w-full"
           >
             <Column
               field="orderNumber"

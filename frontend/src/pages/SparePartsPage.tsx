@@ -48,8 +48,19 @@ import {
 } from "../lib/sparePartDialogUrl";
 import { buildSparePartBigMenuModel } from "../lib/sparePartBigContextMenu";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableBigContextMenu } from "../lib/useTableBigContextMenu";
 import { STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
+
+const selectedActionNavItem = `${primaryActionNavItem} app-header-action-nav-item--active`;
 
 type SiteOption = {
   id: string;
@@ -326,18 +337,6 @@ function formatIsoDateLocal(value: Date | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const selectedActionNavItem = `${actionNavItem} bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const selectedActionIcon = "text-[var(--color-primary)]";
-const deleteActionIcon = "text-red-500";
-
 const SHOW_THUMBS_STORAGE_KEY = "athene-spare-parts-show-thumbs";
 
 function readShowThumbnailsPreference(): boolean {
@@ -416,6 +415,7 @@ const SPARE_PARTS_TABLE_ROWS_PER_PAGE_OPTIONS = [25, 50, 100, 200];
 
 export function SparePartsPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("spare-parts");
   const athene = useAtheneAssistant();
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
@@ -1474,10 +1474,17 @@ export function SparePartsPage() {
               : spareParts.find((sp) => sp.id === row.id);
           if (full) openEdit(full, { tab: sparePartDialogTabs.Documents });
         },
+      }, {
+        canCreate: crud.canCreate,
+        canUpdate: crud.canUpdate,
+        canDelete: crud.canDelete,
       }),
     [
       athene,
       confirmDelete,
+      crud.canCreate,
+      crud.canDelete,
+      crud.canUpdate,
       navigate,
       openCreate,
       openEdit,
@@ -1508,38 +1515,44 @@ export function SparePartsPage() {
     }
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("spareParts.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={!selectedSparePart}
-            onClick={() => {
-              if (selectedSparePart) openEdit(selectedSparePart);
-            }}
-          >
-            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("spareParts.edit")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selectedSparePart}
-            onClick={() => {
-              if (selectedSparePart) confirmDelete(selectedSparePart);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("spareParts.delete")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("spareParts.new")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selectedSparePart}
+              onClick={() => {
+                if (selectedSparePart) openEdit(selectedSparePart);
+              }}
+            >
+              <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("spareParts.edit")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selectedSparePart}
+              onClick={() => {
+                if (selectedSparePart) confirmDelete(selectedSparePart);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("spareParts.delete")}</span>
+            </button>
+          </li>
+        ) : null}
         <li
           aria-hidden
           className="mx-1 h-6 w-px shrink-0 bg-[color-mix(in_srgb,var(--color-on-surface)_20%,transparent)]"
@@ -1564,7 +1577,7 @@ export function SparePartsPage() {
             }}
           >
             <ImageIcon
-              className={`${showThumbnails ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              className={`${primaryActionIcon} h-4 w-4`}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -1589,6 +1602,9 @@ export function SparePartsPage() {
     };
   }, [
     confirmDelete,
+    crud.canCreate,
+    crud.canDelete,
+    crud.canUpdate,
     dialogVisible,
     openCreate,
     openEdit,

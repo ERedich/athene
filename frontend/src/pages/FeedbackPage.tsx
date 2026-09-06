@@ -15,6 +15,11 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { lucidePrimeBtnIcon } from "../icons/lucide";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { useAppCrud } from "../lib/usePermission";
+import {
+  createActionIcon,
+  createActionNavItem,
+} from "../lib/headerActionClasses";
 
 type FeedbackEntry = {
   id: string;
@@ -27,14 +32,9 @@ type FeedbackEntry = {
 
 const bodyMax = 4000;
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const createActionIcon = "text-green-500/70";
-
 export function FeedbackPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("feedback");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
@@ -148,12 +148,14 @@ export function FeedbackPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("feedback.new")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("feedback.new")}</span>
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -171,7 +173,7 @@ export function FeedbackPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [openCreate, searchTerm, setHeaderActions, t]);
+  }, [crud.canCreate, openCreate, searchTerm, setHeaderActions, t]);
 
   const formatShortDt = (iso: string) => {
     try {

@@ -6,6 +6,7 @@ import type { AuthUser } from "../types/api";
 
 export type AuthSession = {
   user: AuthUser | null;
+  permissions: string[];
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;

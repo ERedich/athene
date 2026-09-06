@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { useAuth } from "../auth/AuthContext";
+import { appKeyForPathname } from "../auth/RequireAppView";
 import { apiFetch } from "../lib/api";
 import {
   parseWebNavLayout,
@@ -16,6 +18,7 @@ import {
   type SidebarNavGroup,
   type WebNavLayout,
 } from "../lib/navLayout";
+import { hasPermission, permissionKey } from "../lib/permissions";
 import { navGroups } from "./navModel";
 
 type NavLayoutContextValue = {
@@ -27,7 +30,32 @@ type NavLayoutContextValue = {
 
 const NavLayoutContext = createContext<NavLayoutContextValue | null>(null);
 
+function filterGroupsByPermission(
+  groups: SidebarNavGroup[],
+  permissions: string[],
+): SidebarNavGroup[] {
+  return groups
+    .map((g) => {
+      if (g.to) {
+        const appKey = appKeyForPathname(g.to);
+        if (appKey && !hasPermission(permissions, permissionKey(appKey, "view"))) {
+          return null;
+        }
+        return g;
+      }
+      const items = (g.items ?? []).filter((item) => {
+        const appKey = appKeyForPathname(item.to);
+        if (!appKey) return true;
+        return hasPermission(permissions, permissionKey(appKey, "view"));
+      });
+      if (items.length === 0) return null;
+      return { ...g, items };
+    })
+    .filter((g): g is SidebarNavGroup => g != null);
+}
+
 export function NavLayoutProvider({ children }: { children: ReactNode }) {
+  const { permissions } = useAuth();
   const [navLayout, setNavLayoutState] = useState<WebNavLayout | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -53,8 +81,9 @@ export function NavLayoutProvider({ children }: { children: ReactNode }) {
 
   const sidebarGroups = useMemo(() => {
     const resolved = resolveWebNavLayout(navGroups, navLayout);
-    return toSidebarNavGroups(resolved);
-  }, [navLayout]);
+    const groups = toSidebarNavGroups(resolved);
+    return filterGroupsByPermission(groups, permissions);
+  }, [navLayout, permissions]);
 
   const value = useMemo(
     () => ({

@@ -24,7 +24,16 @@ import {
   storedFromPickerValue,
 } from "../lib/colorHex";
 import { readableSiteColor } from "../lib/siteColor";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type Site = {
   id: string;
@@ -54,18 +63,10 @@ const emptyForm = (): FormState => ({
   colorHex: defaultColorHex,
 });
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
 
 export function SitesPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("sites");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [sites, setSites] = useState<Site[]>([]);
@@ -245,7 +246,14 @@ export function SitesPage() {
 
   const tableCtx = useTableContextMenu<Site>({
     labels: { new: t("sites.new"), edit: t("sites.edit"), delete: t("sites.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    handlers: {
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? confirmDelete : undefined,
+    },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selectedSite,
     setSelection: setSelectedSite,
   });
@@ -259,38 +267,44 @@ export function SitesPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("sites.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={!selectedSite}
-            onClick={() => {
-              if (selectedSite) openEdit(selectedSite);
-            }}
-          >
-            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("sites.edit")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selectedSite}
-            onClick={() => {
-              if (selectedSite) confirmDelete(selectedSite);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("sites.delete")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("sites.new")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selectedSite}
+              onClick={() => {
+                if (selectedSite) openEdit(selectedSite);
+              }}
+            >
+              <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("sites.edit")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selectedSite}
+              onClick={() => {
+                if (selectedSite) confirmDelete(selectedSite);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("sites.delete")}</span>
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -307,7 +321,18 @@ export function SitesPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedSite, setHeaderActions, t]);
+  }, [
+    confirmDelete,
+    crud.canCreate,
+    crud.canDelete,
+    crud.canUpdate,
+    openCreate,
+    openEdit,
+    searchTerm,
+    selectedSite,
+    setHeaderActions,
+    t,
+  ]);
 
   const plantBody = (row: Site) =>
     row.isPlant ? (

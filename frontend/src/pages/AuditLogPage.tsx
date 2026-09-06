@@ -202,9 +202,8 @@ export function AuditLogPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
-      <p className="m-0 text-sm text-on-surface-variant">{t("auditLog.intro")}</p>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-sm border border-white/10 bg-surface-container-low p-3">
+      <div className="flex flex-wrap items-end gap-3 bg-surface-container-low px-3 py-2">
         <div className="space-y-1">
           <label className="block text-[10px] uppercase tracking-wider text-outline" htmlFor="al-table">
             {t("auditLog.filterTable")}

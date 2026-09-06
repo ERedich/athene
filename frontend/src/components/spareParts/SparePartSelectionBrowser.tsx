@@ -201,7 +201,6 @@ export function SparePartSelectionBrowser({
           <DataTable
             value={paged}
             dataKey="id"
-            size="small"
             selectionMode="single"
             selection={selected}
             onSelectionChange={(e) => setSelected((e.value as SparePartSelectionRow | null) ?? null)}
@@ -213,7 +212,7 @@ export function SparePartSelectionBrowser({
               setSortOrder((e.sortOrder as 1 | -1 | 0) || 1);
             }}
             emptyMessage={t("spareParts.empty")}
-            className="text-sm"
+            className="app-data-table w-full"
           >
             <Column field="key" header={t("spareParts.key")} sortable className="min-w-28" />
             <Column field="name" header={t("spareParts.name")} sortable className="min-w-48" />

@@ -224,7 +224,6 @@ export function AssetSelectionBrowser({
           <DataTable
             value={paged}
             dataKey="id"
-            size="small"
             selectionMode="single"
             selection={selected}
             onSelectionChange={(e) => setSelected((e.value as AssetSelectionRow | null) ?? null)}
@@ -236,7 +235,7 @@ export function AssetSelectionBrowser({
               setSortOrder((e.sortOrder as 1 | -1 | 0) || 1);
             }}
             emptyMessage={t("assets.empty")}
-            className="text-sm"
+            className="app-data-table w-full"
           >
             <Column field="key" header={t("assets.key")} sortable className="min-w-28" />
             <Column field="name" header={t("assets.name")} sortable className="min-w-48" />

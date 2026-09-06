@@ -50,6 +50,14 @@ import { defaultTabsPayload } from "../lib/layoutEditor/types";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type SiteOption = {
   id: string;
@@ -74,21 +82,11 @@ type DraftState = {
   isSystem: boolean;
 };
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
-
 export function LayoutEditorPage() {
   const { t } = useTranslation();
-  const { user, appParameterBooleans } = useAuth();
+  const { user, appParameterBooleans, permissions } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
-  const canEditSystem = user.loginName === "admin";
+  const canEditSystem = permissions.includes("layout-editor.editSystem");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const editorRef = useRef<LayoutEditorPanelHandle>(null);
@@ -581,7 +579,7 @@ export function LayoutEditorPage() {
       <ConfirmDialog />
 
       {mode === "table" && draft ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <LayoutTableEditorPanel
             appKey={draft.appKey}
             value={draft.table}

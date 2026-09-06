@@ -21,7 +21,16 @@ import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type SiteOption = {
   id: string;
@@ -77,15 +86,6 @@ const emptyForm = (): FormState => ({
   employeeId: null,
 });
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const createActionIcon = "text-green-500/70";
-const deleteActionIcon = "text-red-500";
 
 function uniqueSiteIds(ids: string[]): string[] {
   return [...new Set(ids)];
@@ -107,6 +107,7 @@ function resolveEmployeeIdFromDropdownValue(value: unknown): string | null {
 
 export function UsersPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("users");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -119,7 +120,7 @@ export function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm());
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -350,7 +351,14 @@ export function UsersPage() {
 
   const tableCtx = useTableContextMenu<User>({
     labels: { new: t("users.new"), edit: t("users.edit"), delete: t("users.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    handlers: {
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? confirmDelete : undefined,
+    },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selectedUser,
     setSelection: setSelectedUser,
   });
@@ -364,38 +372,44 @@ export function UsersPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("users.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={!selectedUser}
-            onClick={() => {
-              if (selectedUser) openEdit(selectedUser);
-            }}
-          >
-            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("users.edit")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selectedUser}
-            onClick={() => {
-              if (selectedUser) confirmDelete(selectedUser);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("users.delete")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("users.new")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selectedUser}
+              onClick={() => {
+                if (selectedUser) void openEdit(selectedUser);
+              }}
+            >
+              <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("users.edit")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selectedUser}
+              onClick={() => {
+                if (selectedUser) confirmDelete(selectedUser);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("users.delete")}</span>
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -412,7 +426,18 @@ export function UsersPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedUser, setHeaderActions, t]);
+  }, [
+    confirmDelete,
+    crud.canCreate,
+    crud.canDelete,
+    crud.canUpdate,
+    openCreate,
+    openEdit,
+    searchTerm,
+    selectedUser,
+    setHeaderActions,
+    t,
+  ]);
 
   const accessSitesBody = (row: User) => {
     const selectedSites = uniqueSiteIds(row.siteIds)
@@ -623,7 +648,9 @@ export function UsersPage() {
           dataKey="id"
           selection={selectedUser}
           onSelectionChange={(e) => setSelectedUser(e.value as User | null)}
-          onRowDoubleClick={(e) => openEdit(e.data as User)}
+          onRowDoubleClick={(e) => {
+            if (crud.canUpdate) void openEdit(e.data as User);
+          }}
           {...tableCtx.tableProps}
           selectionMode="single"
           metaKeySelection={false}
@@ -709,192 +736,201 @@ export function UsersPage() {
         draggable={false}
         resizable={false}
       >
-        <div className="flex flex-col gap-4 pt-1">
-          <div className="space-y-2">
-            <label
-              htmlFor="user-login-name"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("users.loginName")}
-            </label>
-            <InputText
-              id="user-login-name"
-              value={form.loginName}
-              onChange={(e) => setForm((f) => ({ ...f, loginName: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
+            <div className="flex flex-col gap-4 pt-1">
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-login-name"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("users.loginName")}
+                </label>
+                <InputText
+                  id="user-login-name"
+                  value={form.loginName}
+                  onChange={(e) => setForm((f) => ({ ...f, loginName: e.target.value }))}
+                  className="w-full"
+                  autoComplete="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label htmlFor="user-name" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
-              {t("users.name")}
-            </label>
-            <InputText
-              id="user-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full"
-              autoComplete="off"
-            />
-          </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-name"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("users.name")}
+                </label>
+                <InputText
+                  id="user-name"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full"
+                  autoComplete="off"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="user-password"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {editingId ? t("users.passwordOptional") : t("users.password")}
-            </label>
-            <Password
-              inputId="user-password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              className="w-full"
-              inputClassName="w-full"
-              toggleMask
-              feedback={false}
-              placeholder={editingId ? t("users.passwordOptionalPlaceholder") : ""}
-            />
-          </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-password"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {editingId ? t("users.passwordOptional") : t("users.password")}
+                </label>
+                <Password
+                  inputId="user-password"
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  className="w-full"
+                  inputClassName="w-full"
+                  toggleMask
+                  feedback={false}
+                  placeholder={editingId ? t("users.passwordOptionalPlaceholder") : ""}
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="user-working-site"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("users.primarySite")}
-            </label>
-            <Dropdown
-              inputId="user-working-site"
-              value={form.workingSiteId}
-              options={workingSiteOptions}
-              optionLabel="name"
-              optionValue="id"
-              itemTemplate={renderSiteOption}
-              valueTemplate={(value) => {
-                const selected = resolveSiteFromDropdownValue(value);
-                if (!selected) {
-                  return (
-                    <span className="text-on-surface-variant">{t("users.primarySitePlaceholder")}</span>
-                  );
-                }
-                return renderSiteOption(selected);
-              }}
-              onChange={(e) => {
-                const nextWorkingSiteId = String(e.value ?? "");
-                setForm((f) => {
-                  const keepEmployee =
-                    f.employeeId !== null &&
-                    employees.some(
-                      (employee) =>
-                        employee.id === f.employeeId && employee.siteId === nextWorkingSiteId,
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-working-site"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("users.primarySite")}
+                </label>
+                <Dropdown
+                  inputId="user-working-site"
+                  value={form.workingSiteId}
+                  options={workingSiteOptions}
+                  optionLabel="name"
+                  optionValue="id"
+                  itemTemplate={renderSiteOption}
+                  valueTemplate={(value) => {
+                    const selected = resolveSiteFromDropdownValue(value);
+                    if (!selected) {
+                      return (
+                        <span className="text-on-surface-variant">
+                          {t("users.primarySitePlaceholder")}
+                        </span>
+                      );
+                    }
+                    return renderSiteOption(selected);
+                  }}
+                  onChange={(e) => {
+                    const nextWorkingSiteId = String(e.value ?? "");
+                    setForm((f) => {
+                      const keepEmployee =
+                        f.employeeId !== null &&
+                        employees.some(
+                          (employee) =>
+                            employee.id === f.employeeId && employee.siteId === nextWorkingSiteId,
+                        );
+                      return {
+                        ...f,
+                        workingSiteId: nextWorkingSiteId,
+                        employeeId: keepEmployee ? f.employeeId : null,
+                      };
+                    });
+                  }}
+                  placeholder={t("users.primarySitePlaceholder")}
+                  className="w-full"
+                  filter
+                  appendTo={overlayAppendTo}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-employee"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("users.employee.label")}
+                </label>
+                <Dropdown
+                  inputId="user-employee"
+                  value={form.employeeId}
+                  options={employeeDropdownOptions}
+                  optionLabel="name"
+                  optionValue="id"
+                  placeholder={
+                    form.workingSiteId
+                      ? t("users.employee.selectPlaceholder")
+                      : t("users.employee.placeholder")
+                  }
+                  className="w-full"
+                  showClear
+                  disabled={!form.workingSiteId}
+                  filter
+                  appendTo={overlayAppendTo}
+                  itemTemplate={(employee: EmployeeOption) => (
+                    <span>
+                      {employee.key ? `${employee.key} - ${employee.name}` : employee.name}
+                    </span>
+                  )}
+                  valueTemplate={(value) => {
+                    const selectedId = resolveEmployeeIdFromDropdownValue(value);
+                    if (!selectedId) {
+                      return (
+                        <span className="text-on-surface-variant">
+                          {form.workingSiteId
+                            ? t("users.employee.selectPlaceholder")
+                            : t("users.employee.placeholder")}
+                        </span>
+                      );
+                    }
+                    const selected = employeeDropdownOptions.find(
+                      (employee) => employee.id === selectedId,
                     );
-                  return {
-                    ...f,
-                    workingSiteId: nextWorkingSiteId,
-                    employeeId: keepEmployee ? f.employeeId : null,
-                  };
-                });
-              }}
-              placeholder={t("users.primarySitePlaceholder")}
-              className="w-full"
-              filter
-              appendTo={overlayAppendTo}
-            />
-          </div>
+                    if (!selected) {
+                      return (
+                        <span className="text-on-surface-variant">
+                          {form.workingSiteId
+                            ? t("users.employee.selectPlaceholder")
+                            : t("users.employee.placeholder")}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span>
+                        {selected.key ? `${selected.key} - ${selected.name}` : selected.name}
+                      </span>
+                    );
+                  }}
+                  onChange={(e) => {
+                    const nextId = resolveEmployeeIdFromDropdownValue(e.value);
+                    setForm((f) => ({ ...f, employeeId: nextId }));
+                  }}
+                />
+              </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="user-employee"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("users.employee.label")}
-            </label>
-            <Dropdown
-              inputId="user-employee"
-              value={form.employeeId}
-              options={employeeDropdownOptions}
-              optionLabel="name"
-              optionValue="id"
-              placeholder={
-                form.workingSiteId
-                  ? t("users.employee.selectPlaceholder")
-                  : t("users.employee.placeholder")
-              }
-              className="w-full"
-              showClear
-              disabled={!form.workingSiteId}
-              filter
-              appendTo={overlayAppendTo}
-              itemTemplate={(employee: EmployeeOption) => (
-                <span>{employee.key ? `${employee.key} - ${employee.name}` : employee.name}</span>
-              )}
-              valueTemplate={(value) => {
-                const selectedId = resolveEmployeeIdFromDropdownValue(value);
-                if (!selectedId) {
-                  return (
-                    <span className="text-on-surface-variant">
-                      {form.workingSiteId
-                        ? t("users.employee.selectPlaceholder")
-                        : t("users.employee.placeholder")}
-                    </span>
-                  );
-                }
-                const selected = employeeDropdownOptions.find((employee) => employee.id === selectedId);
-                if (!selected) {
-                  return (
-                    <span className="text-on-surface-variant">
-                      {form.workingSiteId
-                        ? t("users.employee.selectPlaceholder")
-                        : t("users.employee.placeholder")}
-                    </span>
-                  );
-                }
-                return (
-                  <span>
-                    {selected.key ? `${selected.key} - ${selected.name}` : selected.name}
-                  </span>
-                );
-              }}
-              onChange={(e) => {
-                const nextId = resolveEmployeeIdFromDropdownValue(e.value);
-                setForm((f) => ({ ...f, employeeId: nextId }));
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="user-additional-sites"
-              className="block text-[11px] text-outline uppercase tracking-[0.1em]"
-            >
-              {t("users.additionalSites")}
-            </label>
-            <MultiSelect
-              inputId="user-additional-sites"
-              value={form.additionalSiteIds}
-              options={accessSiteOptions}
-              optionLabel="name"
-              optionValue="id"
-              itemTemplate={renderSiteOption}
-              selectedItemTemplate={renderSelectedSiteChip}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  additionalSiteIds: uniqueSiteIds(
-                    (Array.isArray(e.value) ? e.value : []).map((v) => String(v)),
-                  ).filter((id) => id !== f.workingSiteId),
-                }))
-              }
-              placeholder={t("users.additionalSitesPlaceholder")}
-              className="w-full users-site-multiselect"
-              filter
-              display="comma"
-              appendTo={overlayAppendTo}
-            />
-          </div>
-        </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="user-additional-sites"
+                  className="block text-[11px] text-outline uppercase tracking-[0.1em]"
+                >
+                  {t("users.additionalSites")}
+                </label>
+                <MultiSelect
+                  inputId="user-additional-sites"
+                  value={form.additionalSiteIds}
+                  options={accessSiteOptions}
+                  optionLabel="name"
+                  optionValue="id"
+                  itemTemplate={renderSiteOption}
+                  selectedItemTemplate={renderSelectedSiteChip}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      additionalSiteIds: uniqueSiteIds(
+                        (Array.isArray(e.value) ? e.value : []).map((v) => String(v)),
+                      ).filter((id) => id !== f.workingSiteId),
+                    }))
+                  }
+                  placeholder={t("users.additionalSitesPlaceholder")}
+                  className="w-full users-site-multiselect"
+                  filter
+                  display="comma"
+                  appendTo={overlayAppendTo}
+                />
+              </div>
+            </div>
       </AppDialog>
     </div>
   );

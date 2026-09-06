@@ -4,6 +4,7 @@ import {
   LayoutTemplate,
   Menu,
   Share2,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +26,7 @@ import {
 const TYPE_ICONS: Record<AssignmentTypeId, LucideIcon> = {
   menu: Menu,
   "search-preset": Share2,
+  "permission-template": Shield,
   dashboard: LayoutGrid,
   layout: LayoutTemplate,
 };
@@ -88,7 +90,7 @@ export function AssignmentsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("assignments.searchHub")}
-              className="app-header-search-input !rounded-sm text-sm"
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
               aria-label={t("assignments.searchHub")}
             />
           </IconField>
@@ -127,7 +129,7 @@ export function AssignmentsPage() {
   return (
     <div className="app-assignments-page min-h-0 flex-1 overflow-auto">
       <Toast ref={toast} position="top-right" />
-      <p className="app-assignments-lead px-4 pt-4 text-sm text-on-surface-variant">
+      <p className="app-assignments-lead text-sm text-on-surface-variant">
         {t("assignments.hubLead")}
       </p>
       <div className="app-assignments-grid" role="list">

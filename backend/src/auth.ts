@@ -14,6 +14,8 @@ import {
 } from "./appParameters.js";
 import { isProduction, sessionSecret } from "./authSessionConfig.js";
 import { pool } from "./db.js";
+import { catalogForClient } from "./permissionCatalog.js";
+import { loadUserPermissions } from "./middleware/requirePermission.js";
 import { clearSessionCookie, createSessionToken, writeSessionCookie } from "./sessionToken.js";
 
 export type AuthUserRow = {
@@ -95,13 +97,20 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
     writeSessionCookie(res, user.id, sessionSecret, isProduction);
+    const permissions = [...(await loadUserPermissions(pool, user.id))];
+    const permissionCatalog = catalogForClient();
     const wantsMobileBearer =
       String(req.headers["x-athene-mobile-auth"] ?? "").trim() === "1";
     if (wantsMobileBearer) {
-      res.json({ user, sessionToken: createSessionToken(user.id, sessionSecret) });
+      res.json({
+        user,
+        permissions,
+        permissionCatalog,
+        sessionToken: createSessionToken(user.id, sessionSecret),
+      });
       return;
     }
-    res.json({ user });
+    res.json({ user, permissions, permissionCatalog });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "internal_error" });
@@ -180,8 +189,12 @@ router.get("/me", async (req: Request, res: Response) => {
     } catch (primErr) {
       console.warn("[athene-backend] GN-PRIM load skipped:", primErr);
     }
+    const permissions = [...(await loadUserPermissions(pool, user.id))];
+    const permissionCatalog = catalogForClient();
     res.json({
       user,
+      permissions,
+      permissionCatalog,
       appParameterBooleans,
       appParameterAssetTypes,
       appParameterDefaultWorkgroupId,

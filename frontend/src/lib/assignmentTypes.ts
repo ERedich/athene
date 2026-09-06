@@ -1,4 +1,9 @@
-export type AssignmentTypeId = "menu" | "search-preset" | "dashboard" | "layout";
+export type AssignmentTypeId =
+  | "menu"
+  | "search-preset"
+  | "permission-template"
+  | "dashboard"
+  | "layout";
 
 export type AssignmentCardinality = "exclusive" | "share";
 
@@ -45,6 +50,9 @@ export type AssignmentDirectoryUser = {
   menuConfigKey: string | null;
   menuConfigName: string | null;
   searchPresetShareCount: number;
+  permissionTemplateId: string | null;
+  permissionTemplateKey: string | null;
+  permissionTemplateName: string | null;
 };
 
 export type AssignmentUserDetail = {
@@ -53,6 +61,7 @@ export type AssignmentUserDetail = {
   name: string;
   menu: { id: string; key: string | null; name: string | null } | null;
   searchPresets: Array<{ id: string; name: string; ownerLoginName: string }>;
+  permissionTemplate: { id: string; key: string | null; name: string | null } | null;
 };
 
 export type AssignMode = "set" | "add" | "remove";
@@ -73,14 +82,18 @@ export type AssignResult = {
 export const ASSIGNMENT_TYPE_LABEL_KEYS: Record<AssignmentTypeId, string> = {
   menu: "assignments.typeMenu",
   "search-preset": "assignments.typeSearchPreset",
+  "permission-template": "assignments.typePermissionTemplate",
   dashboard: "assignments.typeDashboard",
   layout: "assignments.typeLayout",
 };
+
+export type EnabledAssignmentType = "menu" | "search-preset" | "permission-template";
 
 export function isAssignmentTypeId(value: string | undefined): value is AssignmentTypeId {
   return (
     value === "menu" ||
     value === "search-preset" ||
+    value === "permission-template" ||
     value === "dashboard" ||
     value === "layout"
   );
@@ -88,6 +101,10 @@ export function isAssignmentTypeId(value: string | undefined): value is Assignme
 
 export function isEnabledAssignmentType(
   value: string | undefined,
-): value is "menu" | "search-preset" {
-  return value === "menu" || value === "search-preset";
+): value is EnabledAssignmentType {
+  return value === "menu" || value === "search-preset" || value === "permission-template";
+}
+
+export function isExclusiveAssignmentType(value: string | undefined): boolean {
+  return value === "menu" || value === "permission-template";
 }

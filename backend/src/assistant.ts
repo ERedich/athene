@@ -17,6 +17,7 @@ import {
   workOrderDocumentCountSubquery,
 } from "./documents/index.js";
 import { pool } from "./db.js";
+import { loadUserPermissions } from "./middleware/requirePermission.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 import { broadcastWorkOrderCreated } from "./workOrderRealtime.js";
 import { updateWorkOrderPlanning, updateWorkOrderPlanningBatch } from "./workOrders.js";
@@ -4051,6 +4052,47 @@ async function resolveWorkOrderIdFromToolArgs(
 }
 
 async function runTool(userId: string, name: string, rawArgs: string): Promise<unknown> {
+  const TOOL_PERMISSION: Record<string, string> = {
+    getWorkOrderDetails: "work-orders.view",
+    listWorkOrderDocumentCounts: "work-orders.view",
+    searchWorkOrders: "work-orders.view",
+    listWorkOrdersByAsset: "work-orders.view",
+    countWorkOrdersByStatus: "work-orders.view",
+    getWorkOrderStatusEvents: "work-orders.view",
+    getWorkOrderTransactions: "transactions.view",
+    getAssetDetails: "assets.view",
+    getSparePartDetails: "spare-parts.view",
+    searchSpareParts: "spare-parts.view",
+    getWarehouseDetails: "warehouses.view",
+    listWarehouseStock: "warehouses.view",
+    searchStock: "spare-parts.view",
+    listDocuments: "work-orders.view",
+    readDocumentText: "work-orders.view",
+    listWorkOrdersInPlanningWindow: "kalendar.view",
+    analyzeWorkOrderPlanning: "kalendar.view",
+    findPlanningSlots: "kalendar.view",
+    shiftWorkOrdersInPlanningWindow: "kalendar.view",
+    planSequentialWorkOrderSlots: "kalendar.view",
+    rescheduleWorkOrdersBatch: "work-orders.update",
+    rescheduleWorkOrder: "work-orders.update",
+    createWorkOrderFromOrder: "work-orders.create",
+    createWorkOrder: "work-orders.create",
+    listMaintenancePlans: "maintenance-plans.view",
+    generateMaintenancePlanWorkOrder: "maintenance-plans.generateDue",
+    listWorkOrderSearchPresets: "search-presets.view",
+    searchEmployeesForFilter: "employees.view",
+    searchWorkgroupsForFilter: "workgroups.view",
+    searchAssetsForFilter: "assets.view",
+    createWorkOrderSearchPreset: "search-presets.create",
+  };
+  const required = TOOL_PERMISSION[name];
+  if (required) {
+    const perms = await loadUserPermissions(pool, userId);
+    if (!perms.has(required)) {
+      return { error: "permission_denied", permission: required };
+    }
+  }
+
   const args = rawArgs ? (JSON.parse(rawArgs) as Record<string, unknown>) : {};
   if (name === "getWorkOrderDetails") {
     const resolved = await resolveWorkOrderIdFromToolArgs(userId, args);

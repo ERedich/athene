@@ -52,6 +52,12 @@ import { ReportCodePreview } from "../components/ReportCodePreview";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { useThemeSwitcher } from "../theme";
+import {
+  createActionNavItem,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
+
+const selectedActionNavItem = `${primaryActionNavItem} app-header-action-nav-item--active`;
 
 type Step = 1 | 2;
 type ReportSection = "header" | "groupHeader" | "detail" | "groupFooter" | "footer";
@@ -239,11 +245,6 @@ const BAND_META: BandMeta[] = [
   },
 ];
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const selectedActionNavItem = `${actionNavItem} bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]`;
 const toolbarBtn =
   "inline-flex !h-9 !w-9 !min-w-9 shrink-0 items-center justify-center !rounded-sm !border-0 !p-0 text-on-surface-variant transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)] disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const toolbarBtnActive =
@@ -2476,7 +2477,7 @@ export function ReportDesignerPage() {
                 <div className="flex w-full gap-1">
                   <button
                     type="button"
-                    className={`${actionNavItem} !h-9 flex-1 justify-center px-2 text-xs ${
+                    className={`${primaryActionNavItem} !h-9 flex-1 justify-center px-2 text-xs ${
                       layout.grouping.sort === "asc" ? selectedActionNavItem : ""
                     }`}
                     disabled={!layout.grouping.enabled}
@@ -2492,7 +2493,7 @@ export function ReportDesignerPage() {
                   </button>
                   <button
                     type="button"
-                    className={`${actionNavItem} !h-9 flex-1 justify-center px-2 text-xs ${
+                    className={`${primaryActionNavItem} !h-9 flex-1 justify-center px-2 text-xs ${
                       layout.grouping.sort === "desc" ? selectedActionNavItem : ""
                     }`}
                     disabled={!layout.grouping.enabled}

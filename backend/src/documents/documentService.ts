@@ -38,6 +38,11 @@ export type AssetDocumentListRow = {
   updatedBy: string;
 };
 
+export type AssetSubtreeDocumentListRow = AssetDocumentListRow & {
+  assetKey: string;
+  assetName: string;
+};
+
 export type SparePartDocumentListRow = {
   id: string;
   sparePartId: string;
@@ -112,6 +117,44 @@ export async function listAssetDocuments(
     ORDER BY d."createdAt" DESC
     `,
     [assetId],
+  );
+  return rows;
+}
+
+/** Own + descendant asset documents (site-access filtered at every tree level). */
+export async function listAssetDocumentsInSubtree(
+  userId: string,
+  assetId: string,
+): Promise<AssetSubtreeDocumentListRow[] | null> {
+  const accessible = await assertEntityAccessible(userId, "asset", assetId);
+  if (!accessible) return null;
+  const { rows } = await pool.query<AssetSubtreeDocumentListRow>(
+    `
+    WITH RECURSIVE subtree AS (
+      SELECT a."id", a."key", a."name"
+      FROM "asset" a
+      WHERE a."id" = $1::uuid
+        AND ${siteAccessSql('a."siteId"', "$2")}
+      UNION ALL
+      SELECT c."id", c."key", c."name"
+      FROM "asset" c
+      JOIN subtree s ON c."parentAssetId" = s."id"
+      WHERE ${siteAccessSql('c."siteId"', "$2")}
+    )
+    SELECT
+      ${documentMetadataSelect},
+      dl."entityId" AS "assetId",
+      s."key" AS "assetKey",
+      s."name" AS "assetName"
+    FROM "document" d
+    JOIN "documentLink" dl ON dl."documentId" = d."id"
+      AND dl."entityType" = 'asset'
+    JOIN subtree s ON s."id" = dl."entityId"
+    LEFT JOIN "users" created_by ON created_by."id" = d."createdBy"
+    LEFT JOIN "users" updated_by ON updated_by."id" = d."updatedBy"
+    ORDER BY d."createdAt" DESC
+    `,
+    [assetId, userId],
   );
   return rows;
 }

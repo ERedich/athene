@@ -198,7 +198,10 @@ export default function WorkOrdersListScreen() {
   const qc = useQueryClient();
   const { colors, isDark } = useAppTheme();
   const athene = useAtheneAssistant();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
+  const canPermStart = permissions.includes("workOrder.start");
+  const canPermPause = permissions.includes("workOrder.pause");
+  const canPermFeedback = permissions.includes("workOrder.feedback");
   const rowRipple = surfaceRippleColor(isDark);
   const [searchByIndex, setSearchByIndex] = useState<Record<number, string>>({});
   const [activePresetIndex, setActivePresetIndex] = useState(0);
@@ -755,23 +758,23 @@ export default function WorkOrdersListScreen() {
           });
         }}
         onStart={() => {
-          if (!selectedOrder || !canStartWorkOrder(selectedOrder.status)) return;
+          if (!selectedOrder || !canStartWorkOrder(selectedOrder.status) || !canPermStart) return;
           void startOrder(selectedOrder);
         }}
         onPause={() => {
-          if (!selectedOrder || !canPauseWorkOrder(selectedOrder.status)) return;
+          if (!selectedOrder || !canPauseWorkOrder(selectedOrder.status) || !canPermPause) return;
           setActionsOpen(false);
           setFeedbackEntryMode("pause");
           setFeedbackOpen(true);
         }}
         onStop={() => {
-          if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status)) return;
+          if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status) || !canPermFeedback) return;
           setActionsOpen(false);
           setFeedbackEntryMode("stop");
           setFeedbackOpen(true);
         }}
         onFeedback={() => {
-          if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status)) return;
+          if (!selectedOrder || !canFeedbackWorkOrder(selectedOrder.status) || !canPermFeedback) return;
           setActionsOpen(false);
           setFeedbackEntryMode("create");
           setFeedbackOpen(true);

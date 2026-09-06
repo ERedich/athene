@@ -28,6 +28,7 @@ export const NAV_CATALOG: NavCatalogGroup[] = [
     id: "administration",
     items: [
       "/users",
+      "/berechtigungswesen",
       "/zuweisungen",
       "/sites",
       "/kpi-builder",

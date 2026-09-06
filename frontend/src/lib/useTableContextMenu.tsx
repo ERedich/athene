@@ -48,6 +48,10 @@ type ContextMenuSharedOptions<T extends object> = {
   handlers: CrudHandlers<T>;
   leadingItems?: (row: T | null) => MenuItem[];
   extraItems?: (row: T | null) => MenuItem[];
+  /** When false, omit New from the menu. Default true when onCreate is set. */
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 };
 
 type SingleSelectionOptions<T extends object> = ContextMenuSharedOptions<T> & {
@@ -75,6 +79,9 @@ export type DataTableContextMenuOptions<T extends object> =
  */
 export function useTableContextMenu<T extends object>(opts: DataTableContextMenuOptions<T>) {
   const { labels, handlers, leadingItems, extraItems } = opts;
+  const canCreate = opts.canCreate ?? handlers.onCreate != null;
+  const canEdit = opts.canEdit ?? handlers.onEdit != null;
+  const canDelete = opts.canDelete ?? handlers.onDelete != null;
   const selectionMode = opts.selectionMode ?? "single";
   const isMultiple = selectionMode === "multiple";
   const cmRef = useRef<ContextMenu>(null);
@@ -99,29 +106,34 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
   const model = useMemo((): MenuItem[] => {
     // Leading (e.g. Athene): only when exactly one row — same rule as Edit/Delete.
     const leading = leadingItems?.(exactlyOne ? primaryRow : null) ?? [];
-    const base: MenuItem[] = [
-      {
+    const base: MenuItem[] = [];
+    if (canCreate) {
+      base.push({
         label: labels.new,
         icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         command: () => handlers.onCreate?.(),
-      },
-      {
+      });
+    }
+    if (canEdit) {
+      base.push({
         label: labels.edit,
         icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !exactlyOne,
         command: () => {
           if (exactlyOne && primaryRow != null) handlers.onEdit?.(primaryRow);
         },
-      },
-      {
+      });
+    }
+    if (canDelete) {
+      base.push({
         label: labels.delete,
         icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
         disabled: !exactlyOne,
         command: () => {
           if (exactlyOne && primaryRow != null) handlers.onDelete?.(primaryRow);
         },
-      },
-    ];
+      });
+    }
     // Extras (e.g. Print): any non-empty selection.
     const extra = extraItems?.(menuPrimary) ?? [];
     return [
@@ -133,6 +145,9 @@ export function useTableContextMenu<T extends object>(opts: DataTableContextMenu
       ...(extra.length > 0 ? [{ separator: true }, ...extra] : []),
     ];
   }, [
+    canCreate,
+    canDelete,
+    canEdit,
     exactlyOne,
     extraItems,
     handlers,

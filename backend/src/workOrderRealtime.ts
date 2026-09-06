@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
 import { pool } from "./db.js";
+import { loadUserPermissions } from "./middleware/requirePermission.js";
 import { siteAccessSql } from "./siteAccess.js";
 import { readSessionUserIdFromCookieHeader } from "./sessionToken.js";
 import { notifyWorkOrderSubscribers, type WorkOrderSubscriptionChangeKind } from "./workOrderSubscriptionNotify.js";
@@ -64,13 +65,21 @@ const WS_PING_INTERVAL_MS = 25_000;
 /** Drop the socket if no pong arrives within this many ping cycles. */
 const WS_PING_MISSED_LIMIT = 2;
 
-export function registerWorkOrderRealtime(
+export async function registerWorkOrderRealtime(
   req: IncomingMessage,
   ws: WebSocket,
   sessionSecret: string,
-): boolean {
+): Promise<boolean> {
   const userId = readSessionUserIdFromCookieHeader(req.headers.cookie, sessionSecret);
   if (!userId) return false;
+  try {
+    const perms = await loadUserPermissions(pool, userId);
+    if (!perms.has("work-orders.view") && !perms.has("monitoring.view")) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
   sockets.set(ws, userId);
 
   let missedPongs = 0;

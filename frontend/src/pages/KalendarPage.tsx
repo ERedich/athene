@@ -553,7 +553,7 @@ export function KalendarPage() {
       />
 
       {error ? (
-        <div className="mx-4 mt-4 mb-3 rounded-lg bg-surface-container-low p-3 text-sm text-on-surface">
+        <div className="m-4 rounded-lg bg-surface-container-low p-3 text-sm text-on-surface">
           <p>{error}</p>
           <Button
             type="button"

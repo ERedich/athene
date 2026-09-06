@@ -66,22 +66,22 @@ export function AssignmentsUserPage() {
   }, [navigate, setHeaderActions, t]);
 
   return (
-    <div className="app-assignments-user-page flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+    <div className="app-assignments-user-page flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
       <Toast ref={toast} position="top-right" />
       {loading ? (
-        <p className="m-0 text-sm text-on-surface-variant">…</p>
+        <p className="m-0 px-4 pt-4 text-sm text-on-surface-variant">…</p>
       ) : !detail ? (
-        <p className="m-0 text-sm text-on-surface-variant">
+        <p className="m-0 px-4 pt-4 text-sm text-on-surface-variant">
           {t("assignments.loadError")}
         </p>
       ) : (
-        <>
+        <div className="flex flex-col gap-4 p-4">
           <h2 className="m-0 text-lg font-medium text-on-surface">
             {t("assignments.userDetailTitle", { login: detail.loginName })}
           </h2>
           <p className="m-0 text-sm text-on-surface-variant">{detail.name}</p>
 
-          <section className="rounded-lg bg-surface-container-low p-4">
+          <section className="rounded-sm bg-surface-container-low p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="m-0 text-xs font-medium uppercase tracking-wider text-on-surface-variant">
                 {t("assignments.userDetailMenu")}
@@ -111,7 +111,39 @@ export function AssignmentsUserPage() {
             </p>
           </section>
 
-          <section className="rounded-lg bg-surface-container-low p-4">
+          <section className="rounded-sm bg-surface-container-low p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="m-0 text-xs font-medium uppercase tracking-wider text-on-surface-variant">
+                {t("assignments.userDetailTemplate")}
+              </h3>
+              {detail.permissionTemplate ? (
+                <Button
+                  type="button"
+                  className="p-button-text p-button-sm"
+                  label={t("assignments.userDetailChange")}
+                  onClick={() =>
+                    navigate(
+                      `/zuweisungen/permission-template/${detail.permissionTemplate!.id}`,
+                    )
+                  }
+                />
+              ) : (
+                <Button
+                  type="button"
+                  className="p-button-text p-button-sm"
+                  label={t("assignments.assign")}
+                  onClick={() => navigate("/zuweisungen/permission-template")}
+                />
+              )}
+            </div>
+            <p className="m-0 text-sm text-on-surface">
+              {detail.permissionTemplate
+                ? `${detail.permissionTemplate.key ?? ""} — ${detail.permissionTemplate.name ?? ""}`
+                : t("assignments.userDetailNone")}
+            </p>
+          </section>
+
+          <section className="rounded-sm bg-surface-container-low p-4">
             <h3 className="mb-3 m-0 text-xs font-medium uppercase tracking-wider text-on-surface-variant">
               {t("assignments.userDetailPresets")}
             </h3>
@@ -151,7 +183,7 @@ export function AssignmentsUserPage() {
               onClick={() => navigate("/zuweisungen/search-preset")}
             />
           </section>
-        </>
+        </div>
       )}
     </div>
   );

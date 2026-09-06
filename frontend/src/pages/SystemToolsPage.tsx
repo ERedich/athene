@@ -23,7 +23,7 @@ const TOOL_ICONS: Record<SystemToolId, LucideIcon> = {
 };
 
 export function SystemToolsPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { setHeaderActions, setHeaderRowCount } =
     useOutletContext<AppShellOutletContext>();
@@ -82,7 +82,7 @@ export function SystemToolsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("systemTools.searchHub")}
-              className="app-header-search-input !rounded-sm text-sm"
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
               aria-label={t("systemTools.searchHub")}
             />
           </IconField>
@@ -91,14 +91,6 @@ export function SystemToolsPage() {
     );
     return () => setHeaderActions(null);
   }, [search, setHeaderActions, t]);
-
-  const fmt = (n: number) => {
-    try {
-      return new Intl.NumberFormat(i18n.language).format(n);
-    } catch {
-      return String(n);
-    }
-  };
 
   if (error && !loading) {
     return (
@@ -121,7 +113,7 @@ export function SystemToolsPage() {
   return (
     <div className="app-system-tools-page min-h-0 flex-1 overflow-auto">
       <Toast ref={toast} position="top-right" />
-      <p className="app-system-tools-lead px-4 pt-4 text-sm text-on-surface-variant">
+      <p className="app-system-tools-lead text-sm text-on-surface-variant">
         {t("systemTools.hubLead")}
       </p>
       <div className="app-system-tools-grid" role="list">
@@ -157,7 +149,7 @@ export function SystemToolsPage() {
                     {loading
                       ? "…"
                       : item.dueCount != null
-                        ? t("systemTools.dueCount", { count: fmt(item.dueCount) })
+                        ? t("systemTools.dueCount", { count: item.dueCount })
                         : "—"}
                   </span>
                 </>

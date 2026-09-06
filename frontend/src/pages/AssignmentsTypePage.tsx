@@ -48,11 +48,13 @@ import {
 } from "../lib/assignmentsApi";
 import {
   isEnabledAssignmentType,
+  isExclusiveAssignmentType,
   type AssignmentConflict,
   type AssignmentDirectoryUser,
   type AssignmentRecord,
 } from "../lib/assignmentTypes";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
+import { usePermission } from "../lib/usePermission";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 
 type WorkspaceView = "record" | "user";
@@ -66,6 +68,7 @@ export function AssignmentsTypePage() {
   const { type, recordId: routeRecordId } = useParams();
   const navigate = useNavigate();
   const { refresh: refreshNav } = useNavLayout();
+  const canManagePermissions = usePermission("permissions.manage");
   const { setHeaderActions, setHeaderRowCount } =
     useOutletContext<AppShellOutletContext>();
   const toast = useRef<Toast>(null);
@@ -108,6 +111,9 @@ export function AssignmentsTypePage() {
 
   const typeOk = isEnabledAssignmentType(type);
   const assignmentType = typeOk ? type : "menu";
+  const canMutateAssignments =
+    assignmentType !== "permission-template" || canManagePermissions;
+  const exclusiveType = isExclusiveAssignmentType(assignmentType);
 
   const loadBase = useCallback(async () => {
     if (!typeOk) return;
@@ -313,13 +319,21 @@ export function AssignmentsTypePage() {
   const assignChecked = useCallback(
     (mode: "set" | "add" | "remove") => {
       if (!selectedRecord || checkedUserIds.length === 0) return;
+      if (!canMutateAssignments) {
+        toast.current?.show({
+          severity: "warn",
+          summary: t("assignments.needPermissionsManage"),
+          life: 4000,
+        });
+        return;
+      }
 
       const doRun = () => {
         void runAssign(selectedRecord, mode, { userIds: checkedUserIds });
       };
 
       if (
-        assignmentType === "menu" &&
+        isExclusiveAssignmentType(assignmentType) &&
         mode !== "remove" &&
         checkedUserIds.some((id) => conflictByUser.has(id) && !assignedIds.has(id))
       ) {
@@ -328,7 +342,12 @@ export function AssignmentsTypePage() {
         ).length;
         confirmDialog({
           header: t("assignments.replaceConfirmTitle"),
-          message: t("assignments.replaceConfirm", { count }),
+          message: t(
+            assignmentType === "permission-template"
+              ? "assignments.replaceConfirmTemplate"
+              : "assignments.replaceConfirm",
+            { count },
+          ),
           acceptLabel: t("assignments.assign"),
           rejectLabel: t("assignments.wizardCancel"),
           accept: doRun,
@@ -340,6 +359,7 @@ export function AssignmentsTypePage() {
     [
       assignedIds,
       assignmentType,
+      canMutateAssignments,
       checkedUserIds,
       conflictByUser,
       runAssign,
@@ -355,6 +375,8 @@ export function AssignmentsTypePage() {
     (record: AssignmentRecord) => {
       if (assignmentType === "menu") {
         navigate(`/customize-menu/${record.id}`);
+      } else if (assignmentType === "permission-template") {
+        navigate("/berechtigungswesen");
       } else {
         navigate("/suchkonfig");
       }
@@ -368,7 +390,9 @@ export function AssignmentsTypePage() {
       {
         label: t("assignments.assign"),
         icon: <UserPlus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+        disabled: !canMutateAssignments,
         command: () => {
+          if (!canMutateAssignments) return;
           setWizardRecordId(selectedRecord.id);
           setWizardOpen(true);
         },
@@ -379,7 +403,7 @@ export function AssignmentsTypePage() {
         command: () => openSource(selectedRecord),
       },
     ];
-  }, [openSource, selectedRecord, t]);
+  }, [canMutateAssignments, openSource, selectedRecord, t]);
 
   const siteOptions = useMemo(
     () =>
@@ -416,10 +440,14 @@ export function AssignmentsTypePage() {
           <button
             type="button"
             className="app-header-action-nav-item inline-flex items-center gap-1.5 hover:bg-green-500/10 hover:text-green-500"
+            disabled={!canMutateAssignments}
+            title={
+              !canMutateAssignments
+                ? t("assignments.needPermissionsManage")
+                : undefined
+            }
             onClick={() =>
-              assignCheckedRef.current(
-                assignmentType === "menu" ? "set" : "add",
-              )
+              assignCheckedRef.current(exclusiveType ? "set" : "add")
             }
           >
             <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden />
@@ -448,6 +476,12 @@ export function AssignmentsTypePage() {
           <button
             type="button"
             className="app-header-action-nav-item inline-flex items-center gap-1.5"
+            disabled={!canMutateAssignments}
+            title={
+              !canMutateAssignments
+                ? t("assignments.needPermissionsManage")
+                : undefined
+            }
             onClick={() => {
               setWizardRecordId(selectedRecordRef.current?.id ?? null);
               setWizardOpen(true);
@@ -490,6 +524,12 @@ export function AssignmentsTypePage() {
             <button
               type="button"
               className="app-header-action-nav-item"
+              disabled={!canMutateAssignments}
+              title={
+                !canMutateAssignments
+                  ? t("assignments.needPermissionsManage")
+                  : undefined
+              }
               onClick={() => assignCheckedRef.current("remove")}
             >
               {t("assignments.removeSelection")}
@@ -523,6 +563,8 @@ export function AssignmentsTypePage() {
     );
   }, [
     assignmentType,
+    canMutateAssignments,
+    exclusiveType,
     navigate,
     search,
     setHeaderActions,
@@ -551,11 +593,19 @@ export function AssignmentsTypePage() {
 
   const submitWizard = async (e: FormEvent) => {
     e.preventDefault();
+    if (!canMutateAssignments) {
+      toast.current?.show({
+        severity: "warn",
+        summary: t("assignments.needPermissionsManage"),
+        life: 4000,
+      });
+      return;
+    }
     const record =
       records.find((r) => r.id === wizardRecordId) ?? selectedRecord;
     if (!record) return;
 
-    const mode = assignmentType === "menu" ? "set" : "add";
+    const mode = exclusiveType ? "set" : "add";
     let payload:
       | { userIds: string[] }
       | { siteId: string }
@@ -582,7 +632,7 @@ export function AssignmentsTypePage() {
       navigate(`/zuweisungen/${assignmentType}/${record.id}`, { replace: true });
     };
 
-    if (assignmentType === "menu" && wizardTargetMode === "users") {
+    if (exclusiveType && wizardTargetMode === "users") {
       const conflictCount = wizardUserIds.filter((id) => {
         const c = conflictByUser.get(id);
         return c && c.currentRecordId !== record.id;
@@ -590,7 +640,12 @@ export function AssignmentsTypePage() {
       if (conflictCount > 0) {
         confirmDialog({
           header: t("assignments.replaceConfirmTitle"),
-          message: t("assignments.replaceConfirm", { count: conflictCount }),
+          message: t(
+            assignmentType === "permission-template"
+              ? "assignments.replaceConfirmTemplate"
+              : "assignments.replaceConfirm",
+            { count: conflictCount },
+          ),
           acceptLabel: t("assignments.assign"),
           rejectLabel: t("assignments.wizardCancel"),
           accept: () => void finish(),
@@ -653,7 +708,7 @@ export function AssignmentsTypePage() {
     >
       <Checkbox
         inputId="asg-user-check-all"
-        checked={headerCheckState}
+        checked={headerCheckState === true}
         className="rounded-none"
         onChange={(e) => onHeaderCheckChange(Boolean(e.checked))}
         disabled={!selectedRecord || filteredUsers.length === 0}
@@ -703,7 +758,7 @@ export function AssignmentsTypePage() {
   }
 
   return (
-    <div className="app-assignments-workspace flex min-h-0 flex-1 flex-col gap-3 p-4">
+    <div className="app-assignments-workspace flex min-h-0 flex-1 flex-col gap-3">
       <Toast ref={toast} position="top-right" />
       <ConfirmDialog />
       <ContextMenu model={contextItems} ref={cm} appendTo={overlayAppendTo} />
@@ -729,6 +784,14 @@ export function AssignmentsTypePage() {
               onRowDoubleClick={(e) => {
                 const row = e.data as AssignmentRecord;
                 setSelectedRecord(row);
+                if (!canMutateAssignments) {
+                  toast.current?.show({
+                    severity: "warn",
+                    summary: t("assignments.needPermissionsManage"),
+                    life: 4000,
+                  });
+                  return;
+                }
                 setWizardRecordId(row.id);
                 setWizardOpen(true);
               }}
@@ -736,7 +799,7 @@ export function AssignmentsTypePage() {
               scrollable
               scrollHeight="flex"
             >
-              {assignmentType === "menu" ? (
+              {exclusiveType ? (
                 <Column field="key" header={t("assignments.columnKey")} sortable />
               ) : null}
               <Column field="name" header={t("assignments.columnName")} sortable />
@@ -809,6 +872,12 @@ export function AssignmentsTypePage() {
             body={(row: AssignmentDirectoryUser) => row.menuConfigName ?? "—"}
           />
           <Column
+            header={t("assignments.columnCurrentTemplate")}
+            body={(row: AssignmentDirectoryUser) =>
+              row.permissionTemplateName ?? "—"
+            }
+          />
+          <Column
             field="searchPresetShareCount"
             header={t("assignments.columnPresetShares")}
             sortable
@@ -847,6 +916,12 @@ export function AssignmentsTypePage() {
               form="assignments-wizard-form"
               label={t("assignments.wizardApply")}
               loading={saving}
+              disabled={!canMutateAssignments}
+              title={
+                !canMutateAssignments
+                  ? t("assignments.needPermissionsManage")
+                  : undefined
+              }
             />
           </div>
         }
@@ -863,7 +938,7 @@ export function AssignmentsTypePage() {
             <Dropdown
               value={wizardRecordId}
               options={records.map((r) => ({
-                label: assignmentType === "menu" ? `${r.key} — ${r.name}` : r.name,
+                label: exclusiveType ? `${r.key} — ${r.name}` : r.name,
                 value: r.id,
               }))}
               onChange={(e) => setWizardRecordId(e.value as string)}

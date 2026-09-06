@@ -47,6 +47,7 @@ import { ReportDesignerPage } from "./pages/ReportDesignerPage";
 import { AssignmentsPage } from "./pages/AssignmentsPage";
 import { AssignmentsTypePage } from "./pages/AssignmentsTypePage";
 import { AssignmentsUserPage } from "./pages/AssignmentsUserPage";
+import { PermissionsAdminPage } from "./pages/PermissionsAdminPage";
 import { SystemToolsPage } from "./pages/SystemToolsPage";
 import { SystemToolsProcedurePage } from "./pages/SystemToolsProcedurePage";
 
@@ -84,6 +85,8 @@ export default function App() {
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="permission-templates" element={<Navigate to="/berechtigungswesen" replace />} />
+          <Route path="berechtigungswesen" element={<PermissionsAdminPage />} />
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="cost-centers" element={<CostCentersPage />} />
           <Route path="auftragstypen" element={<AuftragstypenPage />} />

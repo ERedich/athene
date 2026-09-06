@@ -48,6 +48,7 @@ import {
 import {
   buildAssetTree,
   collectExpandableKeys,
+  collectSubtreeAssetIds,
   filterAssetTree,
   refButtonAppearance,
   type AnnotatedTreeNode,
@@ -63,11 +64,14 @@ import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 
 type AssetDocumentRow = {
   id: string;
+  assetId: string;
   fileName: string;
   displayName: string | null;
   category: string;
   mimeType: string | null;
   fileSize: number;
+  assetKey: string | null;
+  assetName: string | null;
 };
 
 type RefsTabIndex = 0 | 1 | 2;
@@ -98,12 +102,34 @@ function parseDocumentRow(raw: unknown): AssetDocumentRow | null {
         : 0;
   return {
     id: o.id,
+    assetId: typeof o.assetId === "string" ? o.assetId : "",
     fileName: o.fileName,
     displayName: typeof o.displayName === "string" ? o.displayName : null,
     category: typeof o.category === "string" && o.category.trim() ? o.category : "general",
     mimeType: typeof o.mimeType === "string" ? o.mimeType : null,
     fileSize,
+    assetKey: typeof o.assetKey === "string" ? o.assetKey : null,
+    assetName: typeof o.assetName === "string" ? o.assetName : null,
   };
+}
+
+/** True when any strict descendant of rootId has documentCount > 0. */
+function assetHasDescendantDocuments(assets: AssetTreeAsset[], rootId: string): boolean {
+  const subtreeIds = collectSubtreeAssetIds(assets, rootId);
+  for (const asset of assets) {
+    if (asset.id === rootId) continue;
+    if (subtreeIds.has(asset.id) && asset.documentCount > 0) return true;
+  }
+  return false;
+}
+
+function countSubtreeDocuments(assets: AssetTreeAsset[], rootId: string): number {
+  const subtreeIds = collectSubtreeAssetIds(assets, rootId);
+  let total = 0;
+  for (const asset of assets) {
+    if (subtreeIds.has(asset.id)) total += asset.documentCount;
+  }
+  return total;
 }
 
 function isAssetType(v: unknown): v is AssetTreeType {
@@ -358,11 +384,16 @@ export function BaumstrukturPage() {
     async (asset: AssetTreeAsset) => {
       setDocsLoading(true);
       try {
-        const res = await apiFetch(`/api/assets/${asset.id}/documents`);
+        const includeDescendants = assetHasDescendantDocuments(assets, asset.id);
+        const qs = includeDescendants ? "?includeDescendants=1" : "";
+        const res = await apiFetch(`/api/assets/${asset.id}/documents${qs}`);
         if (!res.ok) throw new Error("docs");
         const data = (await res.json()) as unknown;
         const rows = Array.isArray(data)
-          ? data.map(parseDocumentRow).filter((row): row is AssetDocumentRow => row != null)
+          ? data
+              .map(parseDocumentRow)
+              .filter((row): row is AssetDocumentRow => row != null)
+              .map((row) => (row.assetId ? row : { ...row, assetId: asset.id }))
           : [];
         setDocsRows(rows);
         setDocsLoadedAssetId(asset.id);
@@ -378,7 +409,7 @@ export function BaumstrukturPage() {
         setDocsLoading(false);
       }
     },
-    [t],
+    [assets, t],
   );
 
   const loadWorkOrders = useCallback(
@@ -539,9 +570,113 @@ export function BaumstrukturPage() {
     if (!q) return docsRows;
     return docsRows.filter((doc) => {
       const name = (doc.displayName || doc.fileName).toLowerCase();
-      return name.includes(q) || doc.fileName.toLowerCase().includes(q);
+      const assetLabel = [doc.assetKey, doc.assetName].filter(Boolean).join(" ").toLowerCase();
+      return (
+        name.includes(q) ||
+        doc.fileName.toLowerCase().includes(q) ||
+        (assetLabel.length > 0 && assetLabel.includes(q))
+      );
     });
   }, [docsRows, docsSearchTerm]);
+
+  const refsHasDescendantDocuments = useMemo(() => {
+    if (!refsAsset) return false;
+    return assetHasDescendantDocuments(assets, refsAsset.id);
+  }, [assets, refsAsset]);
+
+  const docsTabCount = useMemo(() => {
+    if (!refsAsset) return 0;
+    if (refsHasDescendantDocuments) return countSubtreeDocuments(assets, refsAsset.id);
+    return refsAsset.documentCount;
+  }, [assets, refsAsset, refsHasDescendantDocuments]);
+
+  const ownDocsRows = useMemo(() => {
+    if (!refsAsset || !refsHasDescendantDocuments) return filteredDocsRows;
+    return filteredDocsRows.filter((doc) => doc.assetId === refsAsset.id);
+  }, [filteredDocsRows, refsAsset, refsHasDescendantDocuments]);
+
+  const descendantDocsRows = useMemo(() => {
+    if (!refsAsset || !refsHasDescendantDocuments) return [];
+    return filteredDocsRows.filter((doc) => doc.assetId !== refsAsset.id);
+  }, [filteredDocsRows, refsAsset, refsHasDescendantDocuments]);
+
+  const renderDocCard = useCallback(
+    (doc: AssetDocumentRow, index: number, showAssetLabel: boolean) => {
+      const ownerAssetId = doc.assetId || refsAsset?.id || "";
+      const title = doc.displayName?.trim() || doc.fileName;
+      const mime = doc.mimeType ?? "application/octet-stream";
+      const imageDoc = isImageDocument(mime, doc.fileName);
+      const assetLabel =
+        doc.assetKey && doc.assetName
+          ? `${doc.assetKey} - ${doc.assetName}`
+          : doc.assetKey || doc.assetName || null;
+      return (
+        <div
+          key={doc.id}
+          role="button"
+          tabIndex={0}
+          className="app-card-cascade app-asset-refs-doc-card flex cursor-pointer items-center gap-2 rounded-sm border border-solid border-outline-variant px-3 py-2 transition-colors hover:bg-[color-mix(in_srgb,var(--color-on-surface)_4%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          style={{ ["--app-cascade-index" as string]: index }}
+          title={imageDoc ? t("documentsUi.imagePreviewHint") : t("assets.documentsOpen")}
+          onClick={() => {
+            if (!ownerAssetId) return;
+            void openDocumentContent(ownerAssetId, doc.id);
+          }}
+          onMouseEnter={(e) => {
+            if (!imageDoc || !ownerAssetId) return;
+            showPreview({
+              cacheKey: `asset:${ownerAssetId}:${doc.id}`,
+              title,
+              mimeType: mime,
+              fileName: doc.fileName,
+              anchor: e.currentTarget.getBoundingClientRect(),
+              fetchUrl: `/api/assets/${ownerAssetId}/documents/${doc.id}/content`,
+            });
+          }}
+          onMouseLeave={() => {
+            if (!imageDoc) return;
+            clearPreview();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (!ownerAssetId) return;
+              void openDocumentContent(ownerAssetId, doc.id);
+            }
+          }}
+        >
+          <DocumentMimeIcon mimeType={mime} fileName={doc.fileName} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-on-surface" title={title}>
+              {title}
+            </div>
+            {showAssetLabel && assetLabel ? (
+              <div className="truncate text-xs text-on-surface-variant" title={assetLabel}>
+                {assetLabel}
+              </div>
+            ) : null}
+            {doc.displayName?.trim() && doc.displayName.trim() !== doc.fileName ? (
+              <div className="truncate text-xs text-on-surface-variant" title={doc.fileName}>
+                {doc.fileName}
+              </div>
+            ) : null}
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-on-surface-variant">
+              <span
+                className={`inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-tight ${documentCategoryBadgeClass(doc.category)}`}
+              >
+                {t(`assets.documentCategories.${doc.category}`, {
+                  defaultValue: doc.category,
+                })}
+              </span>
+              <span className="min-w-0 truncate">{mime.split(";")[0]}</span>
+              <span className="shrink-0 tabular-nums">{formatFileSize(doc.fileSize)}</span>
+            </div>
+          </div>
+        </div>
+      );
+    },
+    [clearPreview, openDocumentContent, refsAsset?.id, showPreview, t],
+  );
 
   const keyBody = useCallback(
     (node: TreeNode) => {
@@ -695,32 +830,28 @@ export function BaumstrukturPage() {
 
   useEffect(() => {
     setHeaderActions(
-      <ul className="m-0 flex w-full list-none items-center gap-2 p-0">
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
         <li>
-          <Button
+          <button
             type="button"
-            className="h-9 !rounded-sm"
-            outlined
-            severity="secondary"
+            className="app-header-action-nav-item app-header-action-nav-item--icon"
             onClick={expandAll}
             title={t("baumstruktur.expandAll")}
             aria-label={t("baumstruktur.expandAll")}
           >
             <ChevronsUpDown className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </Button>
+          </button>
         </li>
         <li>
-          <Button
+          <button
             type="button"
-            className="h-9 !rounded-sm"
-            outlined
-            severity="secondary"
+            className="app-header-action-nav-item app-header-action-nav-item--icon"
             onClick={collapseAll}
             title={t("baumstruktur.collapseAll")}
             aria-label={t("baumstruktur.collapseAll")}
           >
             <ChevronsDownUp className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-          </Button>
+          </button>
         </li>
         <li className="ml-auto">
           <IconField iconPosition="left">
@@ -758,7 +889,7 @@ export function BaumstrukturPage() {
             emptyMessage={t("baumstruktur.empty")}
             showGridlines
             stripedRows={!typeColorsEnabled}
-            className={`app-asset-treetable w-full text-sm${typeColorsEnabled ? " app-asset-treetable--typed" : ""}`}
+            className={`app-asset-treetable w-full${typeColorsEnabled ? " app-asset-treetable--typed" : ""}`}
             tableStyle={{ minWidth: "64rem" }}
           >
             <Column
@@ -877,7 +1008,7 @@ export function BaumstrukturPage() {
                 header={
                   <AppTabHeader
                     label={t("baumstruktur.referencesDocuments")}
-                    count={refsAsset.documentCount}
+                    count={docsTabCount}
                   />
                 }
               >
@@ -896,6 +1027,44 @@ export function BaumstrukturPage() {
                       <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
                       <span>{t("assets.documentsLoading")}</span>
                     </div>
+                  ) : refsHasDescendantDocuments ? (
+                    docsSearchTerm.trim() &&
+                    ownDocsRows.length === 0 &&
+                    descendantDocsRows.length === 0 &&
+                    docsRows.length > 0 ? (
+                      <div className="text-sm text-on-surface-variant">
+                        {t("assets.documentsSearchEmpty")}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <section className="space-y-2">
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant underline underline-offset-2">
+                            {t("baumstruktur.documentsAtThisElement")}
+                          </h3>
+                          {ownDocsRows.length === 0 ? (
+                            <div className="text-sm text-on-surface-variant">-</div>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-2">
+                              {ownDocsRows.map((doc, index) => renderDocCard(doc, index, false))}
+                            </div>
+                          )}
+                        </section>
+                        <section className="space-y-2">
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.1em] text-on-surface-variant underline underline-offset-2">
+                            {t("baumstruktur.documentsAtDescendants")}
+                          </h3>
+                          {descendantDocsRows.length === 0 ? (
+                            <div className="text-sm text-on-surface-variant">-</div>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-2">
+                              {descendantDocsRows.map((doc, index) =>
+                                renderDocCard(doc, index, true),
+                              )}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    )
                   ) : filteredDocsRows.length === 0 ? (
                     <div className="text-sm text-on-surface-variant">
                       {docsRows.length === 0
@@ -904,73 +1073,7 @@ export function BaumstrukturPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-2">
-                      {filteredDocsRows.map((doc, index) => {
-                        const title = doc.displayName?.trim() || doc.fileName;
-                        const mime = doc.mimeType ?? "application/octet-stream";
-                        const imageDoc = isImageDocument(mime, doc.fileName);
-                        return (
-                          <div
-                            key={doc.id}
-                            role="button"
-                            tabIndex={0}
-                            className="app-card-cascade app-asset-refs-doc-card flex cursor-pointer items-center gap-2 rounded-sm border border-solid border-outline-variant px-3 py-2 transition-colors hover:bg-[color-mix(in_srgb,var(--color-on-surface)_4%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                            style={{ ["--app-cascade-index" as string]: index }}
-                            title={
-                              imageDoc
-                                ? t("documentsUi.imagePreviewHint")
-                                : t("assets.documentsOpen")
-                            }
-                            onClick={() => void openDocumentContent(refsAsset.id, doc.id)}
-                            onMouseEnter={(e) => {
-                              if (!imageDoc) return;
-                              showPreview({
-                                cacheKey: `asset:${refsAsset.id}:${doc.id}`,
-                                title,
-                                mimeType: mime,
-                                fileName: doc.fileName,
-                                anchor: e.currentTarget.getBoundingClientRect(),
-                                fetchUrl: `/api/assets/${refsAsset.id}/documents/${doc.id}/content`,
-                              });
-                            }}
-                            onMouseLeave={() => {
-                              if (!imageDoc) return;
-                              clearPreview();
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                void openDocumentContent(refsAsset.id, doc.id);
-                              }
-                            }}
-                          >
-                            <DocumentMimeIcon mimeType={mime} fileName={doc.fileName} />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-on-surface" title={title}>
-                                {title}
-                              </div>
-                              {doc.displayName?.trim() &&
-                              doc.displayName.trim() !== doc.fileName ? (
-                                <div className="truncate text-xs text-on-surface-variant" title={doc.fileName}>
-                                  {doc.fileName}
-                                </div>
-                              ) : null}
-                              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-on-surface-variant">
-                                <span
-                                  className={`inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-tight ${documentCategoryBadgeClass(doc.category)}`}
-                                >
-                                  {t(`assets.documentCategories.${doc.category}`, {
-                                    defaultValue: doc.category,
-                                  })}
-                                </span>
-                                <span className="min-w-0 truncate">
-                                  {mime.split(";")[0]}
-                                </span>
-                                <span className="shrink-0 tabular-nums">{formatFileSize(doc.fileSize)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {filteredDocsRows.map((doc, index) => renderDocCard(doc, index, false))}
                     </div>
                   )}
                 </div>

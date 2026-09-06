@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -13,6 +13,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
+import { AppViewForbidden, useMissingAppView } from "../auth/RequireAppView";
 import { useAuth } from "../auth/AuthContext";
 import { loginBgImage } from "../brandAssets";
 import { AtheneWordmark } from "../components/AtheneWordmark";
@@ -58,6 +59,8 @@ function headerTitleKey(pathname: string): string {
     transactions: "transactions.appName",
     sites: "sites.appName",
     users: "users.appName",
+    "berechtigungswesen": "berechtigungswesen.appName",
+    "permission-templates": "berechtigungswesen.appName",
     zuweisungen: "assignments.appName",
     systemwerkzeuge: "systemTools.appName",
     workgroups: "workgroups.appName",
@@ -68,6 +71,7 @@ function headerTitleKey(pathname: string): string {
     ursachen: "ursachen.appName",
     massnahmen: "massnahmen.appName",
     "maintenance-plans": "maintenancePlans.appName",
+    "inspection-rounds": "inspectionRounds.appName",
     shifts: "shifts.appName",
     warehouses: "warehouses.appName",
     "storage-locations": "storageLocations.appName",
@@ -106,9 +110,18 @@ export function AppShellLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const missingAppView = useMissingAppView();
   const subscriptions = useWorkOrderSubscriptions();
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
   const [headerRowCount, setHeaderRowCount] = useState<number | null>(null);
+  const outletContext = useMemo(
+    () =>
+      ({
+        setHeaderActions,
+        setHeaderRowCount,
+      }) satisfies AppShellOutletContext,
+    [setHeaderActions, setHeaderRowCount],
+  );
   const { dark, isThemeLoading, toggleTheme } = useThemeSwitcher();
   const { isCompact, toggleDensity } = useTableDensity();
   const athene = useAtheneAssistant();
@@ -151,9 +164,10 @@ export function AppShellLayout() {
   }, []);
 
   useEffect(() => {
-    setHeaderActions(null);
+    // Row count only — actions are owned by the page effect (set + cleanup).
+    // Clearing actions here races with the child effect and can leave the header empty.
     setHeaderRowCount(null);
-  }, [pathname]);
+  }, [pathname, setHeaderRowCount]);
 
   const formattedHeaderRowCount = (() => {
     if (headerRowCount === null) return null;
@@ -339,7 +353,7 @@ export function AppShellLayout() {
           style={chromeBackground}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <h1 className="app-shell-title font-mono w-[200px] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
+            <h1 className="app-shell-title font-mono max-w-[14rem] shrink-0 truncate text-base font-semibold tracking-tight text-on-surface">
               <span className="app-shell-title__name">
                 {t(headerTitleKey(pathname))}
               </span>
@@ -368,14 +382,11 @@ export function AppShellLayout() {
           </div>
         </header>
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden bg-surface p-px">
-          <Outlet
-            context={
-              {
-                setHeaderActions,
-                setHeaderRowCount,
-              } satisfies AppShellOutletContext
-            }
-          />
+          {missingAppView ? (
+            <AppViewForbidden />
+          ) : (
+            <Outlet context={outletContext} />
+          )}
         </main>
       </div>
       <ThemeLoadingOverlay visible={isThemeLoading} />

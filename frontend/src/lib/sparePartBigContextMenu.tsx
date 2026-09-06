@@ -42,11 +42,23 @@ export type SparePartBigMenuModel = {
   sections: BigMenuSection[];
 };
 
+export type SparePartBigMenuPermissions = {
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
+};
+
 export function buildSparePartBigMenuModel(
   row: SparePartBigMenuRow | null,
   t: TFunction,
   handlers: SparePartBigMenuHandlers,
+  perms?: SparePartBigMenuPermissions,
 ): SparePartBigMenuModel {
+  const p = {
+    canCreate: perms?.canCreate ?? true,
+    canUpdate: perms?.canUpdate ?? true,
+    canDelete: perms?.canDelete ?? true,
+  };
   const hasRow = row != null;
 
   const cornerAction: BigMenuItem = {
@@ -68,21 +80,29 @@ export function buildSparePartBigMenuModel(
     id: "row1",
     variant: "primary",
     items: [
-      {
-        id: "new",
-        label: t("spareParts.new"),
-        icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        onSelect: () => handlers.onCreate(),
-      },
-      {
-        id: "edit",
-        label: t("spareParts.edit"),
-        icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
-        onSelect: () => {
-          if (row) handlers.onEdit(row);
-        },
-      },
+      ...(p.canCreate
+        ? [
+            {
+              id: "new",
+              label: t("spareParts.new"),
+              icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+              onSelect: () => handlers.onCreate(),
+            },
+          ]
+        : []),
+      ...(p.canUpdate
+        ? [
+            {
+              id: "edit",
+              label: t("spareParts.edit"),
+              icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+              disabled: !hasRow,
+              onSelect: () => {
+                if (row) handlers.onEdit(row);
+              },
+            },
+          ]
+        : []),
       {
         id: "documents",
         label: t("spareParts.bigMenu.documents"),
@@ -141,27 +161,29 @@ export function buildSparePartBigMenuModel(
     ],
   };
 
-  const editSection: BigMenuSection = {
-    id: "edit-actions",
-    title: t("spareParts.bigMenu.sectionEdit"),
-    variant: "column",
-    items: [
-      {
-        id: "delete",
-        label: t("spareParts.delete"),
-        icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
-        danger: true,
-        onSelect: () => {
-          if (row) handlers.onDelete(row);
-        },
-      },
-    ],
-  };
+  const editSection: BigMenuSection | null = p.canDelete
+    ? {
+        id: "edit-actions",
+        title: t("spareParts.bigMenu.sectionEdit"),
+        variant: "column",
+        items: [
+          {
+            id: "delete",
+            label: t("spareParts.delete"),
+            icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
+            disabled: !hasRow,
+            danger: true,
+            onSelect: () => {
+              if (row) handlers.onDelete(row);
+            },
+          },
+        ],
+      }
+    : null;
 
   return {
     header: hasRow ? `${row.key} · ${row.name}` : null,
     cornerAction,
-    sections: [row1, row2, editSection],
+    sections: [row1, row2, ...(editSection ? [editSection] : [])],
   };
 }

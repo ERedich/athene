@@ -12,6 +12,7 @@ import {
   FilePlus,
   History,
   IdCard,
+  KeyRound,
   Languages,
   LayoutGrid,
   LayoutTemplate,
@@ -114,6 +115,11 @@ export const navGroups: NavGroup[] = [
     Icon: Shield,
     items: [
       { to: "/users", Icon: Users, labelKey: "users.navUsers" },
+      {
+        to: "/berechtigungswesen",
+        Icon: KeyRound,
+        labelKey: "berechtigungswesen.nav",
+      },
       {
         to: "/zuweisungen",
         Icon: UserPlus,

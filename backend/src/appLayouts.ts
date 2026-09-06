@@ -21,6 +21,7 @@ import {
   type TabsLayoutPayload,
 } from "./appLayoutCatalog.js";
 import { withAuditContext } from "./auditContext.js";
+import { loadUserPermissions } from "./middleware/requirePermission.js";
 import { pool } from "./db.js";
 import { assertSiteAccess, siteAccessSql } from "./siteAccess.js";
 
@@ -107,12 +108,12 @@ const selectSql = `
   LEFT JOIN "users" updated_by ON updated_by."id" = l."updatedBy"
 `;
 
-async function isAdminUser(client: { query: typeof pool.query }, userId: string): Promise<boolean> {
-  const { rows } = await client.query<{ loginName: string }>(
-    `SELECT u."loginName" FROM "users" u WHERE u."id" = $1::uuid LIMIT 1`,
-    [userId],
-  );
-  return rows[0]?.loginName === "admin";
+async function canEditSystemLayout(
+  client: { query: typeof pool.query },
+  userId: string,
+): Promise<boolean> {
+  const perms = await loadUserPermissions(client, userId);
+  return perms.has("layout-editor.editSystem");
 }
 
 type ParsedWriteBody = {
@@ -371,7 +372,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       }
       const stored = existing.rows[0];
       if (stored.isSystem) {
-        const admin = await isAdminUser(client, meta.userId);
+        const admin = await canEditSystemLayout(client, meta.userId);
         if (!admin) {
           throw new Error("system_layout_forbidden");
         }
@@ -553,7 +554,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
         throw new Error("not_found");
       }
       if (existing.rows[0].isSystem) {
-        const admin = await isAdminUser(client, userId);
+        const admin = await canEditSystemLayout(client, userId);
         if (!admin) {
           throw new Error("system_layout_forbidden");
         }

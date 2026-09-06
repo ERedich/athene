@@ -27,6 +27,7 @@ import { Toast } from "primereact/toast";
 
 import { useAtheneAssistant } from "../assistant/AtheneAssistantContext";
 import { useAuth } from "../auth/AuthContext";
+import { useAppCrud, usePermission } from "../lib/usePermission";
 import { APP_PARAM_KEY_ENABLE_CLEVER_SEARCH } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
@@ -62,20 +63,20 @@ import { formatOriginalWoCell, type WorkOrder, WorkOrderStatus, WorkOrderType } 
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
+import {
   AppPauseIcon,
   AppPlayStartIcon,
   AppSquareStopIcon,
   lucidePrimeBtnIcon,
 } from "../icons/lucide";
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
 
 function addHours(d: Date, hours: number): Date {
   return new Date(d.getTime() + hours * 60 * 60 * 1000);
@@ -85,6 +86,14 @@ export function WorkOrdersPage() {
   const { t, i18n } = useTranslation();
   const athene = useAtheneAssistant();
   const { appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
+  const woCrud = useAppCrud("work-orders");
+  const canStart = usePermission("workOrder.start");
+  const canPause = usePermission("workOrder.pause");
+  const canCancel = usePermission("workOrder.cancel");
+  const canComplete = usePermission("workOrder.complete");
+  const canFeedback = usePermission("workOrder.feedback");
+  const canAssign = usePermission("workOrder.assign");
+  const canSubscribe = usePermission("workOrder.subscribe");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const { openPrintDialog, PrintDialogEl } = useWorkOrderReportPrint(toastRef);
@@ -932,9 +941,27 @@ export function WorkOrdersPage() {
         onPrint: (row) => {
           void openPrintDialog(row);
         },
+      }, {
+        canCreate: woCrud.canCreate,
+        canUpdate: woCrud.canUpdate,
+        canDelete: woCrud.canDelete,
+        canStart,
+        canPause,
+        canCancel,
+        canComplete,
+        canFeedback,
+        canAssign,
+        canSubscribe,
       }),
     [
       athene,
+      canAssign,
+      canCancel,
+      canComplete,
+      canFeedback,
+      canPause,
+      canStart,
+      canSubscribe,
       confirmCancelWorkOrder,
       confirmCloseWorkOrder,
       confirmDelete,
@@ -948,6 +975,9 @@ export function WorkOrdersPage() {
       selectedOrder,
       startOrder,
       t,
+      woCrud.canCreate,
+      woCrud.canDelete,
+      woCrud.canUpdate,
     ],
   );
 

@@ -31,6 +31,10 @@ import { orderDialogTabs } from "../lib/workOrderDialog";
 import type { WorkOrder } from "../lib/workOrderTypes";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
 import { useWorkOrderSubscriptions } from "../workOrders/WorkOrderSubscriptionContext";
+import {
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type InboxResponse = {
   rows: NotificationInboxItem[];
@@ -47,13 +51,6 @@ type HistoryDrawerState = {
 const HISTORY_DRAWER_MS = 280;
 const NOTIFICATION_HIGHLIGHT_MS = 10_000;
 const NOTIFICATION_HIGHLIGHT_FADE_MS = 1_000;
-
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const selectedActionNavItem = `${actionNavItem} bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] text-[var(--color-primary)]`;
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const selectedActionIcon = "text-[var(--color-primary)]";
 
 function parseKindFilter(raw: string | null): KindFilter {
   if (raw === "subscription" || raw === "chat" || raw === "stock") return raw;
@@ -474,12 +471,12 @@ export function MitteilungszentralePage() {
         <li>
           <button
             type="button"
-            className={kindFilter === "all" ? selectedActionNavItem : primaryActionNavItem}
+            className={kindFilter === "all" ? `${primaryActionNavItem} app-header-action-nav-item--active` : primaryActionNavItem}
             aria-pressed={kindFilter === "all"}
             onClick={() => setKindFilter("all")}
           >
             <Inbox
-              className={`${kindFilter === "all" ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              className={`${primaryActionIcon} h-4 w-4`}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -489,12 +486,12 @@ export function MitteilungszentralePage() {
         <li>
           <button
             type="button"
-            className={kindFilter === "subscription" ? selectedActionNavItem : primaryActionNavItem}
+            className={kindFilter === "subscription" ? `${primaryActionNavItem} app-header-action-nav-item--active` : primaryActionNavItem}
             aria-pressed={kindFilter === "subscription"}
             onClick={() => setKindFilter("subscription")}
           >
             <Bell
-              className={`${kindFilter === "subscription" ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              className={`${primaryActionIcon} h-4 w-4`}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -504,12 +501,12 @@ export function MitteilungszentralePage() {
         <li>
           <button
             type="button"
-            className={kindFilter === "chat" ? selectedActionNavItem : primaryActionNavItem}
+            className={kindFilter === "chat" ? `${primaryActionNavItem} app-header-action-nav-item--active` : primaryActionNavItem}
             aria-pressed={kindFilter === "chat"}
             onClick={() => setKindFilter("chat")}
           >
             <MessageSquare
-              className={`${kindFilter === "chat" ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              className={`${primaryActionIcon} h-4 w-4`}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -519,12 +516,12 @@ export function MitteilungszentralePage() {
         <li>
           <button
             type="button"
-            className={kindFilter === "stock" ? selectedActionNavItem : primaryActionNavItem}
+            className={kindFilter === "stock" ? `${primaryActionNavItem} app-header-action-nav-item--active` : primaryActionNavItem}
             aria-pressed={kindFilter === "stock"}
             onClick={() => setKindFilter("stock")}
           >
             <Package
-              className={`${kindFilter === "stock" ? selectedActionIcon : primaryActionIcon} h-4 w-4`}
+              className={`${primaryActionIcon} h-4 w-4`}
               strokeWidth={1.75}
               aria-hidden
             />
@@ -548,13 +545,15 @@ export function MitteilungszentralePage() {
   }, [kindFilter, search, setHeaderActions, setKindFilter, t]);
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col">
-      <Toast ref={toastRef} position="bottom-right" />
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+      <Toast ref={toastRef} position="top-right" />
       <DataTable
         className="app-data-table w-full h-full min-h-0"
         value={filteredRows}
         loading={loading}
         dataKey="id"
+        scrollable
+        scrollHeight="flex"
         onRowDoubleClick={(event) => {
           void openItem(event.data as NotificationInboxItem);
         }}

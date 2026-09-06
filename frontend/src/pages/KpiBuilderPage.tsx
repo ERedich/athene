@@ -30,6 +30,14 @@ import {
 } from "../lib/kpiBuilderApi";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type SiteOption = {
   id: string;
@@ -39,16 +47,6 @@ type SiteOption = {
 };
 
 type PageMode = "list" | "edit";
-
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
 
 export function KpiBuilderPage() {
   const { t } = useTranslation();
@@ -329,11 +327,12 @@ export function KpiBuilderPage() {
     row.isActive ? <Check className="h-4 w-4 text-green-500" strokeWidth={2} /> : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <Toast ref={toastRef} />
       <ConfirmDialog />
 
       {mode === "edit" ? (
+        <div className="min-h-0 flex-1 overflow-auto p-4">
         <KpiEditorPanel
           ref={editorRef}
           editing={editing}
@@ -345,6 +344,7 @@ export function KpiBuilderPage() {
           onSave={(payload) => void save(payload)}
           onValidationError={onValidationError}
         />
+        </div>
       ) : (
         <>
           {tableCtx.ContextMenuEl}

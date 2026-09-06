@@ -28,6 +28,13 @@ import { overlayAppendTo } from "../lib/overlayAppendTo";
 import type { SparePartLookupResult } from "../lib/sparePartLookupApi";
 import type { WorkOrderLookupResult } from "../lib/workOrderLookupApi";
 import type { WorkOrderReferenceAsset } from "../lib/workOrderTypes";
+import { useAppCrud } from "../lib/usePermission";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+} from "../lib/headerActionClasses";
 
 export type TransactionRow = {
   id: string;
@@ -96,13 +103,6 @@ const typeLabelKey: Record<string, string> = {
   ZU: "transactions.typeZU",
 };
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const createActionIcon = "text-green-500/70";
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const deleteActionIcon = "text-red-500";
-
 function typeBadgeClass(type: string): string {
   switch (type) {
     case "IN":
@@ -161,6 +161,7 @@ function costCenterLabel(row: TransactionRow): string {
 
 export function TransactionsPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("transactions");
   const { user } = useAuth();
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -724,25 +725,29 @@ export function TransactionsPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={() => void openCreate()}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("transactions.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selectedRow}
-            onClick={() => {
-              if (selectedRow) confirmDelete(selectedRow);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("transactions.delete")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={() => void openCreate()}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("transactions.new")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selectedRow}
+              onClick={() => {
+                if (selectedRow) confirmDelete(selectedRow);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("transactions.delete")}</span>
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -759,7 +764,7 @@ export function TransactionsPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, searchTerm, selectedRow, setHeaderActions, t]);
+  }, [confirmDelete, crud.canCreate, crud.canDelete, openCreate, searchTerm, selectedRow, setHeaderActions, t]);
 
   const onPageChange = (e: PaginatorPageChangeEvent) => {
     if (e.rows !== limit) {

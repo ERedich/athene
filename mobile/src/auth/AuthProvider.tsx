@@ -13,6 +13,7 @@ import { AuthContext } from "./AuthContext";
 
 type MeResponse = {
   user: AuthUser;
+  permissions?: string[];
   appParameterBooleans?: Record<string, boolean>;
   appParameterDefaultWorkgroupId?: string | null;
   appParameterDefaultShiftHours?: number;
@@ -33,6 +34,7 @@ async function clearMobileCredentials(): Promise<void> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [appParameterBooleans, setAppParameterBooleans] = useState<Record<string, boolean>>({});
   const [appParameterAssetTypes, setAppParameterAssetTypes] = useState<AssetTypeDisplayConfig | null>(null);
   const [appParameterDefaultWorkgroupId, setAppParameterDefaultWorkgroupId] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         await clearMobileCredentials();
         setUser(null);
+        setPermissions([]);
         setAppParameterBooleans({});
         setAppParameterAssetTypes(null);
         setAppParameterDefaultWorkgroupId(null);
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const data = (await res.json()) as MeResponse;
       setUser(data.user);
+      setPermissions(Array.isArray(data.permissions) ? data.permissions : []);
       setAppParameterBooleans(data.appParameterBooleans ?? {});
       setAppParameterAssetTypes(parseAssetTypeDisplayConfig(data.appParameterAssetTypes));
       setAppParameterDefaultWorkgroupId(data.appParameterDefaultWorkgroupId ?? null);
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       await clearMobileCredentials();
       setUser(null);
+      setPermissions([]);
       setAppParameterBooleans({});
       setAppParameterAssetTypes(null);
       setAppParameterDefaultWorkgroupId(null);
@@ -146,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     await clearMobileCredentials();
     setUser(null);
+    setPermissions([]);
     setAppParameterBooleans({});
     setAppParameterAssetTypes(null);
     setAppParameterDefaultWorkgroupId(null);
@@ -158,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
+      permissions,
       appParameterBooleans,
       appParameterAssetTypes,
       appParameterDefaultWorkgroupId,
@@ -172,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
+      permissions,
       appParameterBooleans,
       appParameterAssetTypes,
       appParameterDefaultWorkgroupId,

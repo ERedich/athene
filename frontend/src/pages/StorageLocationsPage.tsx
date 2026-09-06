@@ -20,7 +20,16 @@ import { lucidePrimeBtnIcon } from "../icons/lucide";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type WarehouseOption = {
   id: string;
@@ -66,18 +75,9 @@ const emptyForm = (): FormState => ({
   isActive: true,
 });
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
-
 export function StorageLocationsPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("storage-locations");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const [rows, setRows] = useState<StorageLocation[]>([]);
@@ -275,7 +275,14 @@ export function StorageLocationsPage() {
       edit: t("storageLocations.edit"),
       delete: t("storageLocations.delete"),
     },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    handlers: {
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? confirmDelete : undefined,
+    },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selected,
     setSelection: setSelected,
   });
@@ -285,50 +292,6 @@ export function StorageLocationsPage() {
       setSelected(null);
     }
   }, [rows, selected]);
-
-  useEffect(() => {
-    setHeaderRowCount(rows.length);
-    setHeaderActions(
-      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("storageLocations.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={!selected}
-            onClick={() => {
-              if (selected) openEdit(selected);
-            }}
-          >
-            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("storageLocations.edit")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selected}
-            onClick={() => {
-              if (selected) confirmDelete(selected);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("storageLocations.delete")}</span>
-          </button>
-        </li>
-      </ul>,
-    );
-    return () => {
-      setHeaderActions(null);
-      setHeaderRowCount(null);
-    };
-  }, [confirmDelete, openCreate, openEdit, rows.length, selected, setHeaderActions, setHeaderRowCount, t]);
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -340,6 +303,80 @@ export function StorageLocationsPage() {
         row.warehouseName.toLowerCase().includes(q),
     );
   }, [rows, searchTerm]);
+
+  useEffect(() => {
+    setHeaderRowCount(filtered.length);
+    setHeaderActions(
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("storageLocations.new")}</span>
+          </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+            type="button"
+            className={primaryActionNavItem}
+            disabled={!selected}
+            onClick={() => {
+              if (selected) openEdit(selected);
+            }}
+          >
+            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("storageLocations.edit")}</span>
+          </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+            type="button"
+            className={deleteActionNavItem}
+            disabled={!selected}
+            onClick={() => {
+              if (selected) confirmDelete(selected);
+            }}
+          >
+            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+            <span>{t("storageLocations.delete")}</span>
+          </button>
+          </li>
+        ) : null}
+        <li className="ml-auto">
+          <IconField iconPosition="left">
+            <LucideInputSearchIcon />
+            <InputText
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("storageLocations.searchPlaceholder")}
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
+            />
+          </IconField>
+        </li>
+      </ul>,
+    );
+    return () => {
+      setHeaderActions(null);
+      setHeaderRowCount(null);
+    };
+  }, [
+    confirmDelete,
+    crud.canCreate,
+    crud.canDelete,
+    crud.canUpdate,
+    filtered.length,
+    openCreate,
+    openEdit,
+    searchTerm,
+    selected,
+    setHeaderActions,
+    setHeaderRowCount,
+    t,
+  ]);
 
   const formatShortDt = (iso: string) => {
     try {
@@ -393,18 +430,6 @@ export function StorageLocationsPage() {
       <Toast ref={toastRef} position="top-right" />
       <ConfirmDialog />
       {tableCtx.ContextMenuEl}
-
-      <div className="flex items-center gap-3">
-        <IconField iconPosition="left" className="w-full max-w-md">
-          <LucideInputSearchIcon />
-          <InputText
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t("storageLocations.searchPlaceholder")}
-            className="w-full"
-          />
-        </IconField>
-      </div>
 
       <div className="flex min-h-0 flex-1 flex-col" {...tableCtx.wrapperProps}>
         <DataTable

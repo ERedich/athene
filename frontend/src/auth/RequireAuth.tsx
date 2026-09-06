@@ -16,6 +16,7 @@ import {
   parseCalendarMinDurationHours,
 } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+import type { PermissionCatalogApp } from "../lib/permissions";
 import { applyPrimaryColor } from "../theme";
 
 import { AuthSessionContext, type AuthUser } from "./AuthContext";
@@ -24,6 +25,8 @@ import { NavLayoutProvider } from "../layout/NavLayoutContext";
 
 type MeResponse = {
   user: AuthUser;
+  permissions?: string[];
+  permissionCatalog?: PermissionCatalogApp[];
   appParameterBooleans?: Record<string, boolean>;
   appParameterAssetTypes?: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId?: string | null;
@@ -37,6 +40,8 @@ type MeResponse = {
 
 type SessionBase = {
   user: AuthUser;
+  permissions: string[];
+  permissionCatalog: PermissionCatalogApp[];
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   appParameterDefaultWorkgroupId: string | null;
@@ -61,6 +66,8 @@ function sessionFromMe(data: MeResponse): SessionBase {
   applyPrimaryColor(primary);
   return {
     user: data.user,
+    permissions: Array.isArray(data.permissions) ? data.permissions : [],
+    permissionCatalog: Array.isArray(data.permissionCatalog) ? data.permissionCatalog : [],
     appParameterBooleans: data.appParameterBooleans ?? {},
     appParameterAssetTypes: data.appParameterAssetTypes ?? null,
     appParameterDefaultWorkgroupId: data.appParameterDefaultWorkgroupId ?? null,
@@ -177,6 +184,8 @@ export function RequireAuth() {
 
   const session = {
     user: sessionBase.user,
+    permissions: sessionBase.permissions,
+    permissionCatalog: sessionBase.permissionCatalog,
     appParameterBooleans: sessionBase.appParameterBooleans,
     appParameterAssetTypes: sessionBase.appParameterAssetTypes,
     appParameterDefaultWorkgroupId: sessionBase.appParameterDefaultWorkgroupId,

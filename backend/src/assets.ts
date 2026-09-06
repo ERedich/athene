@@ -29,6 +29,7 @@ import {
   getDocumentContentForAsset,
   isDocumentCategory,
   listAssetDocuments,
+  listAssetDocumentsInSubtree,
   patchDocumentForEntity,
   type DocumentCategory,
 } from "./documents/index.js";
@@ -619,8 +620,12 @@ router.get("/:id/documents", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_id" });
     return;
   }
+  const includeDescendants =
+    req.query.includeDescendants === "1" || req.query.includeDescendants === "true";
   try {
-    const rows = await listAssetDocuments(userId, id);
+    const rows = includeDescendants
+      ? await listAssetDocumentsInSubtree(userId, id)
+      : await listAssetDocuments(userId, id);
     if (rows === null) {
       res.status(404).json({ error: "not_found" });
       return;

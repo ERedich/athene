@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 import type { AppParameterAssetKeyMode } from "../lib/appParameterKeys";
 import type { AssetTypeDisplayConfig } from "../lib/assetTypeDisplay";
+import type { PermissionCatalogApp } from "../lib/permissions";
 
 export type AuthUser = {
   id: string;
@@ -19,6 +20,8 @@ export type AuthUser = {
 
 export type AuthSession = {
   user: AuthUser;
+  permissions: string[];
+  permissionCatalog: PermissionCatalogApp[];
   appParameterBooleans: Record<string, boolean>;
   appParameterAssetTypes: AssetTypeDisplayConfig | null;
   /** WO-DWG: default work group UUID for new work orders, or null if unset. */

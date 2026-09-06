@@ -189,11 +189,8 @@ export function TableViewerPage() {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
-      <div className="rounded-sm border border-outline-variant bg-surface-container-low px-3 py-2 text-sm text-on-surface-variant">
-        {t("tableViewer.readOnlyHint")}
-      </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,28rem)_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-px xl:grid-cols-[minmax(20rem,28rem)_1fr]">
         <div className="flex min-h-0 flex-col">
           <DataTable
             className="app-data-table w-full"

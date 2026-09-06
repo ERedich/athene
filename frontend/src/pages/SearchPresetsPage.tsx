@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { Check, Filter, Pencil, Trash2, TriangleAlert, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useOutletContext } from "react-router-dom";
@@ -8,9 +8,11 @@ import { Column } from "primereact/column";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { DataTable } from "primereact/datatable";
 import { AppDialog } from "../components/AppDialog";
+import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
 
+import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { WorkOrderSearchPanel } from "../components/workOrders/WorkOrderSearchPanel";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { coerceWorkOrderAdvancedSearch, emptyWorkOrderAdvancedSearch, type WorkOrderAdvancedSearchState } from "../lib/workOrderApiFilters";
@@ -29,16 +31,26 @@ import {
 } from "../lib/workOrderSearchPresetApi";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
 import { lucidePrimeBtnIcon } from "../icons/lucide";
+import { useAppCrud } from "../lib/usePermission";
+import {
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 export function SearchPresetsPage() {
   const { t } = useTranslation();
+  const crud = useAppCrud("search-presets");
   const navigate = useNavigate();
-  const { setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
+  const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const refData = useWorkOrderSearchReferenceData({ includeAssets: false });
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<WorkOrderSearchPresetListItem[]>([]);
+  const [selected, setSelected] = useState<WorkOrderSearchPresetListItem | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [defaults, setDefaults] = useState<WorkOrderSearchPresetDefaults>({
     workOrdersPresetId: null,
     monitoringPresetId: null,
@@ -95,10 +107,17 @@ export function SearchPresetsPage() {
     void loadPresets();
   }, [loadPresets]);
 
+  const filtered = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => row.name.toLowerCase().includes(q));
+  }, [rows, searchTerm]);
+
   useEffect(() => {
-    setHeaderRowCount(rows.length);
-    return () => setHeaderRowCount(null);
-  }, [rows.length, setHeaderRowCount]);
+    if (selected && !filtered.some((r) => r.id === selected.id)) {
+      setSelected(null);
+    }
+  }, [filtered, selected]);
 
   const confirmDelete = useCallback(
     (preset: WorkOrderSearchPresetListItem) => {
@@ -114,6 +133,7 @@ export function SearchPresetsPage() {
             try {
               await deleteWorkOrderSearchPreset(preset.id);
               toastRef.current?.show({ severity: "success", summary: t("suchkonfig.deleteSuccess"), life: 4000 });
+              setSelected(null);
               await loadPresets();
             } catch {
               toastRef.current?.show({ severity: "error", summary: t("suchkonfig.deleteError"), life: 6000 });
@@ -223,6 +243,93 @@ export function SearchPresetsPage() {
     [t],
   );
 
+  const openAssignments = useCallback(
+    (preset: WorkOrderSearchPresetListItem) => {
+      navigate(`/zuweisungen/search-preset/${preset.id}`);
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    setHeaderRowCount(filtered.length);
+    setHeaderActions(
+      <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selected}
+              onClick={() => {
+                if (selected) void openEdit(selected);
+              }}
+            >
+              <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("suchkonfig.edit")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selected}
+              onClick={() => {
+                if (selected) openAssignments(selected);
+              }}
+            >
+              <Users className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("suchkonfig.assignments")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selected}
+              onClick={() => {
+                if (selected) confirmDelete(selected);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("suchkonfig.delete")}</span>
+            </button>
+          </li>
+        ) : null}
+        <li className="ml-auto">
+          <IconField iconPosition="left">
+            <LucideInputSearchIcon />
+            <InputText
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("suchkonfig.searchPlaceholder")}
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
+            />
+          </IconField>
+        </li>
+      </ul>,
+    );
+    return () => {
+      setHeaderActions(null);
+      setHeaderRowCount(null);
+    };
+  }, [
+    confirmDelete,
+    crud.canDelete,
+    crud.canUpdate,
+    filtered.length,
+    openAssignments,
+    openEdit,
+    searchTerm,
+    selected,
+    setHeaderActions,
+    setHeaderRowCount,
+    t,
+  ]);
+
   const closeEdit = useCallback(() => {
     setEditVisible(false);
     setEditPreset(null);
@@ -322,32 +429,6 @@ export function SearchPresetsPage() {
     </div>
   );
 
-  const actionsBody = (preset: WorkOrderSearchPresetListItem) => (
-    <div className="flex flex-wrap gap-1">
-      <Button
-        type="button"
-        icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        className="p-button-text p-button-sm"
-        label={t("suchkonfig.edit")}
-        onClick={() => void openEdit(preset)}
-      />
-      <Button
-        type="button"
-        icon={<Users className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        className="p-button-text p-button-sm"
-        label={t("suchkonfig.assignments")}
-        onClick={() => navigate(`/zuweisungen/search-preset/${preset.id}`)}
-      />
-      <Button
-        type="button"
-        icon={<Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        className="p-button-text p-button-sm p-button-danger"
-        label={t("suchkonfig.delete")}
-        onClick={() => confirmDelete(preset)}
-      />
-    </div>
-  );
-
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <Toast ref={toastRef} position="top-right" />
@@ -375,41 +456,46 @@ export function SearchPresetsPage() {
         quickSearchForSave={editQuick}
         appliedSearchForSave={editAdvanced}
       />
-      <p className="m-0 text-sm text-on-surface-variant">{t("suchkonfig.intro")}</p>
-      <DataTable
-        key={dataTableEpoch}
-        className="app-data-table w-full"
-        value={rows}
-        loading={loading}
-        dataKey="id"
-        emptyMessage={t("suchkonfig.empty")}
-        scrollable
-        scrollHeight="flex"
-      >
-        <Column field="name" header={t("suchkonfig.columnName")} sortable />
-        <Column
-          header={t("suchkonfig.columnStandardWo")}
-          body={woDefaultBody}
-          style={{ width: "8rem" }}
-          headerClassName="whitespace-normal text-center"
-          className="text-center"
-        />
-        <Column
-          header={t("suchkonfig.columnStandardMonitoring")}
-          body={monitoringDefaultBody}
-          style={{ width: "8rem" }}
-          headerClassName="whitespace-normal text-center"
-          className="text-center"
-        />
-        <Column
-          header={t("suchkonfig.columnStandardMobile")}
-          body={mobileDefaultBody}
-          style={{ width: "8rem" }}
-          headerClassName="whitespace-normal text-center"
-          className="text-center"
-        />
-        <Column header={t("suchkonfig.columnActions")} body={actionsBody} style={{ width: "20rem" }} />
-      </DataTable>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <DataTable
+          key={dataTableEpoch}
+          className="app-data-table w-full"
+          value={filtered}
+          loading={loading}
+          dataKey="id"
+          selection={selected}
+          onSelectionChange={(e) => setSelected((e.value as WorkOrderSearchPresetListItem | null) ?? null)}
+          onRowDoubleClick={(e) => void openEdit(e.data as WorkOrderSearchPresetListItem)}
+          selectionMode="single"
+          metaKeySelection={false}
+          emptyMessage={t("suchkonfig.empty")}
+          scrollable
+          scrollHeight="flex"
+        >
+          <Column field="name" header={t("suchkonfig.columnName")} sortable />
+          <Column
+            header={t("suchkonfig.columnStandardWo")}
+            body={woDefaultBody}
+            style={{ width: "8rem" }}
+            headerClassName="whitespace-normal text-center"
+            className="text-center"
+          />
+          <Column
+            header={t("suchkonfig.columnStandardMonitoring")}
+            body={monitoringDefaultBody}
+            style={{ width: "8rem" }}
+            headerClassName="whitespace-normal text-center"
+            className="text-center"
+          />
+          <Column
+            header={t("suchkonfig.columnStandardMobile")}
+            body={mobileDefaultBody}
+            style={{ width: "8rem" }}
+            headerClassName="whitespace-normal text-center"
+            className="text-center"
+          />
+        </DataTable>
+      </div>
 
       <AppDialog
         visible={editVisible}

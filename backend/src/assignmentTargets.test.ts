@@ -23,11 +23,14 @@ describe("assignmentCatalog", () => {
     expect(getAssignmentType("layout")?.enabled).toBe(false);
     expect(getAssignmentType("menu")?.enabled).toBe(true);
     expect(getAssignmentType("search-preset")?.enabled).toBe(true);
-    expect(ASSIGNMENT_TYPES).toHaveLength(4);
+    expect(getAssignmentType("permission-template")?.enabled).toBe(true);
+    expect(getAssignmentType("permission-template")?.cardinality).toBe("exclusive");
+    expect(ASSIGNMENT_TYPES).toHaveLength(5);
   });
 
   it("validates type ids", () => {
     expect(isAssignmentTypeId("menu")).toBe(true);
+    expect(isAssignmentTypeId("permission-template")).toBe(true);
     expect(isAssignmentTypeId("nope")).toBe(false);
   });
 });

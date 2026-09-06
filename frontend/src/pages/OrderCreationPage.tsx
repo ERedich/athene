@@ -5,11 +5,10 @@ import { Plus } from "lucide-react";
 
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { useWorkOrderDialog } from "../workOrders/WorkOrderDialogContext";
-
-const actionNavItem =
-  "inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-[var(--color-on-surface)] transition-colors";
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const createActionIcon = "text-green-500/70";
+import {
+  createActionIcon,
+  createActionNavItem,
+} from "../lib/headerActionClasses";
 
 export function OrderCreationPage() {
   const { t } = useTranslation();

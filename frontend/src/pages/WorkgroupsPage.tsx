@@ -23,7 +23,16 @@ import { APP_PARAM_KEY_ALLOW_SITE_CHANGE } from "../lib/appParameterKeys";
 import { apiFetch } from "../lib/api";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useAppCrud } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 type SiteOption = {
   id: string;
@@ -76,15 +85,6 @@ const emptyForm = (): FormState => ({
   leaderEmployeeIds: [],
 });
 
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
 
 function hasEmployeeSiteAccess(employee: EmployeeOption, siteId: string): boolean {
   return employee.siteId === siteId;
@@ -96,6 +96,7 @@ function uniqueIds(ids: string[]): string[] {
 
 export function WorkgroupsPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("workgroups");
   const { user, appParameterBooleans } = useAuth();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
@@ -363,7 +364,14 @@ export function WorkgroupsPage() {
 
   const tableCtx = useTableContextMenu<Workgroup>({
     labels: { new: t("workgroups.new"), edit: t("workgroups.edit"), delete: t("workgroups.delete") },
-    handlers: { onCreate: openCreate, onEdit: openEdit, onDelete: confirmDelete },
+    handlers: {
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? confirmDelete : undefined,
+    },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selectedWorkgroup,
     setSelection: setSelectedWorkgroup,
   });
@@ -377,14 +385,17 @@ export function WorkgroupsPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
             <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workgroups.new")}</span>
           </button>
-        </li>
-        <li>
-          <button
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
             type="button"
             className={primaryActionNavItem}
             disabled={!selectedWorkgroup}
@@ -395,9 +406,11 @@ export function WorkgroupsPage() {
             <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workgroups.edit")}</span>
           </button>
-        </li>
-        <li>
-          <button
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
             type="button"
             className={deleteActionNavItem}
             disabled={!selectedWorkgroup}
@@ -408,7 +421,8 @@ export function WorkgroupsPage() {
             <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
             <span>{t("workgroups.delete")}</span>
           </button>
-        </li>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -425,7 +439,7 @@ export function WorkgroupsPage() {
     return () => {
       setHeaderActions(null);
     };
-  }, [confirmDelete, openCreate, openEdit, searchTerm, selectedWorkgroup, setHeaderActions, t]);
+  }, [confirmDelete, crud.canCreate, crud.canDelete, crud.canUpdate, openCreate, openEdit, searchTerm, selectedWorkgroup, setHeaderActions, t]);
 
   useEffect(() => {
     if (!form.siteId) return;

@@ -69,7 +69,7 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
     <div className="space-y-2">
       <div className="text-[11px] font-medium uppercase tracking-[0.1em] text-outline">{t("workOrders.feedbackTransactionsTitle")}</div>
       <DataTable
-        className="app-data-table app-wo-feedback-tx-table w-full text-sm"
+        className="app-data-table app-wo-feedback-tx-table w-full"
         value={rows}
         loading={loading}
         dataKey="id"
@@ -115,14 +115,14 @@ export function WorkOrderFeedbackTransactionsSection({ rows, loading }: Props) {
             const parts = [r.employeeKey, r.employeeName]
               .map((x) => (typeof x === "string" ? x.trim() : ""))
               .filter(Boolean);
-            return <span className="text-sm">{parts.length ? parts.join(" — ") : "—"}</span>;
+            return <span>{parts.length ? parts.join(" — ") : "—"}</span>;
           }}
           className="whitespace-nowrap"
         />
         <Column
           field="remark"
           header={t("transactions.colRemark")}
-          body={(r: TransactionRow) => <span className="text-sm">{remarkShort(r.remark)}</span>}
+          body={(r: TransactionRow) => <span>{remarkShort(r.remark)}</span>}
           className="max-w-[14rem]"
         />
       </DataTable>

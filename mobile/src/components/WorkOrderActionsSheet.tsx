@@ -8,6 +8,7 @@ import { BottomSheetModal } from "./BottomSheetModal";
 import { HapticPressable } from "./HapticPressable";
 
 import type { WorkOrderStatus } from "../types/api";
+import { useAuth } from "../auth/AuthContext";
 import { canFeedbackWorkOrder, canPauseWorkOrder, canStartWorkOrder } from "../lib/workOrderLifecycle";
 import { workOrderPlaybackBtnStyles } from "../lib/workOrderPlaybackUi";
 import { androidRippleProps, pressedOpacity, PRESSED_OPACITY_CONTROL, surfaceRippleColor } from "../styles/pressableFeedback";
@@ -43,6 +44,7 @@ export function WorkOrderActionsSheet({
   atheneBusy = false,
 }: Props) {
   const { t } = useTranslation();
+  const { permissions } = useAuth();
   const { colors, radii, isDark } = useAppTheme();
   const ripple = surfaceRippleColor(isDark);
 
@@ -95,9 +97,10 @@ export function WorkOrderActionsSheet({
     [colors.background, colors.border, colors.onSurface, colors.primary, colors.surface, radii.md, radii.sm],
   );
 
-  const canStart = status ? canStartWorkOrder(status) : false;
-  const canPause = status ? canPauseWorkOrder(status) : false;
-  const canFeedback = status ? canFeedbackWorkOrder(status) : false;
+  const canStart = Boolean(status) && permissions.includes("workOrder.start") && canStartWorkOrder(status!);
+  const canPause = Boolean(status) && permissions.includes("workOrder.pause") && canPauseWorkOrder(status!);
+  const canFeedback =
+    Boolean(status) && permissions.includes("workOrder.feedback") && canFeedbackWorkOrder(status!);
   const hasPlaybackActions = canStart || canPause || canFeedback;
 
   const startStyles = workOrderPlaybackBtnStyles("start", true, colors, isDark, radii);

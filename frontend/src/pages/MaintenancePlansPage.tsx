@@ -28,24 +28,25 @@ import { fetchMaintenancePlans } from "../lib/maintenancePlanApi";
 import type { MaintenancePlan, MaintenancePlanIntervalUnit } from "../lib/maintenancePlanTypes";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { DEFAULT_SITE_COLOR_HEX, readableSiteColor } from "../lib/siteColor";
+import { useAppCrud, usePermission } from "../lib/usePermission";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 import { useWorkOrderSearchReferenceData } from "../hooks/useWorkOrderSearchReferenceData";
 import { useMaintenancePlanDialog } from "../maintenancePlans/MaintenancePlanDialogContext";
-
-const actionNavItem =
-  "inline-flex h-9 items-center gap-2 rounded-sm px-3 text-sm text-on-surface-variant transition-colors disabled:pointer-events-none disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-
-const createActionNavItem = `${actionNavItem} hover:bg-green-500/10 hover:text-green-500`;
-const primaryActionNavItem = `${actionNavItem} hover:bg-[color-mix(in_srgb,var(--color-primary)_14%,transparent)] hover:text-[var(--color-primary)]`;
-const deleteActionNavItem = `${actionNavItem} hover:bg-red-500/10`;
-const createActionIcon = "text-green-500/70";
-const primaryActionIcon = "text-[color-mix(in_srgb,var(--color-primary)_70%,transparent)]";
-const deleteActionIcon = "text-red-500";
+import {
+  createActionIcon,
+  createActionNavItem,
+  deleteActionIcon,
+  deleteActionNavItem,
+  primaryActionIcon,
+  primaryActionNavItem,
+} from "../lib/headerActionClasses";
 
 const fieldLabelClass = "block text-[11px] text-outline uppercase tracking-[0.1em]";
 
 export function MaintenancePlansPage() {
   const { t } = useTranslation();
+  const crud = useAppCrud("maintenance-plans");
+  const canGenerateDue = usePermission("maintenance-plans.generateDue");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const toastRef = useRef<Toast>(null);
   const refData = useWorkOrderSearchReferenceData({ autoLoad: true });
@@ -313,10 +314,13 @@ export function MaintenancePlansPage() {
       delete: t("maintenancePlans.delete"),
     },
     handlers: {
-      onCreate: openCreate,
-      onEdit: openEdit,
-      onDelete: deletePlan,
+      onCreate: crud.canCreate ? openCreate : undefined,
+      onEdit: crud.canUpdate ? openEdit : undefined,
+      onDelete: crud.canDelete ? deletePlan : undefined,
     },
+    canCreate: crud.canCreate,
+    canEdit: crud.canUpdate,
+    canDelete: crud.canDelete,
     selection: selectedPlan,
     setSelection: setSelectedPlan,
     extraItems: (row) => {
@@ -346,49 +350,57 @@ export function MaintenancePlansPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button type="button" className={createActionNavItem} onClick={openCreate}>
-            <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("maintenancePlans.new")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={!selectedPlan}
-            onClick={() => {
-              if (selectedPlan) openEdit(selectedPlan);
-            }}
-          >
-            <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("maintenancePlans.edit")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={deleteActionNavItem}
-            disabled={!selectedPlan}
-            onClick={() => {
-              if (selectedPlan) deletePlan(selectedPlan);
-            }}
-          >
-            <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("maintenancePlans.delete")}</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={primaryActionNavItem}
-            disabled={generating}
-            onClick={() => void generateDue()}
-          >
-            <WandSparkles className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
-            <span>{t("maintenancePlans.generateDue")}</span>
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button type="button" className={createActionNavItem} onClick={openCreate}>
+              <Plus className={`${createActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("maintenancePlans.new")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canUpdate ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={!selectedPlan}
+              onClick={() => {
+                if (selectedPlan) openEdit(selectedPlan);
+              }}
+            >
+              <Pencil className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("maintenancePlans.edit")}</span>
+            </button>
+          </li>
+        ) : null}
+        {crud.canDelete ? (
+          <li>
+            <button
+              type="button"
+              className={deleteActionNavItem}
+              disabled={!selectedPlan}
+              onClick={() => {
+                if (selectedPlan) deletePlan(selectedPlan);
+              }}
+            >
+              <Trash2 className={`${deleteActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("maintenancePlans.delete")}</span>
+            </button>
+          </li>
+        ) : null}
+        {canGenerateDue ? (
+          <li>
+            <button
+              type="button"
+              className={primaryActionNavItem}
+              disabled={generating}
+              onClick={() => void generateDue()}
+            >
+              <WandSparkles className={`${primaryActionIcon} h-4 w-4`} strokeWidth={1.75} aria-hidden />
+              <span>{t("maintenancePlans.generateDue")}</span>
+            </button>
+          </li>
+        ) : null}
         <li>
           <button
             type="button"
@@ -426,6 +438,10 @@ export function MaintenancePlansPage() {
       setHeaderActions(null);
     };
   }, [
+    canGenerateDue,
+    crud.canCreate,
+    crud.canDelete,
+    crud.canUpdate,
     deletePlan,
     generateDue,
     generating,

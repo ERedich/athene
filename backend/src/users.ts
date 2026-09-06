@@ -5,6 +5,13 @@ import type { QueryResult } from "pg";
 
 import { withAuditContext } from "./auditContext.js";
 import { pool } from "./db.js";
+import { isKnownPermissionKey, operationalPermissionKeys } from "./permissionCatalog.js";
+import {
+  assertCanAssignPermissions,
+  loadUserPermissions,
+  replaceUserPermissions,
+  userHasPermission,
+} from "./middleware/requirePermission.js";
 import { assertSiteAccess, type SiteAccessClient, siteAccessSql } from "./siteAccess.js";
 import { ensureMyOpenWorkOrdersPreset } from "./workOrderSearchPresets.js";
 
@@ -112,20 +119,39 @@ function parseMutableFields(body: unknown): MutableUserFields | null {
   };
 }
 
+function parsePermissionKeys(value: unknown): string[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  const keys: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !entry.trim()) return null;
+    const k = entry.trim();
+    if (!isKnownPermissionKey(k)) return null;
+    keys.push(k);
+  }
+  return [...new Set(keys)];
+}
+
 function parseCreateBody(
   body: unknown,
-): (MutableUserFields & { password: string }) | null {
+): (MutableUserFields & { password: string; permissionKeys?: string[] }) | null {
   const mutable = parseMutableFields(body);
   if (!mutable || body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
   const password = typeof o.password === "string" ? o.password : "";
   if (!password) return null;
-  return { ...mutable, password };
+  const permissionKeys = parsePermissionKeys(o.permissionKeys);
+  if (permissionKeys === null) return null;
+  return {
+    ...mutable,
+    password,
+    ...(permissionKeys !== undefined ? { permissionKeys } : {}),
+  };
 }
 
 function parseUpdateBody(
   body: unknown,
-): (MutableUserFields & { password: string | null }) | null {
+): (MutableUserFields & { password: string | null; permissionKeys?: string[] }) | null {
   const mutable = parseMutableFields(body);
   if (!mutable || body === null || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
@@ -135,7 +161,13 @@ function parseUpdateBody(
   }
   const password =
     typeof rawPassword === "string" && rawPassword.length > 0 ? rawPassword : null;
-  return { ...mutable, password };
+  const permissionKeys = parsePermissionKeys(o.permissionKeys);
+  if (permissionKeys === null) return null;
+  return {
+    ...mutable,
+    password,
+    ...(permissionKeys !== undefined ? { permissionKeys } : {}),
+  };
 }
 
 function sendPgError(res: Response, err: unknown) {
@@ -319,7 +351,8 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { loginName, name, workingSiteId, password, siteIds, employeeId } = parsed;
+  const { loginName, name, workingSiteId, password, siteIds, employeeId, permissionKeys } =
+    parsed;
 
   if (!(await ensureWorkingSiteIsPlant(workingSiteId))) {
     res.status(400).json({ error: "invalid_working_site" });
@@ -328,6 +361,21 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const meta = auditMeta(req);
+    const keysToGrant = permissionKeys ?? operationalPermissionKeys();
+    if (permissionKeys !== undefined) {
+      if (!(await userHasPermission(req, "permissions.manage"))) {
+        res.status(403).json({ error: "forbidden", permission: "permissions.manage" });
+        return;
+      }
+      const actorPerms = await loadUserPermissions(pool, meta.userId);
+      for (const k of keysToGrant) {
+        if (!actorPerms.has(k)) {
+          res.status(403).json({ error: "cannot_grant_unowned", permission: k });
+          return;
+        }
+      }
+    }
+
     const row = await withAuditContext(meta, async (client) => {
       await assertSiteAccess(client, meta.userId, workingSiteId);
       await assertAllSitesExist(client, siteIds);
@@ -358,6 +406,7 @@ router.post("/", async (req: Request, res: Response) => {
       }
 
       await ensureMyOpenWorkOrdersPreset(client, userId);
+      await replaceUserPermissions(client, userId, keysToGrant);
 
       const { rows } = await client.query<UserRow>(
         `
@@ -401,6 +450,108 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/:id/permissions", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const actorId = req.session.userId;
+  if (!actorId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    if (!(await userHasPermission(req, "permissions.manage")) && actorId !== id) {
+      if (!(await userHasPermission(req, "users.view"))) {
+        res.status(403).json({ error: "forbidden", permission: "users.view" });
+        return;
+      }
+    }
+    const existing = await pool.query<{ id: string }>(
+      `
+      SELECT u."id"
+      FROM "users" u
+      WHERE u."id" = $1::uuid
+        AND (
+          ${siteAccessSql('u."workingSiteId"', "$2")}
+          OR EXISTS (
+            SELECT 1
+            FROM "userSite" target_us
+            WHERE target_us."userId" = u."id"
+              AND ${siteAccessSql('target_us."siteId"', "$2")}
+          )
+        )
+      `,
+      [id, actorId],
+    );
+    if ((existing.rowCount ?? 0) === 0) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const perms = await loadUserPermissions(pool, id);
+    res.json({ permissionKeys: [...perms].sort() });
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
+router.put("/:id/permissions", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!isUuid(id)) {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  const keys = parsePermissionKeys((req.body as { permissionKeys?: unknown })?.permissionKeys);
+  if (keys === null || keys === undefined) {
+    res.status(400).json({ error: "invalid_body" });
+    return;
+  }
+  try {
+    const meta = auditMeta(req);
+    const check = await assertCanAssignPermissions(pool, meta.userId, keys, id);
+    if (!check.ok) {
+      res.status(403).json({ error: check.error });
+      return;
+    }
+    await withAuditContext(meta, async (client) => {
+      const existing = await client.query<{ id: string }>(
+        `
+        SELECT u."id"
+        FROM "users" u
+        WHERE u."id" = $1::uuid
+          AND (
+            ${siteAccessSql('u."workingSiteId"', "$2")}
+            OR EXISTS (
+              SELECT 1
+              FROM "userSite" target_us
+              WHERE target_us."userId" = u."id"
+                AND ${siteAccessSql('target_us."siteId"', "$2")}
+            )
+          )
+        `,
+        [id, meta.userId],
+      );
+      if ((existing.rowCount ?? 0) === 0) {
+        throw new Error("not_found");
+      }
+      await replaceUserPermissions(client, id, keys);
+    });
+    const perms = await loadUserPermissions(pool, id);
+    res.json({ permissionKeys: [...perms].sort() });
+  } catch (err) {
+    if ((err as Error).message === "missing_session_user") {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if ((err as Error).message === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    sendPgError(res, err);
+  }
+});
+
 router.put("/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!isUuid(id)) {
@@ -413,7 +564,8 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "invalid_body" });
     return;
   }
-  const { loginName, name, workingSiteId, password, siteIds, employeeId } = parsed;
+  const { loginName, name, workingSiteId, password, siteIds, employeeId, permissionKeys } =
+    parsed;
 
   if (!(await ensureWorkingSiteIsPlant(workingSiteId))) {
     res.status(400).json({ error: "invalid_working_site" });
@@ -422,6 +574,13 @@ router.put("/:id", async (req: Request, res: Response) => {
 
   try {
     const meta = auditMeta(req);
+    if (permissionKeys !== undefined) {
+      const check = await assertCanAssignPermissions(pool, meta.userId, permissionKeys, id);
+      if (!check.ok) {
+        res.status(403).json({ error: check.error });
+        return;
+      }
+    }
     const row = await withAuditContext(meta, async (client) => {
       const existing = await client.query<{ id: string }>(
         `
@@ -487,6 +646,10 @@ router.put("/:id", async (req: Request, res: Response) => {
           `,
           [id, ...siteIds],
         );
+      }
+
+      if (permissionKeys !== undefined) {
+        await replaceUserPermissions(client, id, permissionKeys);
       }
 
       const { rows } = await client.query<UserRow>(

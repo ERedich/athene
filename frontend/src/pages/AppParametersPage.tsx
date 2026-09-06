@@ -52,6 +52,7 @@ import { apiFetch } from "../lib/api";
 import { storedFromPickerValue } from "../lib/colorHex";
 import { overlayAppendTo } from "../lib/overlayAppendTo";
 import { STANDARD_TAB_HOST_CLASS, STANDARD_TAB_VIEW_CLASS, useTabInk } from "../lib/tabs";
+import { useAppCrud } from "../lib/usePermission";
 
 type AppParameterRow = {
   id: string;
@@ -151,6 +152,7 @@ function parameterRowDirty(a: AppParameterRow, b: AppParameterRow): boolean {
 
 export function AppParametersPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("app-parameters");
   const { setHeaderActions, setHeaderRowCount } = useOutletContext<AppShellOutletContext>();
   const { refresh, user } = useAuth();
   const toastRef = useRef<Toast>(null);
@@ -718,7 +720,7 @@ export function AppParametersPage() {
                     label={t("appParameters.editAssetTypes")}
                     icon={<Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
                     className="p-button-sm w-fit"
-                    disabled={savingAll}
+                    disabled={!crud.canUpdate || savingAll}
                     onClick={() => openAssetTypesDialog(row)}
                   />
                 </div>
@@ -868,15 +870,17 @@ export function AppParametersPage() {
                       </div>
                     </div>
                     <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        label={t("appParameters.saveAll")}
-                        icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-                        className="p-button-sm"
-                        disabled={!woPcrDirty || !siteParamSiteId || siteParamsLoading || siteParamsSaving}
-                        loading={siteParamsSaving}
-                        onClick={() => void saveWoPcr()}
-                      />
+                      {crud.canUpdate ? (
+                        <Button
+                          type="button"
+                          label={t("appParameters.saveAll")}
+                          icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+                          className="p-button-sm"
+                          disabled={!woPcrDirty || !siteParamSiteId || siteParamsLoading || siteParamsSaving}
+                          loading={siteParamsSaving}
+                          onClick={() => void saveWoPcr()}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 </Card>
@@ -924,7 +928,7 @@ export function AppParametersPage() {
         type="button"
         label={t("appParameters.apply")}
         icon={<Check className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-        disabled={savingAll}
+        disabled={!crud.canUpdate || savingAll}
         onClick={() => applyAssetTypesDialogToDraft()}
       />
     </div>
@@ -1001,21 +1005,25 @@ export function AppParametersPage() {
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-outline-variant bg-surface px-4 py-3">
-        <Button
-          type="button"
-          label={t("appParameters.discard")}
-          className="p-button-text"
-          disabled={!hasUnsavedChanges || savingAll}
-          onClick={() => discardDraft()}
-        />
-        <Button
-          type="button"
-          label={t("appParameters.save")}
-          icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
-          loading={savingAll}
-          disabled={!hasUnsavedChanges || savingAll}
-          onClick={() => void saveAll()}
-        />
+        {crud.canUpdate ? (
+          <>
+            <Button
+              type="button"
+              label={t("appParameters.discard")}
+              className="p-button-text"
+              disabled={!hasUnsavedChanges || savingAll}
+              onClick={() => discardDraft()}
+            />
+            <Button
+              type="button"
+              label={t("appParameters.save")}
+              icon={<Save className={lucidePrimeBtnIcon} strokeWidth={1.75} />}
+              loading={savingAll}
+              disabled={!hasUnsavedChanges || savingAll}
+              onClick={() => void saveAll()}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

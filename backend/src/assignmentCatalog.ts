@@ -2,7 +2,12 @@
 
 export type AssignmentCardinality = "exclusive" | "share";
 
-export type AssignmentTypeId = "menu" | "search-preset" | "dashboard" | "layout";
+export type AssignmentTypeId =
+  | "menu"
+  | "search-preset"
+  | "permission-template"
+  | "dashboard"
+  | "layout";
 
 export type AssignmentTypeDef = {
   id: AssignmentTypeId;
@@ -23,6 +28,12 @@ export const ASSIGNMENT_TYPES: AssignmentTypeDef[] = [
     cardinality: "share",
     enabled: true,
     sourcePath: "/suchkonfig",
+  },
+  {
+    id: "permission-template",
+    cardinality: "exclusive",
+    enabled: true,
+    sourcePath: "/berechtigungswesen",
   },
   {
     id: "dashboard",

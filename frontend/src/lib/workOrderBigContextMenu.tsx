@@ -49,22 +49,58 @@ function canStopPauseStatus(status: WorkOrder["status"]): boolean {
   return status === "started" || status === "continued";
 }
 
+export type WorkOrderBigMenuPermissions = {
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
+  canStart?: boolean;
+  canPause?: boolean;
+  canCancel?: boolean;
+  canComplete?: boolean;
+  canFeedback?: boolean;
+  canAssign?: boolean;
+  canSubscribe?: boolean;
+};
+
 export function buildWorkOrderBigMenuModel(
   row: WorkOrder | null,
   t: TFunction,
   handlers: WorkOrderBigMenuHandlers,
+  perms?: WorkOrderBigMenuPermissions,
 ): WorkOrderBigMenuModel {
+  const p: Required<WorkOrderBigMenuPermissions> = {
+    canCreate: perms?.canCreate ?? true,
+    canUpdate: perms?.canUpdate ?? true,
+    canDelete: perms?.canDelete ?? true,
+    canStart: perms?.canStart ?? true,
+    canPause: perms?.canPause ?? true,
+    canCancel: perms?.canCancel ?? true,
+    canComplete: perms?.canComplete ?? true,
+    canFeedback: perms?.canFeedback ?? true,
+    canAssign: perms?.canAssign ?? true,
+    canSubscribe: perms?.canSubscribe ?? true,
+  };
   const hasRow = row != null;
-  const canStart = hasRow && canStartStatus(row.status);
-  const canStopPause = hasRow && canStopPauseStatus(row.status);
-  const canOpenFeedbackTab = hasRow && workOrderStatusAllowsFeedbackTab(row.status);
-  const canClose = hasRow && row.status === "ended";
+  const canStart = hasRow && canStartStatus(row.status) && p.canStart;
+  const canStopPause = hasRow && canStopPauseStatus(row.status) && p.canPause;
+  const canOpenFeedbackTab =
+    hasRow && workOrderStatusAllowsFeedbackTab(row.status) && p.canFeedback;
+  const canClose = hasRow && row.status === "ended" && p.canComplete;
   const canCancel =
-    hasRow && row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
+    hasRow &&
+    row.status !== "ended" &&
+    row.status !== "done" &&
+    row.status !== "cancelled" &&
+    p.canCancel;
   const canAssign =
-    hasRow && row.status !== "ended" && row.status !== "done" && row.status !== "cancelled";
-  const canCopyOrFollowUp = hasRow && Boolean(row.workgroupId);
-  const isSubscribed = hasRow && handlers.subscription ? handlers.subscription.isSubscribed(row.id) : false;
+    hasRow &&
+    row.status !== "ended" &&
+    row.status !== "done" &&
+    row.status !== "cancelled" &&
+    p.canAssign;
+  const canCopyOrFollowUp = hasRow && Boolean(row.workgroupId) && p.canCreate;
+  const isSubscribed =
+    hasRow && handlers.subscription ? handlers.subscription.isSubscribed(row.id) : false;
 
   const cornerAction: BigMenuItem = {
     id: "ask-athene",
@@ -143,7 +179,7 @@ export function buildWorkOrderBigMenuModel(
         id: "edit",
         label: t("workOrders.edit"),
         icon: <Pencil className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
+        disabled: !hasRow || !p.canUpdate,
         onSelect: () => {
           if (row) handlers.onEdit(row);
         },
@@ -174,7 +210,7 @@ export function buildWorkOrderBigMenuModel(
         ) : (
           <Bell className={lucidePrimeBtnIcon} strokeWidth={1.75} />
         ),
-        disabled: !hasRow || !handlers.subscription,
+        disabled: !hasRow || !handlers.subscription || !p.canSubscribe,
         onSelect: () => {
           if (row && handlers.subscription) handlers.subscription.onToggle(row);
         },
@@ -191,7 +227,10 @@ export function buildWorkOrderBigMenuModel(
         id: "new",
         label: t("workOrders.new"),
         icon: <Plus className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        onSelect: () => handlers.onCreate(),
+        disabled: !p.canCreate,
+        onSelect: () => {
+          if (p.canCreate) handlers.onCreate();
+        },
       },
       {
         id: "copy",
@@ -233,7 +272,7 @@ export function buildWorkOrderBigMenuModel(
         id: "delete",
         label: t("workOrders.delete"),
         icon: <Trash2 className={lucidePrimeBtnIcon} strokeWidth={1.75} />,
-        disabled: !hasRow,
+        disabled: !hasRow || !p.canDelete,
         danger: true,
         onSelect: () => {
           if (row) handlers.onDelete(row);

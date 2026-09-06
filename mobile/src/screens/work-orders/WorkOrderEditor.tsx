@@ -195,9 +195,12 @@ export function WorkOrderEditor({ orderId }: Props) {
   const { colors, isDark } = useAppTheme();
   const ripple = surfaceRippleColor(isDark);
   const insets = useSafeAreaInsets();
-  const { user, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
+  const { user, permissions, appParameterBooleans, appParameterDefaultWorkgroupId } = useAuth();
   const athene = useAtheneAssistant();
   const siteFieldLocked = !appParameterBooleans[APP_PARAM_KEY_ALLOW_SITE_CHANGE];
+  const allowStart = permissions.includes("workOrder.start");
+  const allowPause = permissions.includes("workOrder.pause");
+  const allowFeedback = permissions.includes("workOrder.feedback");
 
   const { data: orders = [], isLoading: ordersLoading } = useWorkOrdersQuery();
   const { data: assets = [], isLoading: assetsLoading } = useAssetsQuery();
@@ -464,9 +467,9 @@ export function WorkOrderEditor({ orderId }: Props) {
     }
     navigation.setOptions({
       headerRight: () => {
-        const canStart = canStartWorkOrder(currentOrder.status);
-        const canPause = canPauseWorkOrder(currentOrder.status);
-        const canStop = canFeedbackWorkOrder(currentOrder.status);
+        const canStart = allowStart && canStartWorkOrder(currentOrder.status);
+        const canPause = allowPause && canPauseWorkOrder(currentOrder.status);
+        const canStop = allowFeedback && canFeedbackWorkOrder(currentOrder.status);
 
         return (
         <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8, gap: 2 }}>
@@ -545,6 +548,9 @@ export function WorkOrderEditor({ orderId }: Props) {
     });
     return () => navigation.setOptions({ headerRight: undefined });
   }, [
+    allowFeedback,
+    allowPause,
+    allowStart,
     athene.busy,
     colors.primary,
     currentOrder,

@@ -46,6 +46,17 @@ describe("resolveWebNavLayout default", () => {
   });
 });
 
+describe("administration catalog includes berechtigungswesen", () => {
+  it("lists /berechtigungswesen after /users in navModel", async () => {
+    const { navGroups } = await import("../layout/navModel");
+    const admin = navGroups.find((g) => g.id === "administration");
+    expect(admin).toBeTruthy();
+    const tos = admin!.items.map((i) => i.to);
+    expect(tos).toContain("/berechtigungswesen");
+    expect(tos.indexOf("/berechtigungswesen")).toBeGreaterThan(tos.indexOf("/users"));
+  });
+});
+
 describe("administration catalog includes zuweisungen", () => {
   it("lists /zuweisungen after /users in navModel", async () => {
     const { navGroups } = await import("../layout/navModel");

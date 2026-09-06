@@ -10,6 +10,7 @@ import { AppDialog } from "../components/AppDialog";
 import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { apiFetch } from "../lib/api";
+import { useAppCrud } from "../lib/usePermission";
 
 type ConfigListRow = {
   id: string;
@@ -21,6 +22,7 @@ type ConfigListRow = {
 
 export function CustomizeMenuPage() {
   const { t, i18n } = useTranslation();
+  const crud = useAppCrud("customize-menu");
   const navigate = useNavigate();
   const { setHeaderActions, setHeaderRowCount } =
     useOutletContext<AppShellOutletContext>();
@@ -69,16 +71,18 @@ export function CustomizeMenuPage() {
   useEffect(() => {
     setHeaderActions(
       <ul className="m-0 flex w-full list-none items-center gap-1 p-0">
-        <li>
-          <button
-            type="button"
-            className="app-header-action-nav-item inline-flex items-center gap-1.5"
-            onClick={() => navigate("/customize-menu/new")}
-          >
-            <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
-            {t("customizeMenu.newConfig")}
-          </button>
-        </li>
+        {crud.canCreate ? (
+          <li>
+            <button
+              type="button"
+              className="app-header-action-nav-item inline-flex items-center gap-1.5"
+              onClick={() => navigate("/customize-menu/new")}
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+              {t("customizeMenu.newConfig")}
+            </button>
+          </li>
+        ) : null}
         <li className="ml-auto">
           <IconField iconPosition="left">
             <LucideInputSearchIcon />
@@ -86,7 +90,7 @@ export function CustomizeMenuPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("customizeMenu.searchConfigs")}
-              className="app-header-search-input !rounded-sm text-sm"
+              className="app-header-search-input h-9 w-56 !rounded-sm text-sm"
               aria-label={t("customizeMenu.searchConfigs")}
             />
           </IconField>
@@ -94,7 +98,7 @@ export function CustomizeMenuPage() {
       </ul>,
     );
     return () => setHeaderActions(null);
-  }, [navigate, search, setHeaderActions, t]);
+  }, [crud.canCreate, navigate, search, setHeaderActions, t]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -134,9 +138,10 @@ export function CustomizeMenuPage() {
   };
 
   return (
-    <div className="app-customize-menu-page flex min-h-0 flex-1 flex-col overflow-auto p-4">
+    <div className="app-customize-menu-page flex min-h-0 flex-1 flex-col overflow-auto">
       <Toast ref={toast} position="top-right" />
-      <p className="mb-4 max-w-2xl text-sm text-on-surface-variant">
+      <div className="flex flex-col gap-4 p-4">
+      <p className="m-0 max-w-2xl text-sm text-on-surface-variant">
         {t("customizeMenu.listLead")}
       </p>
 
@@ -149,12 +154,15 @@ export function CustomizeMenuPage() {
           {filtered.map((row) => (
             <li
               key={row.id}
-              className="app-customize-menu-group flex items-center gap-3 rounded-lg px-3 py-3"
+              className="app-customize-menu-group flex items-center gap-3 rounded-sm px-3 py-3"
             >
               <button
                 type="button"
                 className="min-w-0 flex-1 text-left"
-                onClick={() => navigate(`/customize-menu/${row.id}`)}
+                disabled={!crud.canUpdate}
+                onClick={() => {
+                  if (crud.canUpdate) navigate(`/customize-menu/${row.id}`);
+                }}
               >
                 <span className="app-customize-menu-group-label block">
                   {row.name}
@@ -172,28 +180,33 @@ export function CustomizeMenuPage() {
               >
                 <UserPlus size={20} strokeWidth={2} />
               </button>
-              <button
-                type="button"
-                className="app-customize-menu-icon-btn text-on-surface-variant hover:bg-surface-container-high"
-                aria-label={t("customizeMenu.edit")}
-                title={t("customizeMenu.edit")}
-                onClick={() => navigate(`/customize-menu/${row.id}`)}
-              >
-                <Pencil size={20} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className="app-customize-menu-icon-btn text-on-surface-variant hover:bg-surface-container-high"
-                aria-label={t("customizeMenu.delete")}
-                title={t("customizeMenu.delete")}
-                onClick={() => setDeleteTarget(row)}
-              >
-                <Trash2 size={20} strokeWidth={2} />
-              </button>
+              {crud.canUpdate ? (
+                <button
+                  type="button"
+                  className="app-customize-menu-icon-btn text-on-surface-variant hover:bg-surface-container-high"
+                  aria-label={t("customizeMenu.edit")}
+                  title={t("customizeMenu.edit")}
+                  onClick={() => navigate(`/customize-menu/${row.id}`)}
+                >
+                  <Pencil size={20} strokeWidth={2} />
+                </button>
+              ) : null}
+              {crud.canDelete ? (
+                <button
+                  type="button"
+                  className="app-customize-menu-icon-btn text-on-surface-variant hover:bg-surface-container-high"
+                  aria-label={t("customizeMenu.delete")}
+                  title={t("customizeMenu.delete")}
+                  onClick={() => setDeleteTarget(row)}
+                >
+                  <Trash2 size={20} strokeWidth={2} />
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
+      </div>
 
       <AppDialog
         header={t("customizeMenu.deleteConfigTitle")}
