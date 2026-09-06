@@ -263,17 +263,6 @@
       }
     }
   },
-  "calculator": {
-    "appName": "Taschenrechner",
-    "navCalculator": "Taschenrechner",
-    "clear": "C",
-    "equals": "Gleich",
-    "decimal": "Dezimalpunkt",
-    "error": "Fehler",
-    "divideByZero": "Division durch null",
-    "displayAria": "Anzeige",
-    "keypadAria": "Tastenfeld"
-  },
   "customizeMenu": {
     "appName": "Menü anpassen",
     "nav": "Menü anpassen",
@@ -1172,6 +1161,40 @@
     "backToHub": "Übersicht",
     "skippedWithoutEmployee": "{{count}} Benutzer ohne Mitarbeiter übersprungen.",
     "typeDisabled": "Dieser Typ ist noch nicht verfügbar."
+  },
+  "systemTools": {
+    "appName": "Systemwerkzeuge",
+    "navSystemTools": "Systemwerkzeuge",
+    "hubLead": "Manuelle Systemprozeduren auslösen — etwa fällige Arbeitspläne als Aufträge erzeugen.",
+    "searchHub": "Prozeduren durchsuchen",
+    "comingSoon": "Folgt",
+    "toolGenerateDue": "Fällige Arbeitspläne ausrollen",
+    "toolGenerateDueMeta": "Manuell oder täglich automatisch",
+    "toolBanfCreate": "BANFen erstellen",
+    "toolBanfCreateMeta": "Folgt",
+    "dueCount": "{{count}} fällig",
+    "loadError": "Systemwerkzeuge konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "backToHub": "Zurück zu Systemwerkzeuge",
+    "procedureGenerateDueLead": "Erzeugt Aufträge für alle jetzt fälligen aktiven Arbeitspläne (inkl. Vorlauf) in Ihren Buchungskreisen — derselbe Lauf wie der tägliche Hintergrund-Job.",
+    "kpiDue": "Fällig jetzt",
+    "kpiLastSweep": "Letzter automatischer Lauf",
+    "kpiNextSweep": "Nächster automatischer Lauf",
+    "runGenerate": "Jetzt ausrollen",
+    "confirmGenerateTitle": "Fällige Arbeitspläne ausrollen?",
+    "confirmGenerate": "{{count}} fällige Pläne prüfen und ggf. Aufträge erzeugen. Fortfahren?",
+    "yes": "Ja",
+    "no": "Nein",
+    "generateDone": "{{created}} erzeugt, {{skipped}} übersprungen.",
+    "generateError": "Ausrollen fehlgeschlagen.",
+    "lastRunSummary": "Letzter Lauf: {{created}} erzeugt, {{skipped}} übersprungen.",
+    "skipNotFound": "Plan nicht gefunden",
+    "skipNotActive": "Plan nicht aktiv",
+    "skipNotDue": "Noch nicht fällig",
+    "skipOpenWorkOrder": "Offener Auftrag vorhanden",
+    "skipNoResponsibles": "Keine Verantwortlichen",
+    "skipUnauthorized": "Keine Berechtigung",
+    "skipCreateFailed": "Erzeugen fehlgeschlagen"
   },
   "users": {
     "appName": "Benutzer",

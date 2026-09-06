@@ -20,8 +20,8 @@ export const NAV_CATALOG: NavCatalogGroup[] = [
       "/audit-log",
       "/app-parameters",
       "/translations",
-      "/calculator",
       "/customize-menu",
+      "/systemwerkzeuge",
     ],
   },
   {

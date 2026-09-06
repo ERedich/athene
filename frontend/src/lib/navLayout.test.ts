@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LayoutGrid, Settings, Calculator, History, Menu } from "lucide-react";
+import { LayoutGrid, Settings, History, Menu } from "lucide-react";
 
 import type { NavGroup } from "../layout/navModel";
 import {
@@ -32,7 +32,6 @@ const miniCatalog: NavGroup[] = [
     Icon: Settings,
     items: [
       { to: "/audit-log", Icon: History, labelKey: "auditLog.navAudit" },
-      { to: "/calculator", Icon: Calculator, labelKey: "calculator.navCalculator" },
       { to: "/customize-menu", Icon: Menu, labelKey: "customizeMenu.nav" },
     ],
   },
@@ -58,6 +57,19 @@ describe("administration catalog includes zuweisungen", () => {
   });
 });
 
+describe("system catalog includes systemwerkzeuge", () => {
+  it("lists /systemwerkzeuge after /customize-menu in navModel", async () => {
+    const { navGroups } = await import("../layout/navModel");
+    const system = navGroups.find((g) => g.id === "system");
+    expect(system).toBeTruthy();
+    const tos = system!.items.map((i) => i.to);
+    expect(tos).toContain("/systemwerkzeuge");
+    expect(tos.indexOf("/systemwerkzeuge")).toBeGreaterThan(
+      tos.indexOf("/customize-menu"),
+    );
+  });
+});
+
 describe("custom items", () => {
   it("adds custom group and sub item", () => {
     let resolved = resolveWebNavLayout(miniCatalog, null);
@@ -67,12 +79,12 @@ describe("custom items", () => {
     resolved = addCustomSubItem(
       resolved,
       custom!.id,
-      "Calc copy",
-      "/calculator",
+      "Audit copy",
+      "/audit-log",
       miniCatalog,
     );
     const again = resolved.find((g) => g.id === custom!.id)!;
-    expect(again.items.some((i) => i.name === "Calc copy" && i.to === "/calculator")).toBe(
+    expect(again.items.some((i) => i.name === "Audit copy" && i.to === "/audit-log")).toBe(
       true,
     );
   });
@@ -90,21 +102,21 @@ describe("custom items", () => {
 describe("hide and move", () => {
   it("hides catalog item from sidebar", () => {
     let resolved = resolveWebNavLayout(miniCatalog, null);
-    const calc = resolved[1].items.find((i) => i.to === "/calculator")!;
-    resolved = toggleItemHidden(resolved, "system", calc.id);
+    const audit = resolved[1].items.find((i) => i.to === "/audit-log")!;
+    resolved = toggleItemHidden(resolved, "system", audit.id);
     const sidebar = toSidebarNavGroups(resolved);
     expect(
       sidebar.find((g) => g.id === "system")?.items.map((i) => i.to),
-    ).not.toContain("/calculator");
+    ).not.toContain("/audit-log");
   });
 
   it("moves item into leaf group", () => {
     let resolved = resolveWebNavLayout(miniCatalog, null);
-    const calcIdx = resolved[1].items.findIndex((i) => i.to === "/calculator");
-    resolved = moveItem(resolved, "system", calcIdx, "dashboard", 1);
+    const auditIdx = resolved[1].items.findIndex((i) => i.to === "/audit-log");
+    resolved = moveItem(resolved, "system", auditIdx, "dashboard", 1);
     const dash = resolved.find((g) => g.id === "dashboard")!;
     expect(dash.role).toBe("group");
-    expect(dash.items.map((i) => i.to)).toContain("/calculator");
+    expect(dash.items.map((i) => i.to)).toContain("/audit-log");
   });
 });
 

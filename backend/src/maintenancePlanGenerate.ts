@@ -299,6 +299,21 @@ export async function generateWorkOrderForPlan(params: {
   }
 }
 
+/** Count active plans due now (incl. lead time), same filter as generateDueMaintenancePlans. */
+export async function countDueMaintenancePlans(actorUserId: string): Promise<number> {
+  const { rows } = await pool.query<{ c: number }>(
+    `
+    SELECT COUNT(*)::int AS c
+    FROM "maintenancePlan" p
+    WHERE p."status" = 'active'
+      AND p."nextDueAt" <= now() + make_interval(days => p."leadTimeDays")
+      AND ${siteAccessSql('p."siteId"', "$1")}
+    `,
+    [actorUserId],
+  );
+  return rows[0]?.c ?? 0;
+}
+
 export async function generateDueMaintenancePlans(params: {
   actorUserId: string | null;
   systemSweep?: boolean;

@@ -48,6 +48,7 @@ import { publicLoginKpisRouter } from "./publicLoginKpis.js";
 import { reportDesignerRouter } from "./reportDesigner.js";
 import { navLayoutRouter, navMenuConfigsRouter } from "./navLayout.js";
 import { assignmentsRouter } from "./assignments.js";
+import { systemToolsRouter } from "./systemTools.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -125,6 +126,7 @@ app.use("/api/report-designer", requireAuth, reportDesignerRouter);
 app.use("/api/nav-layout", requireAuth, navLayoutRouter);
 app.use("/api/nav-menu-configs", requireAuth, navMenuConfigsRouter);
 app.use("/api/assignments", requireAuth, assignmentsRouter);
+app.use("/api/system-tools", requireAuth, systemToolsRouter);
 
 const server = createServer(app);
 const workOrdersWss = createWorkOrderWebSocketServer("/api/work-orders/events");

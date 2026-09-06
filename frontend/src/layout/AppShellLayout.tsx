@@ -41,7 +41,6 @@ function headerTitleKey(pathname: string): string {
   const map: Record<string, string> = {
     dashboard: "dashboard.appName",
     "getting-started": "gettingStarted.appName",
-    calculator: "calculator.appName",
     "customize-menu": "customizeMenu.appName",
     feedback: "feedback.appName",
     "stammdaten-manager": "stammdatenManager.appName",
@@ -60,6 +59,7 @@ function headerTitleKey(pathname: string): string {
     sites: "sites.appName",
     users: "users.appName",
     zuweisungen: "assignments.appName",
+    systemwerkzeuge: "systemTools.appName",
     workgroups: "workgroups.appName",
     employees: "employees.appName",
     "cost-centers": "costCenters.appName",

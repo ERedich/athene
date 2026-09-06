@@ -263,17 +263,6 @@
       }
     }
   },
-  "calculator": {
-    "appName": "Calculator",
-    "navCalculator": "Calculator",
-    "clear": "C",
-    "equals": "Equals",
-    "decimal": "Decimal point",
-    "error": "Error",
-    "divideByZero": "Division by zero",
-    "displayAria": "Display",
-    "keypadAria": "Keypad"
-  },
   "customizeMenu": {
     "appName": "Customize menu",
     "nav": "Customize menu",
@@ -1866,6 +1855,40 @@
     "backToHub": "Overview",
     "skippedWithoutEmployee": "{{count}} users without employee skipped.",
     "typeDisabled": "This type is not available yet."
+  },
+  "systemTools": {
+    "appName": "System tools",
+    "navSystemTools": "System tools",
+    "hubLead": "Trigger manual system procedures — for example generate work orders from due maintenance plans.",
+    "searchHub": "Search procedures",
+    "comingSoon": "Coming soon",
+    "toolGenerateDue": "Roll out due maintenance plans",
+    "toolGenerateDueMeta": "Manual or daily automatic",
+    "toolBanfCreate": "Create BANFs",
+    "toolBanfCreateMeta": "Coming soon",
+    "dueCount": "{{count}} due",
+    "loadError": "Could not load system tools.",
+    "retry": "Retry",
+    "backToHub": "Back to system tools",
+    "procedureGenerateDueLead": "Creates work orders for all currently due active maintenance plans (including lead time) in your sites — the same run as the daily background job.",
+    "kpiDue": "Due now",
+    "kpiLastSweep": "Last automatic run",
+    "kpiNextSweep": "Next automatic run",
+    "runGenerate": "Roll out now",
+    "confirmGenerateTitle": "Roll out due maintenance plans?",
+    "confirmGenerate": "Check {{count}} due plans and create work orders where needed. Continue?",
+    "yes": "Yes",
+    "no": "No",
+    "generateDone": "{{created}} created, {{skipped}} skipped.",
+    "generateError": "Rollout failed.",
+    "lastRunSummary": "Last run: {{created}} created, {{skipped}} skipped.",
+    "skipNotFound": "Plan not found",
+    "skipNotActive": "Plan not active",
+    "skipNotDue": "Not due yet",
+    "skipOpenWorkOrder": "Open work order exists",
+    "skipNoResponsibles": "No responsibles",
+    "skipUnauthorized": "Unauthorized",
+    "skipCreateFailed": "Create failed"
   },
   "users": {
     "appName": "Users",

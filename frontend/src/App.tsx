@@ -17,7 +17,6 @@ import { SparePartsPage } from "./pages/SparePartsPage";
 import { WarehousesPage } from "./pages/WarehousesPage";
 import { StorageLocationsPage } from "./pages/StorageLocationsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
-import { CalculatorPage } from "./pages/CalculatorPage";
 import { CustomizeMenuPage } from "./pages/CustomizeMenuPage";
 import { CustomizeMenuEditorPage } from "./pages/CustomizeMenuEditorPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -48,6 +47,8 @@ import { ReportDesignerPage } from "./pages/ReportDesignerPage";
 import { AssignmentsPage } from "./pages/AssignmentsPage";
 import { AssignmentsTypePage } from "./pages/AssignmentsTypePage";
 import { AssignmentsUserPage } from "./pages/AssignmentsUserPage";
+import { SystemToolsPage } from "./pages/SystemToolsPage";
+import { SystemToolsProcedurePage } from "./pages/SystemToolsProcedurePage";
 
 export default function App() {
   return (
@@ -58,7 +59,6 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="getting-started/:guideId" element={<GettingStartedPage />} />
-          <Route path="calculator" element={<CalculatorPage />} />
           <Route path="customize-menu" element={<CustomizeMenuPage />} />
           <Route path="customize-menu/new" element={<CustomizeMenuEditorPage />} />
           <Route path="customize-menu/:id" element={<CustomizeMenuEditorPage />} />
@@ -76,6 +76,8 @@ export default function App() {
           <Route path="zuweisungen/user/:userId" element={<AssignmentsUserPage />} />
           <Route path="zuweisungen/:type" element={<AssignmentsTypePage />} />
           <Route path="zuweisungen/:type/:recordId" element={<AssignmentsTypePage />} />
+          <Route path="systemwerkzeuge" element={<SystemToolsPage />} />
+          <Route path="systemwerkzeuge/:procedureId" element={<SystemToolsProcedurePage />} />
           <Route path="kpi-builder" element={<KpiBuilderPage />} />
           <Route path="layout-editor" element={<LayoutEditorPage />} />
           <Route path="report-designer" element={<ReportDesignerPage />} />
