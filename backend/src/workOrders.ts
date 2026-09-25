@@ -983,6 +983,90 @@ router.get("/by-order-number", async (req: Request, res: Response) => {
   }
 });
 
+/** Athene agent: work orders created for an asset in the last 24 hours. */
+router.get("/recent-for-asset", async (req: Request, res: Response) => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const assetId = typeof req.query.assetId === "string" ? req.query.assetId.trim() : "";
+  if (!isUuid(assetId)) {
+    res.status(400).json({ error: "invalid_asset_id" });
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{
+      id: string;
+      orderNumber: number;
+      name: string;
+      description: string | null;
+      status: WorkOrderStatus;
+      createdAt: string;
+      assetKey: string;
+      assetName: string;
+      workgroupKey: string | null;
+      workgroupName: string | null;
+      totalCount: number;
+    }>(
+      `
+      SELECT
+        w."id"::text AS "id",
+        w."orderNumber",
+        w."name",
+        w."description",
+        w."status",
+        w."createdAt"::text AS "createdAt",
+        a."key" AS "assetKey",
+        a."name" AS "assetName",
+        wg."key" AS "workgroupKey",
+        wg."name" AS "workgroupName",
+        COUNT(*) OVER()::int AS "totalCount"
+      FROM "workOrder" w
+      JOIN "asset" a ON a."id" = w."assetId"
+      LEFT JOIN "workgroup" wg ON wg."id" = w."workgroupId"
+      WHERE w."assetId" = $2::uuid
+        AND w."createdAt" >= (now() - interval '24 hours')
+        AND ${siteAccessSql('w."siteId"', "$1")}
+      ORDER BY w."createdAt" DESC
+      LIMIT 50
+      `,
+      [userId, assetId],
+    );
+    const count = rows[0]?.totalCount ?? 0;
+    res.json({
+      count,
+      rows: rows.map(
+        ({
+          id,
+          orderNumber,
+          name,
+          description,
+          status,
+          createdAt,
+          assetKey,
+          assetName,
+          workgroupKey,
+          workgroupName,
+        }) => ({
+          id,
+          orderNumber,
+          name,
+          description,
+          status,
+          createdAt,
+          assetKey,
+          assetName,
+          workgroupKey,
+          workgroupName,
+        }),
+      ),
+    });
+  } catch (err) {
+    sendPgError(res, err);
+  }
+});
+
 router.get("/:id/planning-conflicts", async (req: Request, res: Response) => {
   const userId = req.session.userId;
   if (!userId) {

@@ -440,24 +440,14 @@ export const KpiEditorPanel = forwardRef<KpiEditorPanelHandle, Props>(function K
               ) : null}
 
               {display === "sparkline" ? (
-                <>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={form.style.showAxes === true}
-                      onChange={(e) => setStyle({ showAxes: Boolean(e.checked) })}
-                      disabled={saving}
-                    />
-                    <span>{t("kpiBuilder.fieldShowAxes")}</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={form.style.showTooltip === true}
-                      onChange={(e) => setStyle({ showTooltip: Boolean(e.checked) })}
-                      disabled={saving}
-                    />
-                    <span>{t("kpiBuilder.fieldShowTooltip")}</span>
-                  </label>
-                </>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={form.style.showTooltip === true}
+                    onChange={(e) => setStyle({ showTooltip: Boolean(e.checked) })}
+                    disabled={saving}
+                  />
+                  <span>{t("kpiBuilder.fieldShowTooltip")}</span>
+                </label>
               ) : null}
 
               {display === "bar" || display === "pie" ? (
@@ -729,7 +719,7 @@ export const KpiEditorPanel = forwardRef<KpiEditorPanelHandle, Props>(function K
               locale={i18n.language}
               series={previewView.series}
               chart={previewView.chart}
-              chartAnimationKey={`${form.style.display}-${form.definition.entity}-${form.name}-${form.style.showAxes}-${form.style.showTooltip}`}
+              chartAnimationKey={`${form.style.display}-${form.definition.entity}-${form.name}-${form.style.showTooltip}`}
               loading={previewLoading}
               accent={previewView.accent}
               sparklineOptions={previewView.sparklineOptions}

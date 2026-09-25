@@ -40,7 +40,9 @@ function RefIconButton({
   return (
     <button
       type="button"
-      className={`p-button p-component p-button-icon-only h-7 w-7 !rounded-[0.5rem] !p-0 ${className}`}
+      className={`p-button p-component p-button-icon-only h-7 w-7 !rounded-[0.5rem] !p-0 ${className}${
+        disabled ? " p-disabled" : ""
+      }`}
       onClick={onClick}
       aria-label={title}
       title={title}

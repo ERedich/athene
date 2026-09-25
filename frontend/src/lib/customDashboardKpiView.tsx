@@ -130,7 +130,6 @@ export function resolveCustomKpiView(
   const href = deeplinkHref(entry?.style);
   const showLegend = entry?.style?.showLegend !== false;
   const showTooltip = entry?.style?.showTooltip === true;
-  const showAxes = entry?.style?.showAxes === true;
   const valueSuffix = entry?.style?.valueSuffix?.trim() || undefined;
   const rowLimit = entry?.style?.rowLimit ?? 10;
 
@@ -231,7 +230,6 @@ export function resolveCustomKpiView(
     series: numericSeries.length > 0 ? numericSeries : demoSparkSeries(result.total),
     sparklineOptions: {
       labels: seriesLabels.length > 0 ? seriesLabels : undefined,
-      showAxes,
       showTooltip,
     },
     href,

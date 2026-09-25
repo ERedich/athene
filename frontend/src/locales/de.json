@@ -412,7 +412,20 @@
     "rescheduleShiftSuccess": "{{count}} Aufträge wurden in die Zielwoche verschoben.",
     "rescheduleSuccess": "Planungstermin wurde übernommen.",
     "rescheduleError": "Termin konnte nicht übernommen werden.",
-    "contextCalendar": "Kalendar"
+    "contextCalendar": "Kalendar",
+    "agents": {
+      "yes": "Ja",
+      "no": "Nein",
+      "tipTimer": "Schließt in {{seconds}} s",
+      "activeWorkOrders": {
+        "tipSingular": "Für dieses Asset wurde in den letzten 24 Stunden 1 Auftrag angelegt. Soll ich diesen anzeigen?",
+        "tipPlural": "Für dieses Asset wurden in den letzten 24 Stunden {{count}} Aufträge angelegt. Soll ich diese anzeigen?",
+        "drawerTitle": "Aufträge der letzten 24 Stunden",
+        "createdAt": "Angelegt: {{date}}",
+        "empty": "Keine Aufträge gefunden.",
+        "truncated": "Zeige {{shown}} von {{total}} Aufträgen."
+      }
+    }
   },
   "onboarding": {
     "stepOf": "{{current}} / {{total}}",
@@ -839,6 +852,7 @@
     "instructionMoveUp": "Anweisung nach oben",
     "instructionMoveDown": "Anweisung nach unten",
     "instructionPlaceholder": "Anweisungstext",
+    "instructionsReference": "Anweisungen",
     "instructionsReferenceTitle": "Anweisungen ({{count}} offen)",
     "instructionsPopoverTitle": "Anweisungen",
     "instructionsLoading": "Anweisungen werden geladen…",

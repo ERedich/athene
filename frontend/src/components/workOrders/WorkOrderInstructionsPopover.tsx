@@ -39,7 +39,9 @@ export function WorkOrderInstructionsPopover({
     setUncheckedCount(row.uncheckedTodoCount ?? row.todoCount ?? 0);
   }, [row.id, row.uncheckedTodoCount, row.todoCount]);
 
-  const instructionsTitle = t("workOrders.instructionsReferenceTitle", { count: uncheckedCount });
+  const instructionsTitle = hasTodos
+    ? t("workOrders.instructionsReferenceTitle", { count: uncheckedCount })
+    : t("workOrders.instructionsReference");
 
   const loadTodos = useCallback(async () => {
     setLoading(true);
@@ -64,11 +66,14 @@ export function WorkOrderInstructionsPopover({
     }
   }, [onCountsChange, row.id]);
 
-  const handleToggle = useCallback((e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    if (!hasTodos) return;
-    panelRef.current?.toggle(e);
-  }, [hasTodos]);
+  const handleToggle = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (!hasTodos) return;
+      panelRef.current?.toggle(e);
+    },
+    [hasTodos],
+  );
 
   const handlePanelShow = useCallback(() => {
     void loadTodos();
@@ -104,73 +109,84 @@ export function WorkOrderInstructionsPopover({
     [onCountsChange, row.id, rows],
   );
 
-  if (!hasTodos) return null;
-
-  const badge =
-    emptyBadgePlaceholder || uncheckedCount > 0 ? String(uncheckedCount) : undefined;
+  const badge = hasTodos
+    ? emptyBadgePlaceholder || uncheckedCount > 0
+      ? String(uncheckedCount)
+      : undefined
+    : emptyBadgePlaceholder
+      ? " "
+      : undefined;
+  const badgeClassName = `!bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !px-1 !py-0${
+    hasTodos ? "" : " app-ref-badge--placeholder"
+  }`;
 
   return (
     <>
       <button
         type="button"
-        className="p-button p-component p-button-icon-only h-7 w-7 !rounded-[0.5rem] !p-0 app-ref-button--todos"
+        className={`p-button p-component p-button-icon-only h-7 w-7 !rounded-[0.5rem] !p-0 ${
+          hasTodos ? "app-ref-button--todos" : "app-ref-button--todos-empty p-disabled"
+        }`}
         onClick={handleToggle}
         aria-label={instructionsTitle}
         title={instructionsTitle}
+        disabled={!hasTodos}
       >
         <span className="p-button-icon p-c">
           <List className={lucidePrimeBtnIcon} strokeWidth={1.75} />
         </span>
         {badge != null ? (
-          <span className="p-badge p-component !bg-slate-900 !text-white !shadow-none !min-w-[1.1rem] !h-4 !text-[10px] !leading-4 !px-1 !py-0">
-            {badge}
-          </span>
+          <span className={`p-badge p-component ${badgeClassName}`}>{badge}</span>
         ) : null}
       </button>
-      <OverlayPanel
-        ref={panelRef}
-        appendTo={overlayAppendTo}
-        className="app-instructions-popover w-[min(24rem,calc(100vw-2rem))]"
-        onShow={handlePanelShow}
-      >
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-on-surface">{t("workOrders.instructionsPopoverTitle")}</h3>
-          {loading ? (
-            <div className="flex items-center gap-2 py-2 text-sm text-on-surface-variant">
-              <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
-              <span>{t("workOrders.instructionsLoading")}</span>
-            </div>
-          ) : loadError ? (
-            <p className="text-sm text-on-surface-variant">{t("workOrders.instructionsLoadError")}</p>
-          ) : rows.length === 0 ? (
-            <p className="text-sm text-on-surface-variant">{t("workOrders.instructionsEmpty")}</p>
-          ) : (
-            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {rows.map((todo, index) => (
-                <label
-                  key={todo.id}
-                  className="app-card-cascade flex cursor-pointer items-start gap-3 rounded-sm border border-solid border-outline-variant px-3 py-2"
-                  style={{ ["--app-cascade-index" as string]: index }}
-                >
-                  <Checkbox
-                    checked={Boolean(todo.checked)}
-                    disabled={togglingId === todo.id}
-                    onChange={(e) => void handleCheck(todo, e.checked === true)}
-                    inputId={`wo-instruction-${todo.id}`}
-                  />
-                  <span
-                    className={`min-w-0 flex-1 text-sm ${
-                      todo.checked ? "text-on-surface-variant line-through" : "text-on-surface"
-                    }`}
+      {hasTodos ? (
+        <OverlayPanel
+          ref={panelRef}
+          appendTo={overlayAppendTo}
+          className="app-instructions-popover w-[min(24rem,calc(100vw-2rem))]"
+          onShow={handlePanelShow}
+        >
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-on-surface">
+              {t("workOrders.instructionsPopoverTitle")}
+            </h3>
+            {loading ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-on-surface-variant">
+                <LucideSpinner className="h-4 w-4" strokeWidth={1.75} />
+                <span>{t("workOrders.instructionsLoading")}</span>
+              </div>
+            ) : loadError ? (
+              <p className="text-sm text-on-surface-variant">{t("workOrders.instructionsLoadError")}</p>
+            ) : rows.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">{t("workOrders.instructionsEmpty")}</p>
+            ) : (
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                {rows.map((todo, index) => (
+                  <label
+                    key={todo.id}
+                    className="app-card-cascade flex cursor-pointer items-start gap-3 rounded-sm border border-solid border-outline-variant px-3 py-2"
+                    style={{ ["--app-cascade-index" as string]: index }}
                   >
-                    {todo.text}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      </OverlayPanel>
+                    <Checkbox
+                      checked={Boolean(todo.checked)}
+                      disabled={togglingId === todo.id}
+                      onChange={(e) => void handleCheck(todo, e.checked === true)}
+                      inputId={`wo-instruction-${todo.id}`}
+                    />
+                    <span
+                      className={`min-w-0 flex-1 text-sm ${
+                        todo.checked ? "text-on-surface-variant line-through" : "text-on-surface"
+                      }`}
+                    >
+                      {todo.text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </OverlayPanel>
+      ) : null}
     </>
   );
 }

@@ -412,7 +412,20 @@
     "rescheduleShiftSuccess": "{{count}} work orders were moved to the target week.",
     "rescheduleSuccess": "Planned dates were applied.",
     "rescheduleError": "Could not apply the planned dates.",
-    "contextCalendar": "Calendar"
+    "contextCalendar": "Calendar",
+    "agents": {
+      "yes": "Yes",
+      "no": "No",
+      "tipTimer": "Closes in {{seconds}} s",
+      "activeWorkOrders": {
+        "tipSingular": "1 work order was created for this asset in the last 24 hours. Should I show it?",
+        "tipPlural": "{{count}} work orders were created for this asset in the last 24 hours. Should I show them?",
+        "drawerTitle": "Work orders from the last 24 hours",
+        "createdAt": "Created: {{date}}",
+        "empty": "No work orders found.",
+        "truncated": "Showing {{shown}} of {{total}} work orders."
+      }
+    }
   },
   "onboarding": {
     "stepOf": "{{current}} / {{total}}",
@@ -839,6 +852,7 @@
     "instructionMoveUp": "Move instruction up",
     "instructionMoveDown": "Move instruction down",
     "instructionPlaceholder": "Instruction text",
+    "instructionsReference": "Instructions",
     "instructionsReferenceTitle": "Instructions ({{count}} open)",
     "instructionsPopoverTitle": "Instructions",
     "instructionsLoading": "Loading instructions…",

@@ -25,9 +25,12 @@ import {
   workOrdersActiveStatusHref,
 } from "./dashboardCharts";
 import {
+  demoSparkDayLabels,
   demoSparkSeries,
+  formatDayMonthLabels,
   seriesFromByDay,
   type SparkAccent,
+  type SparklineOptions,
 } from "./dashboardSparkCharts";
 
 export const DASHBOARD_KPI_IDS = [
@@ -169,6 +172,7 @@ export type DashboardKpiView = {
   detail?: string;
   series: number[];
   chart?: DashboardKpiBarChart;
+  sparklineOptions?: SparklineOptions;
   href?: string;
   footer?: ReactNode;
 };
@@ -244,6 +248,7 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.openActive.total,
         series: demoSparkSeries(metrics.openActive.total),
+        sparklineOptions: { labels: demoSparkDayLabels() },
         href: workOrdersActiveStatusHref(),
       };
 
@@ -255,6 +260,9 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.completedLast7Days.total,
         series: seriesFromByDay(metrics.completedLast7Days.byDay),
+        sparklineOptions: {
+          labels: formatDayMonthLabels(metrics.completedLast7Days.byDay.map((d) => d.date)),
+        },
         href: "/monitoring",
       };
 
@@ -267,6 +275,7 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.myOrders.total,
         series: demoSparkSeries(metrics.myOrders.total),
+        sparklineOptions: { labels: demoSparkDayLabels() },
         href: myOrdersHref,
         footer: !metrics.myOrders.employeeLinked ? (
           <p className="text-xs text-on-surface-variant">{t("dashboard.noEmployee")}</p>
@@ -282,6 +291,9 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.transactionsLast7Days.total,
         series: seriesFromByDay(metrics.transactionsLast7Days.byDay),
+        sparklineOptions: {
+          labels: formatDayMonthLabels(metrics.transactionsLast7Days.byDay.map((d) => d.date)),
+        },
         href: "/transactions",
       };
 
@@ -309,6 +321,7 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.delayedOrders.total,
         series: demoSparkSeries(metrics.delayedOrders.total),
+        sparklineOptions: { labels: demoSparkDayLabels() },
         href: "/monitoring?overdue=1",
       };
 
@@ -348,6 +361,7 @@ export function resolveKpiView(
         display: "chart",
         value: metrics.transactionsLast24h.total,
         series: demoSparkSeries(metrics.transactionsLast24h.total, 1),
+        sparklineOptions: { labels: demoSparkDayLabels(1) },
         href: "/transactions",
       };
 

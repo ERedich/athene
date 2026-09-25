@@ -6,30 +6,18 @@ import { readThemeChartColors } from "./workOrderOverviewCharts";
 
 const SPARK_GREEN = {
   line: "rgb(34, 197, 94)",
-  fillTop: "rgba(34, 197, 94, 0.38)",
-  fillBottom: "rgba(34, 197, 94, 0)",
-  iconBg: "rgb(34, 197, 94)",
 };
 
 const SPARK_BLUE = {
   line: "rgb(59, 130, 246)",
-  fillTop: "rgba(59, 130, 246, 0.35)",
-  fillBottom: "rgba(59, 130, 246, 0)",
-  iconBg: "rgb(59, 130, 246)",
 };
 
 const SPARK_AMBER = {
   line: "rgb(245, 158, 11)",
-  fillTop: "rgba(245, 158, 11, 0.35)",
-  fillBottom: "rgba(245, 158, 11, 0)",
-  iconBg: "rgb(245, 158, 11)",
 };
 
 const SPARK_TEAL = {
   line: "rgb(20, 184, 166)",
-  fillTop: "rgba(20, 184, 166, 0.35)",
-  fillBottom: "rgba(20, 184, 166, 0)",
-  iconBg: "rgb(20, 184, 166)",
 };
 
 export type SparkAccent = "green" | "blue" | "amber" | "teal";
@@ -43,12 +31,48 @@ const ACCENT_MAP = {
 
 export type SparklineOptions = {
   labels?: string[];
+  /** @deprecated Axes are always shown; kept for stored KPI style compatibility. */
   showAxes?: boolean;
   showTooltip?: boolean;
 };
 
 export function seriesFromByDay(byDay: DayCount[]): number[] {
   return byDay.map((d) => d.count);
+}
+
+/** Last `days` calendar days ending today as `YYYY-MM-DD` (local). */
+export function recentDayIsoDates(days = 7): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${day}`);
+  }
+  return out;
+}
+
+/** Axis labels as `DD.MM` from ISO date strings. */
+export function formatDayMonthLabels(dates: string[]): string[] {
+  return dates.map((iso) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (match) return `${match[3]}.${match[2]}`;
+    try {
+      const d = new Date(`${iso}T12:00:00`);
+      if (Number.isNaN(d.getTime())) return iso;
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      return `${dd}.${mm}`;
+    } catch {
+      return iso;
+    }
+  });
+}
+
+export function demoSparkDayLabels(days = 7): string[] {
+  return formatDayMonthLabels(recentDayIsoDates(days));
 }
 
 /** Plausible 7-day trend ending at `endValue` (demo / fallback). */
@@ -72,7 +96,6 @@ export function buildSparklineChart(
   opts: SparklineOptions = {},
 ): { data: ChartData<"line">; options: ChartOptions<"line"> } {
   const colors = ACCENT_MAP[accent];
-  const showAxes = opts.showAxes === true;
   const showTooltip = opts.showTooltip === true;
   const labels =
     opts.labels && opts.labels.length === series.length
@@ -87,18 +110,12 @@ export function buildSparklineChart(
         {
           data: series,
           borderColor: colors.line,
-          backgroundColor: (context) => {
-            const chart = context.chart;
-            const { ctx, chartArea } = chart;
-            if (!chartArea) return colors.fillTop;
-            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            gradient.addColorStop(0, colors.fillTop);
-            gradient.addColorStop(1, colors.fillBottom);
-            return gradient;
-          },
-          fill: true,
-          tension: 0.4,
-          pointRadius: showTooltip || showAxes ? 2 : 0,
+          backgroundColor: colors.line,
+          fill: false,
+          tension: 0,
+          pointRadius: 3,
+          pointBackgroundColor: colors.line,
+          pointBorderColor: colors.line,
           pointHitRadius: 12,
           borderWidth: 2,
         },
@@ -108,7 +125,7 @@ export function buildSparklineChart(
       {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 4, bottom: showAxes ? 2 : 0, left: 0, right: 0 } },
+        layout: { padding: { top: 4, bottom: 2, left: 0, right: 0 } },
         interaction: { mode: "index", intersect: false },
         plugins: {
           legend: { display: false },
@@ -116,12 +133,12 @@ export function buildSparklineChart(
         },
         scales: {
           x: {
-            display: showAxes,
+            display: true,
             ticks: { color: theme.text, maxRotation: 0, font: { size: 9 }, maxTicksLimit: 7 },
-            grid: { display: false },
+            grid: { color: theme.grid },
           },
           y: {
-            display: showAxes,
+            display: true,
             min: 0,
             grace: "5%",
             ticks: { color: theme.text, font: { size: 9 }, precision: 0 },
@@ -129,7 +146,7 @@ export function buildSparklineChart(
           },
         },
         elements: {
-          line: { borderCapStyle: "round", borderJoinStyle: "round" },
+          line: { borderCapStyle: "butt", borderJoinStyle: "miter" },
         },
       },
     ),

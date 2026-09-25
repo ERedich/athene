@@ -1336,6 +1336,41 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   border-color: rgb(74 222 128) !important;
 }
 
+/* Instructions with zero entries: same chrome as filled, at 10% opacity. */
+.app-ref-button--todos-empty.p-button.p-disabled,
+.app-ref-button--todos-empty.p-button:disabled,
+.app-ref-button--todos-empty.p-button:not(:disabled):not(.p-disabled) {
+  opacity: 0.1 !important;
+  background: rgb(134 239 172) !important; /* green-300 — same as filled */
+  border: 1px solid rgb(134 239 172) !important;
+  box-shadow: none !important;
+  color: rgb(15 23 42) !important;
+  cursor: not-allowed !important;
+}
+
+.app-ref-button--todos-empty.p-button.p-disabled .p-button-icon,
+.app-ref-button--todos-empty.p-button:disabled .p-button-icon,
+.app-ref-button--todos-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon,
+.app-ref-button--todos-empty.p-button.p-disabled .p-button-icon .pi,
+.app-ref-button--todos-empty.p-button:disabled .p-button-icon .pi,
+.app-ref-button--todos-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon .pi,
+.app-ref-button--todos-empty.p-button.p-disabled .p-button-icon svg,
+.app-ref-button--todos-empty.p-button:disabled .p-button-icon svg,
+.app-ref-button--todos-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon svg {
+  color: inherit !important;
+  stroke: currentColor;
+  opacity: 1;
+}
+
+[data-theme="dark"] .app-ref-button--todos-empty.p-button.p-disabled,
+[data-theme="dark"] .app-ref-button--todos-empty.p-button:disabled,
+[data-theme="dark"] .app-ref-button--todos-empty.p-button:not(:disabled):not(.p-disabled) {
+  background: rgb(134 239 172) !important;
+  border-color: rgb(134 239 172) !important;
+  color: rgb(15 23 42) !important;
+  opacity: 0.1 !important;
+}
+
 .app-ref-button--purchase.p-button:not(:disabled),
 .app-ref-button--purchase.p-button:not(.p-disabled) {
   background: rgb(249 168 212) !important; /* pink-300 */
@@ -1490,28 +1525,36 @@ button.p-button[class*="app-ref-button--"] .p-badge {
   border-color: rgb(180 83 9) !important; /* amber-700 */
 }
 
+/* Inspection points with zero checklist: same chrome as filled, at 10% opacity. */
 .app-ref-button--inspection-points-empty.p-button.p-disabled,
-.app-ref-button--inspection-points-empty.p-button:disabled {
+.app-ref-button--inspection-points-empty.p-button:disabled,
+.app-ref-button--inspection-points-empty.p-button:not(:disabled):not(.p-disabled) {
   opacity: 0.1 !important;
-  background: rgb(252 211 77) !important; /* amber-300 */
+  background: rgb(252 211 77) !important; /* amber-300 — same as filled */
   border: 1px solid rgb(252 211 77) !important;
   box-shadow: none !important;
   color: rgb(15 23 42) !important;
   cursor: not-allowed !important;
 }
+
 .app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon,
 .app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon,
+.app-ref-button--inspection-points-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon,
 .app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon .pi,
 .app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon .pi,
+.app-ref-button--inspection-points-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon .pi,
 .app-ref-button--inspection-points-empty.p-button.p-disabled .p-button-icon svg,
-.app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon svg {
+.app-ref-button--inspection-points-empty.p-button:disabled .p-button-icon svg,
+.app-ref-button--inspection-points-empty.p-button:not(:disabled):not(.p-disabled) .p-button-icon svg {
   color: inherit !important;
   stroke: currentColor;
   opacity: 1;
 }
 
 [data-theme="dark"] .app-ref-button--inspection-points-empty.p-button.p-disabled,
-[data-theme="dark"] .app-ref-button--inspection-points-empty.p-button:disabled {
+[data-theme="dark"] .app-ref-button--inspection-points-empty.p-button:disabled,
+[data-theme="dark"]
+  .app-ref-button--inspection-points-empty.p-button:not(:disabled):not(.p-disabled) {
   background: rgb(252 211 77) !important;
   border-color: rgb(252 211 77) !important;
   color: rgb(15 23 42) !important;
@@ -7614,6 +7657,150 @@ button.app-calendar-day__num:focus-visible {
   .app-getting-started-detail-header--complete .app-getting-started-detail-icon svg :is(path, polyline, line),
   .app-getting-started-badge--complete,
   .app-getting-started-complete-badge {
+    animation: none;
+  }
+}
+
+/* Athene field tip (create-form agents) */
+@keyframes app-athene-field-tip-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes app-athene-field-tip-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.app-athene-field-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.5rem);
+  z-index: 20;
+  width: max(100%, min(22rem, 70vw));
+  max-width: min(28rem, 90vw);
+  padding: 0.7rem 0.85rem 0.65rem;
+  border-radius: 0.625rem;
+  /* Dark theme: elevated surface; light theme override below → white. */
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  border: 1px solid color-mix(in srgb, #2dd4bf 72%, #38bdf8 28%);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+  animation: app-athene-field-tip-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: auto;
+}
+
+.app-athene-field-tip--exit {
+  pointer-events: none;
+  animation: app-athene-field-tip-exit 280ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+[data-theme="light"] .app-athene-field-tip {
+  background: var(--color-surface-container-lowest);
+  border-color: color-mix(in srgb, #14b8a6 55%, #0ea5e9 45%);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--color-on-surface) 12%, transparent);
+}
+
+.app-athene-field-tip__head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.app-athene-field-tip__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+}
+
+.app-athene-field-tip__timer {
+  position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.app-athene-field-tip__timer-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-athene-field-tip__timer-track {
+  stroke: color-mix(in srgb, #2dd4bf 22%, transparent);
+}
+
+[data-theme="light"] .app-athene-field-tip__timer-track {
+  stroke: color-mix(in srgb, #14b8a6 18%, transparent);
+}
+
+.app-athene-field-tip__timer-arc {
+  stroke: color-mix(in srgb, #2dd4bf 72%, #38bdf8 28%);
+}
+
+[data-theme="light"] .app-athene-field-tip__timer-arc {
+  stroke: color-mix(in srgb, #14b8a6 55%, #0ea5e9 45%);
+}
+
+.app-athene-field-tip__message {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-on-surface-variant);
+}
+
+.app-athene-field-tip__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.app-athene-field-tip__link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.app-athene-field-tip__link:hover {
+  color: var(--color-primary-container);
+}
+
+.app-athene-field-tip__sep {
+  font-size: 0.75rem;
+  color: var(--color-on-surface-variant);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-athene-field-tip,
+  .app-athene-field-tip--exit {
     animation: none;
   }
 }

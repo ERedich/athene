@@ -13,6 +13,7 @@ import { DocumentMimeIcon } from "../documents/DocumentMimeIcon";
 import { DescriptionTodoField } from "../DescriptionTodoField";
 import { LucideInputSearchIcon } from "../LucideInputSearchIcon";
 import { ReportCodePreview } from "../ReportCodePreview";
+import { ActiveWorkOrdersAgent } from "../../assistant/agents/ActiveWorkOrdersAgent";
 import { AssetSelItem } from "../selItem/AssetSelItem";
 import { WorkOrderFeedbackTabContent } from "./WorkOrderFeedbackTabContent";
 import { WorkOrderFeedbackTransactionsSection } from "./WorkOrderFeedbackTransactionsSection";
@@ -376,21 +377,24 @@ export function WorkOrderEditTabContent(props: WorkOrderEditDialogProps) {
               textareaId="order-description"
             />
 
-            <div className="space-y-2 md:col-span-3">
+            <div className="relative space-y-2 md:col-span-3">
               <label htmlFor="order-asset" className="block text-[11px] text-outline uppercase tracking-[0.1em]">
                 {t("workOrders.asset")}
                 <span className="app-required-marker" aria-hidden>
                   *
                 </span>
               </label>
-              <AssetSelItem
-                inputId="order-asset"
-                assetId={form.assetId}
-                assetKey={assetKeyDisplay}
-                onSelect={handleAssetSelect}
-                onAssetKeyChange={setAssetKeyDisplay}
-                placeholder={t("workOrders.assetPlaceholder")}
-              />
+              <div className="relative">
+                <ActiveWorkOrdersAgent assetId={form.assetId} enabled={!editingId} />
+                <AssetSelItem
+                  inputId="order-asset"
+                  assetId={form.assetId}
+                  assetKey={assetKeyDisplay}
+                  onSelect={handleAssetSelect}
+                  onAssetKeyChange={setAssetKeyDisplay}
+                  placeholder={t("workOrders.assetPlaceholder")}
+                />
+              </div>
             </div>
 
             <div className="space-y-2 md:col-span-3">
