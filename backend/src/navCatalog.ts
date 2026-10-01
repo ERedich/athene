@@ -65,6 +65,7 @@ export const NAV_CATALOG: NavCatalogGroup[] = [
       "/transactions",
       "/monitoring",
       "/mitteilungszentrale",
+      "/projects",
     ],
   },
   {

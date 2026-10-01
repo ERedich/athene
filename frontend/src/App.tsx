@@ -50,6 +50,8 @@ import { AssignmentsUserPage } from "./pages/AssignmentsUserPage";
 import { PermissionsAdminPage } from "./pages/PermissionsAdminPage";
 import { SystemToolsPage } from "./pages/SystemToolsPage";
 import { SystemToolsProcedurePage } from "./pages/SystemToolsProcedurePage";
+import { ProjectsPage } from "./pages/ProjectsPage";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 
 export default function App() {
   return (
@@ -102,6 +104,8 @@ export default function App() {
           <Route path="shifts" element={<ShiftsPage />} />
           <Route path="maintenance-plans" element={<MaintenancePlansPage />} />
           <Route path="inspection-rounds" element={<InspectionRoundsPage />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="app-parameters" element={<AppParametersPage />} />
           <Route path="audit-log" element={<AuditLogPage />} />
           <Route path="table-viewer" element={<TableViewerPage />} />

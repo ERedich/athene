@@ -3054,5 +3054,80 @@
     "createdBy": "Created by",
     "updatedBy": "Updated by",
     "causesCount": "Causes"
+  },
+  "projects": {
+    "appName": "Projects",
+    "new": "New Project",
+    "edit": "Edit Project",
+    "key": "Project Key",
+    "name": "Project Name",
+    "status": {
+      "label": "Status",
+      "planning": "Planning",
+      "active": "Active",
+      "on_hold": "On Hold",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "plannedStart": "Planned Start",
+    "plannedEnd": "Planned End",
+    "responsible": "Project Manager",
+    "progress": "Progress",
+    "tasksLabel": "Tasks / Milestones",
+    "openGantt": "Open Gantt Chart",
+    "loadError": "Failed to load projects.",
+    "deleteError": "Failed to delete project.",
+    "deleted": "Project deleted.",
+    "deleteConfirm": "Really delete project \"{{name}}\"?",
+    "duplicateKey": "A project with this key already exists.",
+    "notFound": "Project not found.",
+    "task": {
+      "new": "New Task",
+      "edit": "Edit Task",
+      "key": "Key",
+      "name": "Name",
+      "type": "Type",
+      "typeTask": "Task",
+      "typeMilestone": "Milestone",
+      "status": {
+        "pending": "Pending",
+        "in_progress": "In Progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      },
+      "start": "Start",
+      "end": "End",
+      "date": "Date",
+      "priority": "Priority",
+      "priority.low": "Low",
+      "priority.medium": "Medium",
+      "priority.high": "High",
+      "priority.critical": "Critical",
+      "assignee": "Assignee",
+      "progress": "Progress",
+      "parentTask": "Parent Task",
+      "deleted": "Task deleted.",
+      "deleteConfirm": "Really delete task \"{{name}}\"?",
+      "deleteError": "Failed to delete task.",
+      "duplicateKey": "A task with this key already exists."
+    },
+    "workOrder": {
+      "link": "Link Work Order",
+      "unlink": "Unlink",
+      "linked": "Linked Work Orders"
+    },
+    "dependency": {
+      "add": "Add Dependency",
+      "type": {
+        "finish_to_start": "Finish to Start",
+        "start_to_start": "Start to Start",
+        "finish_to_finish": "Finish to Finish",
+        "start_to_finish": "Start to Finish"
+      }
+    }
+  },
+  "nav": {
+    "projektmanagement": "Project Management",
+    "projects": "Projects"
   }
 }
