@@ -57,6 +57,10 @@ export const NAV_CATALOG: NavCatalogGroup[] = [
     ],
   },
   {
+    id: "projektmanagement",
+    items: ["/projects"],
+  },
+  {
     id: "auftragswesen",
     items: [
       "/workorders",

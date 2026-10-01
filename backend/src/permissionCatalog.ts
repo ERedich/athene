@@ -265,6 +265,17 @@ export const PERMISSION_CATALOG: AppPermissionDef[] = [
     actions: STANDARD_CRUD,
   },
 
+  // Projektmanagement
+  {
+    appKey: "projects",
+    route: "/projects",
+    labelKey: "projects.appName",
+    actions: [
+      ...STANDARD_CRUD,
+      { key: "link", kind: "extra" },
+    ],
+  },
+
   // Auftragswesen
   {
     appKey: "work-orders",

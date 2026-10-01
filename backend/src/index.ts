@@ -57,6 +57,9 @@ import { navLayoutRouter, navMenuConfigsRouter } from "./navLayout.js";
 import { assignmentsRouter } from "./assignments.js";
 import { systemToolsRouter } from "./systemTools.js";
 import { permissionTemplatesRouter } from "./permissionTemplates.js";
+import { projectsRouter } from "./projects.js";
+import { projectTasksRouter } from "./projectTasks.js";
+import { projectGanttRouter } from "./projectGantt.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -200,6 +203,19 @@ app.use(
   requireAuth,
   requireAppCrud("permission-templates"),
   permissionTemplatesRouter,
+);
+app.use("/api/projects", requireAuth, requireAppCrud("projects"), projectsRouter);
+app.use(
+  "/api/projects/:projectId/tasks",
+  requireAuth,
+  requireAppCrud("projects"),
+  projectTasksRouter,
+);
+app.use(
+  "/api/projects/:projectId/gantt",
+  requireAuth,
+  requireAppCrud("projects"),
+  projectGanttRouter,
 );
 
 const server = createServer(app);
