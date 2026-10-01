@@ -11,7 +11,7 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { GanttChart } from "../components/gantt/GanttChart";
 import { ProjectTaskDialog } from "../components/projects/ProjectTaskDialog";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
-import { APP_HEADER_ACTION_NAV_ITEM, APP_HEADER_ACTION_NAV_ITEM_CREATE } from "../lib/headerActionClasses";
+import { headerActionNavItem, createHeaderActionNavItem } from "../lib/headerActionClasses";
 import { fetchGanttData, deleteProjectTask, fetchProject } from "../lib/projects/projectApi";
 import type { GanttData, GanttTask, Project, ProjectTask } from "../lib/projects/projectTypes";
 
@@ -123,7 +123,7 @@ export function ProjectDetailPage() {
         <li>
           <button
             type="button"
-            className={APP_HEADER_ACTION_NAV_ITEM}
+            className={headerActionNavItem}
             onClick={handleBack}
           >
             <i className="pi pi-arrow-left mr-1" />
@@ -133,7 +133,7 @@ export function ProjectDetailPage() {
         <li>
           <button
             type="button"
-            className={`${APP_HEADER_ACTION_NAV_ITEM} ${APP_HEADER_ACTION_NAV_ITEM_CREATE}`}
+            className={createHeaderActionNavItem}
             onClick={handleNewTask}
           >
             {t("projects.task.new")}

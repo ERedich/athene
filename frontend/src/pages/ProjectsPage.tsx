@@ -15,14 +15,14 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { ProjectDialog } from "../components/projects/ProjectDialog";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import {
-  APP_HEADER_ACTION_NAV_ITEM,
-  APP_HEADER_ACTION_NAV_ITEM_CREATE,
-  APP_HEADER_ACTION_NAV_ITEM_DELETE,
+  headerActionNavItem,
+  createHeaderActionNavItem,
+  deleteHeaderActionNavItem,
 } from "../lib/headerActionClasses";
 import { fetchProjects, deleteProject } from "../lib/projects/projectApi";
 import type { Project, ProjectStatus } from "../lib/projects/projectTypes";
 import { readableSiteColor } from "../lib/siteColor";
-import { useTableContextMenu, type TableContextMenuItem } from "../lib/useTableContextMenu";
+import { useTableContextMenu } from "../lib/useTableContextMenu";
 
 function statusSeverity(status: ProjectStatus): "info" | "success" | "warn" | "danger" | "secondary" {
   switch (status) {
@@ -140,36 +140,34 @@ export function ProjectsPage() {
     [navigate],
   );
 
-  const contextMenuItems = useMemo<TableContextMenuItem<Project>[]>(
-    () => [
-      {
-        label: t("common.new"),
-        icon: "pi pi-plus",
-        command: () => handleNew(),
-      },
-      {
-        label: t("common.edit"),
-        icon: "pi pi-pencil",
-        command: (row) => row && handleEdit(row),
-      },
-      {
-        label: t("projects.openGantt"),
-        icon: "pi pi-chart-bar",
-        command: (row) => row && handleOpenGantt(row),
-      },
-      {
-        label: t("common.delete"),
-        icon: "pi pi-trash",
-        className: "p-menuitem-danger",
-        command: (row) => row && handleDelete(row),
-      },
-    ],
-    [t, handleNew, handleEdit, handleDelete, handleOpenGantt],
+  const extraMenuItems = useCallback(
+    (row: Project | null) => {
+      if (!row) return [];
+      return [
+        {
+          label: t("projects.openGantt"),
+          icon: "pi pi-chart-bar",
+          command: () => handleOpenGantt(row),
+        },
+      ];
+    },
+    [t, handleOpenGantt],
   );
 
-  const { menuRef, onContextMenu, onRowDoubleClick } = useTableContextMenu<Project>({
-    items: contextMenuItems,
-    onDoubleClick: handleEdit,
+  const tableCtx = useTableContextMenu<Project>({
+    labels: {
+      new: t("common.new"),
+      edit: t("common.edit"),
+      delete: t("common.delete"),
+    },
+    handlers: {
+      onCreate: handleNew,
+      onEdit: handleEdit,
+      onDelete: handleDelete,
+    },
+    selection: selectedProject,
+    setSelection: setSelectedProject,
+    extraItems: extraMenuItems,
   });
 
   useEffect(() => {
@@ -178,7 +176,7 @@ export function ProjectsPage() {
         <li>
           <button
             type="button"
-            className={`${APP_HEADER_ACTION_NAV_ITEM} ${APP_HEADER_ACTION_NAV_ITEM_CREATE}`}
+            className={createHeaderActionNavItem}
             onClick={handleNew}
           >
             {t("common.new")}
@@ -187,7 +185,7 @@ export function ProjectsPage() {
         <li>
           <button
             type="button"
-            className={`${APP_HEADER_ACTION_NAV_ITEM} ${APP_HEADER_ACTION_NAV_ITEM_DELETE}`}
+            className={deleteHeaderActionNavItem}
             disabled={!selectedProject}
             onClick={() => selectedProject && handleDelete(selectedProject)}
           >
@@ -292,22 +290,23 @@ export function ProjectsPage() {
     <div className="flex h-full flex-col">
       <Toast ref={toastRef} />
       <ConfirmDialog />
+      {tableCtx.ContextMenuEl}
 
-      <DataTable
-        ref={menuRef}
-        value={filteredProjects}
-        loading={loading}
-        selectionMode="single"
-        selection={selectedProject}
-        onSelectionChange={(e) => setSelectedProject(e.value as Project)}
-        onContextMenu={onContextMenu}
-        onRowDoubleClick={onRowDoubleClick}
-        scrollable
-        scrollHeight="flex"
-        className="app-data-table flex-1"
-        emptyMessage={t("common.noResults")}
-        dataKey="id"
-      >
+      <div className="flex min-h-0 flex-1 flex-col" {...tableCtx.wrapperProps}>
+        <DataTable
+          value={filteredProjects}
+          loading={loading}
+          selectionMode="single"
+          selection={selectedProject}
+          onSelectionChange={(e) => setSelectedProject(e.value as Project)}
+          onRowDoubleClick={(e) => handleEdit(e.data as Project)}
+          {...tableCtx.tableProps}
+          scrollable
+          scrollHeight="flex"
+          className="app-data-table flex-1"
+          emptyMessage={t("common.noResults")}
+          dataKey="id"
+        >
         <Column field="key" header={t("projects.key")} body={keyBodyTemplate} sortable style={{ width: "120px" }} />
         <Column field="name" header={t("projects.name")} sortable />
         <Column field="siteKey" header={t("common.site")} body={siteBodyTemplate} sortable style={{ width: "180px" }} />
@@ -318,7 +317,8 @@ export function ProjectsPage() {
         <Column field="plannedEnd" header={t("projects.plannedEnd")} body={plannedEndBodyTemplate} sortable style={{ width: "120px" }} />
         <Column field="responsibleEmployeeName" header={t("projects.responsible")} body={responsibleBodyTemplate} sortable style={{ width: "150px" }} />
         <Column header="" body={actionsBodyTemplate} style={{ width: "100px" }} />
-      </DataTable>
+        </DataTable>
+      </div>
 
       <ProjectDialog
         visible={dialogVisible}
