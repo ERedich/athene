@@ -3054,5 +3054,80 @@
     "createdBy": "Erstellt von",
     "updatedBy": "Aktualisiert von",
     "causesCount": "Ursachen"
+  },
+  "projects": {
+    "appName": "Projekte",
+    "new": "Neues Projekt",
+    "edit": "Projekt bearbeiten",
+    "key": "Projektschlüssel",
+    "name": "Projektname",
+    "status": {
+      "label": "Status",
+      "planning": "In Planung",
+      "active": "Aktiv",
+      "on_hold": "Pausiert",
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "plannedStart": "Geplanter Start",
+    "plannedEnd": "Geplantes Ende",
+    "responsible": "Projektleiter",
+    "progress": "Fortschritt",
+    "tasksLabel": "Tasks / Meilensteine",
+    "openGantt": "Gantt-Diagramm öffnen",
+    "loadError": "Projekte konnten nicht geladen werden.",
+    "deleteError": "Projekt konnte nicht gelöscht werden.",
+    "deleted": "Projekt gelöscht.",
+    "deleteConfirm": "Projekt „{{name}}" wirklich löschen?",
+    "duplicateKey": "Ein Projekt mit diesem Schlüssel existiert bereits.",
+    "notFound": "Projekt nicht gefunden.",
+    "task": {
+      "new": "Neue Aufgabe",
+      "edit": "Aufgabe bearbeiten",
+      "key": "Schlüssel",
+      "name": "Name",
+      "type": "Typ",
+      "typeTask": "Aufgabe",
+      "typeMilestone": "Meilenstein",
+      "status": {
+        "pending": "Ausstehend",
+        "in_progress": "In Bearbeitung",
+        "completed": "Abgeschlossen",
+        "cancelled": "Abgebrochen"
+      },
+      "start": "Start",
+      "end": "Ende",
+      "date": "Datum",
+      "priority": "Priorität",
+      "priority.low": "Niedrig",
+      "priority.medium": "Mittel",
+      "priority.high": "Hoch",
+      "priority.critical": "Kritisch",
+      "assignee": "Zugewiesen an",
+      "progress": "Fortschritt",
+      "parentTask": "Übergeordnete Aufgabe",
+      "deleted": "Aufgabe gelöscht.",
+      "deleteConfirm": "Aufgabe „{{name}}" wirklich löschen?",
+      "deleteError": "Aufgabe konnte nicht gelöscht werden.",
+      "duplicateKey": "Eine Aufgabe mit diesem Schlüssel existiert bereits."
+    },
+    "workOrder": {
+      "link": "Mit Auftrag verknüpfen",
+      "unlink": "Verknüpfung lösen",
+      "linked": "Verknüpfte Aufträge"
+    },
+    "dependency": {
+      "add": "Abhängigkeit hinzufügen",
+      "type": {
+        "finish_to_start": "Ende zu Start",
+        "start_to_start": "Start zu Start",
+        "finish_to_finish": "Ende zu Ende",
+        "start_to_finish": "Start zu Ende"
+      }
+    }
+  },
+  "nav": {
+    "projektmanagement": "Projektmanagement",
+    "projects": "Projekte"
   }
 }
