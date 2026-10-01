@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Button } from "primereact/button";
-import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
+import { ConfirmDialog } from "primereact/confirmdialog";
 import { IconField } from "primereact/iconfield";
 import { InputText } from "primereact/inputtext";
 import { Toast } from "primereact/toast";
@@ -12,8 +12,8 @@ import { GanttChart } from "../components/gantt/GanttChart";
 import { ProjectTaskDialog } from "../components/projects/ProjectTaskDialog";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import { headerActionNavItem, createHeaderActionNavItem } from "../lib/headerActionClasses";
-import { fetchGanttData, deleteProjectTask, fetchProject } from "../lib/projects/projectApi";
-import type { GanttData, GanttTask, Project, ProjectTask } from "../lib/projects/projectTypes";
+import { fetchGanttData, fetchProject } from "../lib/projects/projectApi";
+import type { GanttData, GanttTask, Project } from "../lib/projects/projectTypes";
 
 export function ProjectDetailPage() {
   const { t } = useTranslation();
@@ -80,38 +80,6 @@ export function ProjectDetailPage() {
     setEditingTask(task);
     setTaskDialogVisible(true);
   }, []);
-
-  const handleDeleteTask = useCallback(
-    (task: GanttTask) => {
-      if (!projectId) return;
-      confirmDialog({
-        message: t("projects.task.deleteConfirm", { name: task.name }),
-        header: t("common.confirmDelete"),
-        icon: "pi pi-exclamation-triangle",
-        acceptClassName: "p-button-danger",
-        accept: async () => {
-          try {
-            await deleteProjectTask(projectId, task.id);
-            toastRef.current?.show({
-              severity: "success",
-              summary: t("common.success"),
-              detail: t("projects.task.deleted"),
-              life: 3000,
-            });
-            loadData();
-          } catch (err) {
-            toastRef.current?.show({
-              severity: "error",
-              summary: t("common.error"),
-              detail: t("projects.task.deleteError"),
-              life: 3000,
-            });
-          }
-        },
-      });
-    },
-    [projectId, t, loadData],
-  );
 
   const handleBack = useCallback(() => {
     navigate("/projects");

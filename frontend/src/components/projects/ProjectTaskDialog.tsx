@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "primereact/button";
 import { Calendar } from "primereact/calendar";
 import { Dropdown } from "primereact/dropdown";
-import { InputNumber } from "primereact/inputnumber";
 import { InputText } from "primereact/inputtext";
 import { InputTextarea } from "primereact/inputtextarea";
 import { SelectButton } from "primereact/selectbutton";
@@ -13,7 +12,6 @@ import { AppDialog } from "../AppDialog";
 import { createProjectTask, updateProjectTask } from "../../lib/projects/projectApi";
 import type {
   GanttTask,
-  ProjectTask,
   TaskType,
   TaskStatus,
   TaskPriority,
@@ -81,7 +79,9 @@ export function ProjectTaskDialog({
 
   useEffect(() => {
     if (visible) {
-      apiFetch("/api/employees").then((res) => res.ok && res.json().then(setEmployees));
+      apiFetch("/api/employees").then((res) => {
+        if (res.ok) res.json().then(setEmployees);
+      });
     }
   }, [visible]);
 

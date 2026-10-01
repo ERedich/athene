@@ -15,7 +15,6 @@ import { LucideInputSearchIcon } from "../components/LucideInputSearchIcon";
 import { ProjectDialog } from "../components/projects/ProjectDialog";
 import type { AppShellOutletContext } from "../layout/AppShellLayout";
 import {
-  headerActionNavItem,
   createHeaderActionNavItem,
   deleteHeaderActionNavItem,
 } from "../lib/headerActionClasses";
@@ -24,14 +23,14 @@ import type { Project, ProjectStatus } from "../lib/projects/projectTypes";
 import { readableSiteColor } from "../lib/siteColor";
 import { useTableContextMenu } from "../lib/useTableContextMenu";
 
-function statusSeverity(status: ProjectStatus): "info" | "success" | "warn" | "danger" | "secondary" {
+function statusSeverity(status: ProjectStatus): "info" | "success" | "warning" | "danger" | "secondary" {
   switch (status) {
     case "planning":
       return "info";
     case "active":
       return "success";
     case "on_hold":
-      return "warn";
+      return "warning";
     case "completed":
       return "success";
     case "cancelled":

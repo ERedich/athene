@@ -165,7 +165,7 @@ export function GanttChart({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {tasks.map((task, index) => (
+          {tasks.map((task) => (
             <div
               key={task.id}
               className={`flex cursor-pointer items-center border-b border-surface-100 px-3 transition-colors hover:bg-surface-50 dark:border-surface-800 dark:hover:bg-surface-700 ${

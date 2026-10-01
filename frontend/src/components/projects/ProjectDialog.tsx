@@ -33,7 +33,7 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
 
 export function ProjectDialog({ visible, project, onHide, onSaved }: Props) {
   const { t, i18n } = useTranslation();
-  const { workingSiteId } = useAuth();
+  const { user } = useAuth();
 
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
@@ -55,9 +55,15 @@ export function ProjectDialog({ visible, project, onHide, onSaved }: Props) {
 
   useEffect(() => {
     if (visible) {
-      apiFetch("/api/sites").then((res) => res.ok && res.json().then(setSites));
-      apiFetch("/api/employees").then((res) => res.ok && res.json().then(setEmployees));
-      apiFetch("/api/cost-centers").then((res) => res.ok && res.json().then(setCostCenters));
+      apiFetch("/api/sites").then((res) => {
+        if (res.ok) res.json().then(setSites);
+      });
+      apiFetch("/api/employees").then((res) => {
+        if (res.ok) res.json().then(setEmployees);
+      });
+      apiFetch("/api/cost-centers").then((res) => {
+        if (res.ok) res.json().then(setCostCenters);
+      });
     }
   }, [visible]);
 
@@ -77,7 +83,7 @@ export function ProjectDialog({ visible, project, onHide, onSaved }: Props) {
         setKey("");
         setName("");
         setDescription("");
-        setSiteId(workingSiteId ?? "");
+        setSiteId(user.workingSiteId ?? "");
         setStatus("planning");
         setPlannedStart(new Date());
         setPlannedEnd(null);
@@ -86,7 +92,7 @@ export function ProjectDialog({ visible, project, onHide, onSaved }: Props) {
       }
       setError(null);
     }
-  }, [visible, project, workingSiteId]);
+  }, [visible, project, user.workingSiteId]);
 
   const handleFromDateChange = (d: Date | null) => {
     setPlannedStart(d);
